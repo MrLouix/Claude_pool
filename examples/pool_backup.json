@@ -1,0 +1,35 @@
+[
+  {
+    "id": "task_001",
+    "prompt": "Analyze the codebase structure and create a brief summary",
+    "directory": "/tmp",
+    "args": ["--model", "sonnet-4"],
+    "status": "pending",
+    "exit_code": null,
+    "duration_ms": null,
+    "json_output": null,
+    "retry_count": 0
+  },
+  {
+    "id": "task_002",
+    "prompt": "List all Python files in the current directory",
+    "directory": "/tmp",
+    "args": [],
+    "status": "pending",
+    "exit_code": null,
+    "duration_ms": null,
+    "json_output": null,
+    "retry_count": 0
+  },
+  {
+    "id": "task_003",
+    "prompt": "What is the current date and time?",
+    "directory": "/tmp",
+    "args": ["--model", "haiku"],
+    "status": "pending",
+    "exit_code": null,
+    "duration_ms": null,
+    "json_output": null,
+    "retry_count": 0
+  }
+]

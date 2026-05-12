@@ -26,28 +26,54 @@ def parse_claude_output(stdout: bytes) -> dict[str, Any]:
     try:
         text = stdout.decode("utf-8", errors="replace")
 
-        # Try to find JSON block - could be wrapped in markdown code fence
-        json_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(1)
-        else:
-            # Try to find raw JSON (look for object starting with {)
-            json_match = re.search(r"\{.*\}", text, re.DOTALL)
+        # Try to parse as direct JSON first
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            # Try to find JSON block - could be wrapped in markdown code fence
+            json_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
             if json_match:
-                json_str = json_match.group(0)
+                json_str = json_match.group(1)
+                data = json.loads(json_str)
             else:
-                # No JSON found, return text as-is
-                return {
-                    "result": text[:1000],
-                    "code_blocks": [],
-                    "files_changed": [],
-                    "tokens_used": 0,
-                    "session_usage_percent": 0.0,
-                    "parse_error": True,
-                }
+                # Try to find raw JSON (look for object starting with {)
+                json_match = re.search(r"\{.*\}", text, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(0)
+                    data = json.loads(json_str)
+                else:
+                    # No JSON found, return text as-is
+                    return {
+                        "result": text[:1000],
+                        "code_blocks": [],
+                        "files_changed": [],
+                        "tokens_used": 0,
+                        "session_usage_percent": 0.0,
+                        "parse_error": True,
+                    }
 
-        data = json.loads(json_str)
+        # Handle new format: {"type":"result","result":"..."}
+        if data.get("type") == "result":
+            result_text = data.get("result", "")
+            # Extract code from markdown if present
+            code_blocks = []
+            code_matches = re.findall(r"```(\w+)?\n(.*?)```", result_text, re.DOTALL)
+            for i, (lang, content) in enumerate(code_matches):
+                code_blocks.append({
+                    "language": lang or "text",
+                    "filename": f"code_{i}.txt",
+                    "content": content.strip(),
+                })
+            
+            return {
+                "result": result_text,
+                "code_blocks": code_blocks,
+                "files_changed": [],
+                "tokens_used": 0,
+                "session_usage_percent": 0.0,
+            }
 
+        # Original format handling
         # Extract code blocks
         code_blocks = []
         raw_blocks = data.get("code_blocks", [])

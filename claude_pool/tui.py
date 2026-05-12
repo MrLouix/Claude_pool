@@ -260,9 +260,13 @@ class PoolTUI(App):
     Screen {
         layout: vertical;
     }
+    CSS = """
+    Screen {
+        layout: vertical;
+    }
 
     #task_list_widget {
-        height: 40%;
+        height: 35%;
         border: solid green;
         padding: 1;
     }
@@ -275,18 +279,21 @@ class PoolTUI(App):
     }
 
     #logs {
-        height: 25%;
+        height: 28%;
         border: solid yellow;
         padding: 1;
         overflow-y: scroll;
     }
 
     #controls {
-        height: auto;
+        height: 3;
         layout: horizontal;
     }
 
     Button {
+        margin: 0 1;
+    }
+    """
         margin: 1;
     }
     """
@@ -389,11 +396,13 @@ class PoolTUI(App):
     @on(Tree.NodeSelected)
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         """Handle task selection."""
+        json_output = self.query_one("#json_output", JsonOutputWidget)
         if event.node.data:
             self.selected_task = event.node.data
-            json_output = self.query_one("#json_output", JsonOutputWidget)
             json_output.update_content(self.selected_task)
-
+        else:
+            self.selected_task = None
+            json_output.update_content(None)
     def action_show_detail(self) -> None:
         """Show detailed output for selected task."""
         if self.selected_task and self.selected_task.json_output:
