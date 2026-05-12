@@ -472,9 +472,9 @@ class PoolTUI(App):
         self.action_skip_task()
 
     @on(Button.Pressed, "#delete_btn")
-    async def on_delete_pressed(self) -> None:
+    def on_delete_pressed(self) -> None:
         """Handle delete button press."""
-        await self.action_delete_task()
+        self.run_worker(self.action_delete_task())
 
     @on(Button.Pressed, "#quit_btn")
     def on_quit_pressed(self) -> None:
