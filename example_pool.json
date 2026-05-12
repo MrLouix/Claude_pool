@@ -1,0 +1,13 @@
+[
+  {
+    "id": "test_001",
+    "prompt": "echo 'Hello from Claude Pool'",
+    "directory": "/tmp",
+    "args": [],
+    "status": "pending",
+    "exit_code": null,
+    "duration_ms": null,
+    "json_output": null,
+    "retry_count": 0
+  }
+]
