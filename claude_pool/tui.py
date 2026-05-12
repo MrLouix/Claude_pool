@@ -157,7 +157,7 @@ class TaskListWidget(Static):
                 "rate_limit_retry": "⟳",
             }.get(task.status, "?")
 
-            label = f"{status_emoji} [{task.id}] {task.prompt[:50]}"
+            label = f"{status_emoji} {task.id}: {task.prompt[:40]}"
 
             if task.status == "success" and task.json_output:
                 tokens = task.json_output.get("tokens_used", 0)
