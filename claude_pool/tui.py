@@ -175,7 +175,7 @@ class TaskListWidget(Static):
         root = tree.root
         root.expand()
 
-        for task in self.executor.tasks:
+        for task in self.executor.pool.tasks:
             # Format task line with status color
             status_emoji = {
                 "pending": "⏸",
@@ -195,14 +195,6 @@ class TaskListWidget(Static):
                 label += f" ({task.duration_ms}ms)"
 
             node = root.add(label, data=task)
-
-
-            # Add input parameters as child nodes
-            node.add_leaf(f"📁 {task.directory}")
-            node.add_leaf(f"📊 Status: {task.status}")
-            if task.args:
-                node.add_leaf(f"⚙️  {" ".join(task.args)}")
-            # Apply status-based styling
             if task.status == "success":
                 node.set_label(f"[green]{label}[/green]")
             elif task.status == "failed":
@@ -392,7 +384,7 @@ class PoolTUI(App):
 
         try:
             await self.executor.load_tasks()
-            log_widget.add_log(f"Loaded {len(self.executor.tasks)} tasks")
+            log_widget.add_log(f"Loaded {len(self.executor.pool.tasks)} tasks")
             task_list.update_tasks()
 
             # Start execution in background
@@ -440,6 +432,16 @@ class PoolTUI(App):
             self.selected_task = None
             json_output.update_content(None)
 
+
+    @on(Tree.NodeExpanded)
+    def on_tree_node_expanded(self, event: Tree.NodeExpanded) -> None:
+        """Handle task node expansion - add parameter details on first expand."""
+        if event.node.data and not event.node.children:
+            task = event.node.data
+            event.node.add_leaf(f"📁 {task.directory}")
+            event.node.add_leaf(f"📊 Status: {task.status}")
+            if task.args:
+                event.node.add_leaf(f"⚙️  {' '.join(task.args)}")
     def action_show_detail(self) -> None:
         """Show detailed output for selected task."""
         if self.selected_task and self.selected_task.json_output:

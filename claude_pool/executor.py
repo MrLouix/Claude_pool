@@ -4,12 +4,12 @@ import asyncio
 import json
 import logging
 import signal
-import subprocess
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
-from .models import Task
+from .models import PoolState, Task
 from .parser import parse_claude_output
 from .storage import load_pool, save_pool
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class TaskExecutor:
-    """Executes tasks from a pool sequentially with rate-limit handling."""
+    """Executes tasks from a pool sequentially with global rate-limit handling."""
 
     def __init__(self, pool_file: Path, on_task_update: Callable[[Task], None] | None = None):
         """Initialize the executor.
@@ -27,7 +27,7 @@ class TaskExecutor:
             on_task_update: Optional callback called when a task is updated
         """
         self.pool_file = pool_file
-        self.tasks: list[Task] = []
+        self.pool = PoolState(pool_file=pool_file)
         self.current_task: Task | None = None
         self.paused = False
         self.should_stop = False
@@ -47,19 +47,21 @@ class TaskExecutor:
     def _save_state(self) -> None:
         """Save current state to pool file."""
         try:
-            save_pool(self.pool_file, self.tasks)
+            save_pool(self.pool)
             logger.info("State saved successfully")
         except Exception as e:
             logger.error(f"Failed to save state: {e}")
 
     async def load_tasks(self) -> None:
-        """Load tasks from pool file."""
+        """Load tasks and pool state from pool file."""
         try:
-            self.tasks = load_pool(self.pool_file)
-            logger.info(f"Loaded {len(self.tasks)} tasks from {self.pool_file}")
+            self.pool = load_pool(self.pool_file)
+            # Ensure pool_file is preserved after load
+            self.pool.pool_file = self.pool_file
+            logger.info(f"Loaded {len(self.pool.tasks)} tasks from {self.pool_file}")
         except FileNotFoundError:
             logger.warning(f"Pool file {self.pool_file} not found, starting with empty pool")
-            self.tasks = []
+            self.pool = PoolState(pool_file=self.pool_file)
         except Exception as e:
             logger.error(f"Error loading tasks: {e}")
             raise
@@ -128,20 +130,49 @@ class TaskExecutor:
             if task.exit_code == 0:
                 task.status = "success"
                 logger.info(f"Task {task.id} completed successfully")
+
+                # Check post-success session usage — if ≥80%, set warning flag
+                usage = task.json_output.get("session_usage_percent", 0)
+                if usage >= 80:
+                    logger.warning(
+                        f"Task {task.id} succeeded but session usage is {usage}% — "
+                        f"next rate limit will use shorter initial backoff"
+                    )
             elif task.exit_code == 1:
-                # Check for rate limit
+                # Check for rate limit in stderr AND stdout/json_output
                 stderr_text = stderr.decode("utf-8", errors="replace").lower()
-                is_rate_limit = any(
-                    pattern in stderr_text
-                    for pattern in ["rate limit", "session limit", "quota exceeded"]
+                stdout_text = stdout.decode("utf-8", errors="replace").lower() if stdout else ""
+                result_text = (
+                    task.json_output.get("result", "").lower()
+                    if task.json_output
+                    else ""
                 )
 
-                if is_rate_limit and task.retry_count < 5:
-                    task.status = "rate_limit_retry"
-                    logger.warning(f"Task {task.id} hit rate limit, will retry")
+                rate_limit_patterns = [
+                    "rate limit",
+                    "session limit",
+                    "quota exceeded",
+                    "you've hit your limit",
+                    "hit your limit",
+                    "rate limited",
+                    "too many requests",
+                ]
+
+                is_rate_limit = any(
+                    pattern in text
+                    for pattern in rate_limit_patterns
+                    for text in [stderr_text, stdout_text, result_text]
+                )
+
+                is_high_usage = (
+                    task.json_output.get("session_usage_percent", 0) >= 80
+                )
+
+                if is_rate_limit or is_high_usage:
+                    self._on_rate_limit_detected(task)
                 else:
                     task.status = "failed"
-                    logger.error(f"Task {task.id} failed with exit code 1")
+                    logger.error(f"Task {task.id} failed with exit code 1 (no rate limit)")
             else:
                 task.status = "failed"
                 logger.error(f"Task {task.id} failed with exit code {task.exit_code}")
@@ -157,30 +188,135 @@ class TaskExecutor:
         self._save_state()
         self.current_task = None
 
-    async def handle_rate_limit(self, task: Task) -> None:
-        """Handle rate limit retry with exponential backoff.
+    def _on_rate_limit_detected(self, task: Task) -> None:
+        """Handle global pool suspension when a rate limit is detected.
 
         Args:
-            task: Task that hit rate limit
+            task: Task that triggered the rate limit
         """
-        task.retry_count += 1
-        wait_seconds = min(60 * (2**task.retry_count), 5 * 3600)
+        self.pool.retry_count += 1
+        task.status = "rate_limit_retry"
+
+        # Use shorter backoff if session usage was already high (section 9.5)
+        base_delay = 30 if task.json_output and task.json_output.get("session_usage_percent", 0) >= 80 else 60
+        wait_seconds = min(base_delay * (2 ** self.pool.retry_count), 5 * 3600)
+
+        self.pool.suspended_until = datetime.now() + timedelta(seconds=wait_seconds)
 
         logger.info(
-            f"Rate limit retry {task.retry_count}/5 for task {task.id}, "
-            f"waiting {wait_seconds} seconds ({wait_seconds/60:.1f} minutes)"
+            f"Rate limit detected; pool suspended for {wait_seconds}s "
+            f"(retry {self.pool.retry_count}/5, resuming at {self.pool.suspended_until:%H:%M:%S})"
         )
 
-        # Wait with periodic checks for should_stop
-        elapsed = 0
-        while elapsed < wait_seconds and not self.should_stop:
-            await asyncio.sleep(min(10, wait_seconds - elapsed))
-            elapsed += 10
+        self._save_state()
 
-        if not self.should_stop:
-            task.status = "pending"
-            self._notify_update(task)
-            self._save_state()
+    async def wait_for_suspension(self) -> None:
+        """Sleep until the pool suspension expires, with periodic should_stop checks.
+
+        The TUI can reflect countdown via self.pool.suspension_remaining.
+        """
+        while not self.should_stop and self.pool.is_suspended:
+            remaining = self.pool.suspension_remaining
+            if remaining <= 0:
+                break
+            await asyncio.sleep(min(1, remaining))
+
+    def _suspend_aware_sleep(self, seconds: float) -> None:
+        """Track time spent during suspension for backoff credit."""
+        pass  # No-op — the pool loop handles this via wait_for_suspension
+
+    async def run_pool(self) -> None:
+        """Run all pending tasks sequentially with global rate-limit suspension."""
+        logger.info("Starting task pool execution")
+
+        # If the pool was loaded while already suspended (e.g. restart), wait
+        if self.pool.is_suspended:
+            logger.info(
+                f"Pool was suspended on load, waiting until {self.pool.suspended_until:%H:%M:%S}"
+            )
+            await self.wait_for_suspension()
+            if self.should_stop:
+                return
+            self.pool.suspended_until = None
+
+        while not self.should_stop:
+            # Check for new tasks in pool.json
+            self.check_pool_updates()
+
+            # If pool is currently suspended, wait for expiration
+            if self.pool.is_suspended:
+                resume_time = self.pool.suspended_until
+                logger.info(
+                    f"Pool suspended, resuming at {resume_time:%H:%M:%S} "
+                    f"({self.pool.suspension_remaining:.0f}s remaining)"
+                )
+                await self.wait_for_suspension()
+                if self.should_stop:
+                    break
+
+                logger.info("Pool suspension ended, resuming execution")
+                self.pool.suspended_until = None
+                self._save_state()
+
+                # Re-attempt the task that triggered the suspension first
+                retry_task = self._find_rate_limit_task()
+                if retry_task:
+                    retry_task.status = "pending"
+                    self._notify_update(retry_task)
+                    await self.execute_task(retry_task)
+
+                    # If it succeeded, reset the global retry counter
+                    if retry_task.status == "success":
+                        self.pool.retry_count = 0
+                        logger.info("Retry task succeeded, pool retry counter reset to 0")
+                    continue  # Loop back to check remaining tasks
+                
+                # No rate-limit task found — fall through to pending tasks
+
+            # Handle paused state (manual pause)
+            while self.paused and not self.should_stop:
+                await asyncio.sleep(1)
+
+            if self.should_stop:
+                break
+
+            # Find next pending task
+            pending_tasks = [t for t in self.pool.tasks if t.status == "pending"]
+
+            # Check for exhaustion
+            if self.pool.retry_count >= 5:
+                for t in self.pool.tasks:
+                    if t.status in ("pending", "rate_limit_retry"):
+                        t.status = "failed"
+                        t.json_output = {"result": f"Pool exhausted: rate limit retries exhausted ({self.pool.retry_count}/5)"}
+                logger.error(f"Pool exhausted after {self.pool.retry_count} rate-limit retries")
+                self._save_state()
+                break
+
+            if not pending_tasks:
+                logger.info("All tasks completed")
+                break
+
+            # Execute next pending task
+            task = pending_tasks[0]
+            await self.execute_task(task)
+
+            if self.should_stop:
+                break
+
+        logger.info("Task pool execution finished")
+        self._save_state()
+
+    def _find_rate_limit_task(self) -> Task | None:
+        """Find the task currently in rate_limit_retry status.
+
+        Returns:
+            The task or None if no rate-limit task exists
+        """
+        for t in self.pool.tasks:
+            if t.status == "rate_limit_retry":
+                return t
+        return None
 
     def check_pool_updates(self) -> bool:
         """Check if pool.json has been modified and reload if needed.
@@ -196,62 +332,29 @@ class TaskExecutor:
             if current_mtime > self.last_pool_mtime:
                 logger.info("Pool file modified, reloading tasks...")
                 try:
-                    new_tasks = load_pool(self.pool_file)
+                    new_pool = load_pool(self.pool_file)
                 except (json.JSONDecodeError, ValueError, KeyError) as e:
                     logger.error(f"Invalid pool.json format: {e}")
                     return False
                 
                 # Merge: keep existing tasks status, add new ones
-                existing_ids = {t.id for t in self.tasks}
-                for new_task in new_tasks:
+                existing_ids = {t.id for t in self.pool.tasks}
+                for new_task in new_pool.tasks:
                     if new_task.id not in existing_ids:
-                        self.tasks.append(new_task)
+                        self.pool.tasks.append(new_task)
                         logger.info(f"Added new task: {new_task.id}")
                         if self.on_task_update:
                             self.on_task_update(new_task)
                 
+                # Preserve pool metadata from the file
+                self.pool.retry_count = new_pool.retry_count
+                self.pool.suspended_until = new_pool.suspended_until
+
                 self.last_pool_mtime = current_mtime
                 return True
         except Exception as e:
             logger.error(f"Error checking pool updates: {e}")
         return False
-
-    async def run_pool(self) -> None:
-        """Run all pending tasks sequentially."""
-        logger.info("Starting task pool execution")
-
-        while not self.should_stop:
-            # Check for new tasks in pool.json
-            self.check_pool_updates()
-            # Find next pending task
-            pending_tasks = [t for t in self.tasks if t.status == "pending"]
-            retry_tasks = [t for t in self.tasks if t.status == "rate_limit_retry"]
-
-            if not pending_tasks and not retry_tasks:
-                logger.info("All tasks completed")
-                break
-
-            # Handle paused state
-            while self.paused and not self.should_stop:
-                await asyncio.sleep(1)
-
-            if self.should_stop:
-                break
-
-            # Process rate limit retries first
-            if retry_tasks:
-                task = retry_tasks[0]
-                await self.handle_rate_limit(task)
-                if self.should_stop:
-                    break
-
-            # Execute next pending task
-            if pending_tasks:
-                task = pending_tasks[0]
-                await self.execute_task(task)
-
-        logger.info("Task pool execution finished")
-        self._save_state()
 
     def _notify_update(self, task: Task) -> None:
         """Notify callback of task update."""
@@ -286,9 +389,9 @@ class TaskExecutor:
         Returns:
             True if task was deleted, False if not found
         """
-        for i, task in enumerate(self.tasks):
+        for i, task in enumerate(self.pool.tasks):
             if task.id == task_id:
-                del self.tasks[i]
+                del self.pool.tasks[i]
                 logger.info(f"Deleted task {task_id}")
                 self._save_state()
                 return True

@@ -1,10 +1,31 @@
 """Data models for Claude Pool TUI."""
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
 TaskStatus = Literal["pending", "running", "success", "failed", "skipped", "rate_limit_retry"]
+
+
+@dataclass
+class PoolState:
+    """Global pool state metadata for rate-limit handling."""
+
+    retry_count: int = 0
+    suspended_until: datetime | None = None
+    tasks: list["Task"] = field(default_factory=list)
+    pool_file: Path = Path("pool.json")
+
+    @property
+    def is_suspended(self) -> bool:
+        return self.suspended_until is not None and datetime.now() < self.suspended_until
+
+    @property
+    def suspension_remaining(self) -> float:
+        if not self.suspended_until:
+            return 0
+        return max(0, (self.suspended_until - datetime.now()).total_seconds())
 
 
 @dataclass

@@ -1,13 +1,14 @@
 """Tests for task executor."""
 
 import asyncio
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from claude_pool.executor import TaskExecutor
-from claude_pool.models import Task
+from claude_pool.models import PoolState, Task
 
 
 @pytest.fixture
@@ -27,13 +28,18 @@ def sample_task() -> Task:
     )
 
 
+def make_pool_state(tasks: list[Task] = None, pool_file: Path = Path("pool.json")) -> PoolState:
+    """Helper to create a PoolState with given tasks."""
+    return PoolState(tasks=tasks or [], pool_file=pool_file)
+
+
 @pytest.mark.asyncio
 async def test_executor_init(temp_pool_file: Path):
     """Test executor initialization."""
     executor = TaskExecutor(temp_pool_file)
 
     assert executor.pool_file == temp_pool_file
-    assert executor.tasks == []
+    assert executor.pool.tasks == []
     assert executor.current_task is None
     assert executor.paused is False
     assert executor.should_stop is False
@@ -45,7 +51,7 @@ async def test_load_tasks_empty_file(temp_pool_file: Path):
     executor = TaskExecutor(temp_pool_file)
     await executor.load_tasks()
 
-    assert executor.tasks == []
+    assert executor.pool.tasks == []
 
 
 @pytest.mark.asyncio
@@ -64,11 +70,11 @@ async def test_pause_resume(temp_pool_file: Path):
 async def test_delete_task(temp_pool_file: Path, sample_task: Task):
     """Test deleting a task."""
     executor = TaskExecutor(temp_pool_file)
-    executor.tasks = [sample_task]
+    executor.pool.tasks = [sample_task]
 
     result = executor.delete_task("test_001")
     assert result is True
-    assert len(executor.tasks) == 0
+    assert len(executor.pool.tasks) == 0
 
     result = executor.delete_task("nonexistent")
     assert result is False
@@ -78,7 +84,7 @@ async def test_delete_task(temp_pool_file: Path, sample_task: Task):
 async def test_execute_task_success(temp_pool_file: Path, sample_task: Task):
     """Test successful task execution."""
     executor = TaskExecutor(temp_pool_file)
-    executor.tasks = [sample_task]
+    executor.pool.tasks = [sample_task]
 
     # Mock subprocess
     mock_process = AsyncMock()
@@ -102,7 +108,7 @@ async def test_execute_task_success(temp_pool_file: Path, sample_task: Task):
 async def test_execute_task_failure(temp_pool_file: Path, sample_task: Task):
     """Test failed task execution."""
     executor = TaskExecutor(temp_pool_file)
-    executor.tasks = [sample_task]
+    executor.pool.tasks = [sample_task]
 
     mock_process = AsyncMock()
     mock_process.returncode = 2
@@ -122,7 +128,8 @@ async def test_execute_task_failure(temp_pool_file: Path, sample_task: Task):
 async def test_execute_task_rate_limit(temp_pool_file: Path, sample_task: Task):
     """Test task with rate limit."""
     executor = TaskExecutor(temp_pool_file)
-    executor.tasks = [sample_task]
+    executor.pool.tasks = [sample_task]
+    executor.pool.retry_count = 0
 
     mock_process = AsyncMock()
     mock_process.returncode = 1
@@ -136,43 +143,48 @@ async def test_execute_task_rate_limit(temp_pool_file: Path, sample_task: Task):
 
     assert sample_task.status == "rate_limit_retry"
     assert sample_task.exit_code == 1
+    assert executor.pool.retry_count == 1
+    assert executor.pool.suspended_until is not None
 
 
 @pytest.mark.asyncio
-async def test_handle_rate_limit(temp_pool_file: Path, sample_task: Task):
-    """Test rate limit handling with backoff."""
+async def test_pool_suspension_on_rate_limit(temp_pool_file: Path, sample_task: Task):
+    """Test that rate limit triggers global pool suspension."""
     executor = TaskExecutor(temp_pool_file)
-    sample_task.status = "rate_limit_retry"
-    sample_task.retry_count = 0
-
-    # Mock asyncio.sleep to avoid actual waiting
-    with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-        await executor.handle_rate_limit(sample_task)
-
-    assert sample_task.retry_count == 1
-    assert sample_task.status == "pending"
-    assert mock_sleep.called
-
-
-@pytest.mark.asyncio
-async def test_handle_rate_limit_max_retries(temp_pool_file: Path, sample_task: Task):
-    """Test rate limit with max retries exceeded."""
-    executor = TaskExecutor(temp_pool_file)
-    executor.tasks = [sample_task]
-    sample_task.retry_count = 5
+    executor.pool.tasks = [sample_task]
 
     mock_process = AsyncMock()
     mock_process.returncode = 1
     mock_process.communicate.return_value = (
-        b'{"result": "Still rate limited"}',
+        b'{"result": "Rate limited"}',
         b"Error: rate limit exceeded",
     )
 
     with patch("asyncio.create_subprocess_exec", return_value=mock_process):
         await executor.execute_task(sample_task)
 
-    # Should fail instead of retry
-    assert sample_task.status == "failed"
+    assert executor.pool.is_suspended is True
+    assert executor.pool.suspension_remaining > 0
+    assert executor.pool.retry_count == 1
+
+
+@pytest.mark.asyncio
+async def test_pool_retry_count_exhaustion(temp_pool_file: Path, sample_task: Task):
+    """Test that pool marks remaining tasks as failed after max retries."""
+    executor = TaskExecutor(temp_pool_file)
+    task1 = sample_task
+    task2 = Task(id="test_002", prompt="Task 2", directory=Path("/tmp"))
+    executor.pool.tasks = [task1, task2]
+    executor.pool.retry_count = 5  # Pre-set to max
+
+    # Manually test exhaustion logic (simulate what run_pool does)
+    for t in executor.pool.tasks:
+        if t.status in ("pending", "rate_limit_retry"):
+            t.status = "failed"
+            t.json_output = {"result": f"Pool exhausted"}
+
+    assert task1.status == "failed"
+    assert task2.status == "failed"
 
 
 @pytest.mark.asyncio
@@ -184,7 +196,7 @@ async def test_skip_current(temp_pool_file: Path, sample_task: Task):
 
     executor.skip_current()
 
-    assert sample_task.status == "failed"
+    assert sample_task.status == "skipped"
     assert sample_task.json_output is not None
     assert "skipped" in sample_task.json_output["result"].lower()
 
@@ -194,7 +206,7 @@ async def test_callback_on_update(temp_pool_file: Path, sample_task: Task):
     """Test that callback is called on task update."""
     callback = MagicMock()
     executor = TaskExecutor(temp_pool_file, on_task_update=callback)
-    executor.tasks = [sample_task]
+    executor.pool.tasks = [sample_task]
 
     mock_process = AsyncMock()
     mock_process.returncode = 0

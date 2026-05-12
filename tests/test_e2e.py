@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from claude_pool.models import Task
+from claude_pool.models import PoolState, Task
 from claude_pool.storage import load_pool, save_pool
 
 
@@ -40,25 +40,26 @@ def test_full_cycle_save_load(e2e_pool_file: Path):
         ),
     ]
 
-    # Save to file
-    save_pool(e2e_pool_file, tasks)
+    state = PoolState(tasks=tasks, pool_file=e2e_pool_file)
+    save_pool(state)
 
-    # Verify file exists and is valid JSON
+    # Verify file exists and is valid JSON (wrapped format)
     assert e2e_pool_file.exists()
     content = json.loads(e2e_pool_file.read_text())
-    assert isinstance(content, list)
-    assert len(content) == 2
+    assert isinstance(content, dict)
+    assert "tasks" in content
+    assert len(content["tasks"]) == 2
 
     # Load from file
-    loaded_tasks = load_pool(e2e_pool_file)
+    loaded_state = load_pool(e2e_pool_file)
 
     # Verify all data preserved
-    assert len(loaded_tasks) == 2
-    assert loaded_tasks[0].id == "e2e_001"
-    assert loaded_tasks[0].status == "pending"
-    assert loaded_tasks[1].id == "e2e_002"
-    assert loaded_tasks[1].status == "success"
-    assert loaded_tasks[1].json_output["tokens_used"] == 1000
+    assert len(loaded_state.tasks) == 2
+    assert loaded_state.tasks[0].id == "e2e_001"
+    assert loaded_state.tasks[0].status == "pending"
+    assert loaded_state.tasks[1].id == "e2e_002"
+    assert loaded_state.tasks[1].status == "success"
+    assert loaded_state.tasks[1].json_output["tokens_used"] == 1000
 
 
 def test_pool_modification_persistence(e2e_pool_file: Path):
@@ -70,30 +71,32 @@ def test_pool_modification_persistence(e2e_pool_file: Path):
         Task(id="mod_003", prompt="Task 3", directory=Path("/tmp")),
     ]
 
-    save_pool(e2e_pool_file, tasks)
+    state = PoolState(tasks=tasks, pool_file=e2e_pool_file)
+    save_pool(state)
 
     # Modify: mark one as success, delete one
     loaded = load_pool(e2e_pool_file)
-    loaded[0].status = "success"
-    loaded[0].exit_code = 0
-    del loaded[1]  # Delete middle task
+    loaded.tasks[0].status = "success"
+    loaded.tasks[0].exit_code = 0
+    del loaded.tasks[1]  # Delete middle task
 
-    save_pool(e2e_pool_file, loaded)
+    save_pool(loaded)
 
     # Reload and verify
     final = load_pool(e2e_pool_file)
-    assert len(final) == 2
-    assert final[0].id == "mod_001"
-    assert final[0].status == "success"
-    assert final[1].id == "mod_003"
+    assert len(final.tasks) == 2
+    assert final.tasks[0].id == "mod_001"
+    assert final.tasks[0].status == "success"
+    assert final.tasks[1].id == "mod_003"
 
 
 def test_empty_pool(e2e_pool_file: Path):
     """Test handling of empty pool."""
-    save_pool(e2e_pool_file, [])
+    state = PoolState(tasks=[], pool_file=e2e_pool_file)
+    save_pool(state)
 
     loaded = load_pool(e2e_pool_file)
-    assert loaded == []
+    assert loaded.tasks == []
 
 
 def test_unicode_handling(e2e_pool_file: Path):
@@ -107,12 +110,13 @@ def test_unicode_handling(e2e_pool_file: Path):
         )
     ]
 
-    save_pool(e2e_pool_file, tasks)
+    state = PoolState(tasks=tasks, pool_file=e2e_pool_file)
+    save_pool(state)
     loaded = load_pool(e2e_pool_file)
 
-    assert "caractères spéciaux" in loaded[0].prompt
-    assert "🎉" in loaded[0].prompt
-    assert loaded[0].json_output["result"] == "Résultat avec émojis 🚀"
+    assert "caractères spéciaux" in loaded.tasks[0].prompt
+    assert "🎉" in loaded.tasks[0].prompt
+    assert loaded.tasks[0].json_output["result"] == "Résultat avec émojis 🚀"
 
 
 def test_complex_json_output(e2e_pool_file: Path):
@@ -145,9 +149,32 @@ def test_complex_json_output(e2e_pool_file: Path):
         )
     ]
 
-    save_pool(e2e_pool_file, tasks)
+    state = PoolState(tasks=tasks, pool_file=e2e_pool_file)
+    save_pool(state)
     loaded = load_pool(e2e_pool_file)
 
-    assert len(loaded[0].json_output["code_blocks"]) == 2
-    assert loaded[0].json_output["code_blocks"][0]["language"] == "python"
-    assert loaded[0].json_output["tokens_used"] == 2500
+    assert len(loaded.tasks[0].json_output["code_blocks"]) == 2
+    assert loaded.tasks[0].json_output["code_blocks"][0]["language"] == "python"
+    assert loaded.tasks[0].json_output["tokens_used"] == 2500
+
+
+def test_pool_metadata_preservation(e2e_pool_file: Path):
+    """Test that pool metadata (retry_count, suspended_until) is preserved."""
+    from datetime import datetime, timedelta
+
+    tasks = [
+        Task(id="meta_001", prompt="Test", directory=Path("/tmp")),
+    ]
+    suspended_time = datetime.now() + timedelta(minutes=30)
+    state = PoolState(
+        retry_count=3,
+        suspended_until=suspended_time,
+        tasks=tasks,
+        pool_file=e2e_pool_file,
+    )
+    save_pool(state)
+
+    loaded = load_pool(e2e_pool_file)
+    assert loaded.retry_count == 3
+    assert loaded.suspended_until is not None
+    assert loaded.is_suspended

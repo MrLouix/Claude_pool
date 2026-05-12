@@ -39,7 +39,7 @@
     "retry_count": 0
   },
   {
-    "id": "test_001",
+    "id": "test_004",
     "prompt": "echo 'Hello from Claude Pool'",
     "directory": "/tmp",
     "args": [],
