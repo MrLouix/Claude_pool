@@ -17,6 +17,33 @@ from .models import Task
 
 logger = logging.getLogger(__name__)
 
+def get_exit_code_meaning(exit_code: int | None) -> str:
+    """Get human-readable meaning of exit code."""
+    if exit_code is None:
+        return ""
+    
+    # Common exit codes
+    if exit_code == 0:
+        return "✓ Success"
+    elif exit_code == 1:
+        return "⚠ General error"
+    elif exit_code == 2:
+        return "⚠ Misuse of shell command"
+    elif exit_code == 126:
+        return "⚠ Command cannot execute"
+    elif exit_code == 127:
+        return "⚠ Command not found"
+    elif exit_code == 130:
+        return "⏸ Terminated by Ctrl+C (SIGINT)"
+    elif exit_code == 143:
+        return "⏹ Terminated by SIGTERM (killed/timeout)"
+    elif exit_code >= 128:
+        signal_num = exit_code - 128
+        return f"⏹ Terminated by signal {signal_num}"
+    else:
+        return f"⚠ Error code {exit_code}"
+
+
 
 class ConfirmDialog(ModalScreen[bool]):
     """Modal dialog for confirmation."""
@@ -233,7 +260,8 @@ class JsonOutputWidget(Static):
             lines.append(f"Session usage: [{color}]{usage}%[/{color}]")
 
         if task.exit_code is not None:
-            lines.append(f"Exit code: {task.exit_code}")
+            meaning = get_exit_code_meaning(task.exit_code)
+            lines.append(f"Exit code: {task.exit_code} - {meaning}")
 
         if task.duration_ms:
             lines.append(f"Duration: {task.duration_ms}ms ({task.duration_ms/1000:.1f}s)")
