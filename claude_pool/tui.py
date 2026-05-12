@@ -165,22 +165,11 @@ class TaskListWidget(Static):
 
             node = root.add(label, data=task)
 
-            # Add task details as child nodes
-            details_text = f"📁 Directory: {task.directory}"
-            node.add_leaf(details_text)
-            
-            if task.args:
-                args_text = f"⚙️  Args: {' '.join(task.args)}"
-                node.add_leaf(args_text)
-            
-            if task.exit_code is not None:
-                exit_text = f"🔢 Exit code: {task.exit_code}"
-                node.add_leaf(exit_text)
-            
-            if task.retry_count > 0:
-                retry_text = f"🔁 Retries: {task.retry_count}/5"
-                node.add_leaf(retry_text)
 
+            # Add input parameters as child nodes
+            node.add_leaf(f"📁 {task.directory}")
+            if task.args:
+                node.add_leaf(f"⚙️  {" ".join(task.args)}")
             # Apply status-based styling
             if task.status == "success":
                 node.set_label(f"[green]{label}[/green]")
@@ -191,6 +180,9 @@ class TaskListWidget(Static):
             else:
                 node.set_label(f"[dim]{label}[/dim]")
 
+
+class JsonOutputWidget(Static):
+    """Widget displaying JSON output of selected task."""
 
     def __init__(self) -> None:
         """Initialize the JSON output widget."""
