@@ -1,19 +1,13 @@
 [
   {
-    "id": "test_001",
-    "prompt": "echo 'Hello from Claude Pool'",
+    "id": "test_simple",
+    "prompt": "Say hello in one sentence.",
     "directory": "/tmp",
-    "args": [],
-    "status": "success",
-    "exit_code": 0,
-    "duration_ms": 9854,
-    "json_output": {
-      "result": "`Hello from Claude Pool`",
-      "code_blocks": [],
-      "files_changed": [],
-      "tokens_used": 0,
-      "session_usage_percent": 0.0
-    },
+    "args": ["--model", "haiku"],
+    "status": "pending",
+    "exit_code": null,
+    "duration_ms": null,
+    "json_output": null,
     "retry_count": 0
   }
 ]

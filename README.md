@@ -43,7 +43,7 @@ This will:
     "id": "task_001",
     "prompt": "Fix the login bug in auth.py",
     "directory": "/home/user/my-project",
-    "args": ["--model", "sonnet-4"],
+    "args": ["--model", "sonnet"],
     "status": "pending",
     "exit_code": null,
     "duration_ms": null,
@@ -88,6 +88,16 @@ Special:
 
 # Run in CLI mode (headless)
 ./claude-pool.sh --pool pool.json --no-tui
+
+
+### Valid Model Names
+
+Use these model aliases in the `args` field:
+- `haiku` - Fastest, most cost-effective
+- `sonnet` - Balanced performance
+- `opus` - Most capable
+
+Or use full model names like `claude-sonnet-4-6`.
 
 # Run with verbose logging
 ./claude-pool.sh --pool pool.json -v
