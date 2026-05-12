@@ -85,7 +85,6 @@ class TaskExecutor:
             task.prompt,
             "--output-format",
             "json",
-            "--structured-output",
         ] + task.args
 
         try:
