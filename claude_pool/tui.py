@@ -67,7 +67,8 @@ class ConfirmDialog(ModalScreen[bool]):
 
     #dialog Button {
         height: 3;
-        margin: 0 1;
+        margin: 0;
+        padding: 0 1;
     }
     """
 
@@ -296,7 +297,8 @@ class PoolTUI(App):
 
     Button {
         height: 3;
-        margin: 0 1;
+        margin: 0;
+        padding: 0 1;
     }
     """
 
@@ -338,6 +340,7 @@ class PoolTUI(App):
             Button("Pause", id="pause_btn", variant="warning"),
             Button("Skip", id="skip_btn", variant="error"),
             Button("Delete", id="delete_btn", variant="error"),
+            Button("Retry", id="retry_btn", variant="warning"),
             Button("Quit", id="quit_btn", variant="primary"),
             id="controls",
         )
@@ -437,6 +440,10 @@ class PoolTUI(App):
                 f"[yellow]Skipping task {self.executor.current_task.id}[/yellow]"
             )
             self.executor.skip_current()
+            
+            # Refresh UI
+            task_list = self.query_one("#task_list_widget", TaskListWidget)
+            task_list.update_tasks()
 
     async def action_delete_task(self) -> None:
         """Delete selected task."""
@@ -477,6 +484,11 @@ class PoolTUI(App):
     def on_delete_pressed(self) -> None:
         """Handle delete button press."""
         self.run_worker(self.action_delete_task())
+
+    @on(Button.Pressed, "#retry_btn")
+    def on_retry_pressed(self) -> None:
+        """Handle retry button press."""
+        self.action_retry_task()
 
     @on(Button.Pressed, "#quit_btn")
     def on_quit_pressed(self) -> None:
