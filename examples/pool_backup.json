@@ -1,9 +1,12 @@
 [
   {
     "id": "task_001",
-    "prompt": "Analyze the codebase structure and create a brief summary",
+    "prompt": "What is 2+2? Answer in one short sentence.",
     "directory": "/tmp",
-    "args": ["--model", "sonnet-4"],
+    "args": [
+      "--model",
+      "haiku"
+    ],
     "status": "pending",
     "exit_code": null,
     "duration_ms": null,
@@ -12,7 +15,21 @@
   },
   {
     "id": "task_002",
-    "prompt": "List all Python files in the current directory",
+    "prompt": "List 3 programming languages. Just list them, no explanation.",
+    "directory": "/tmp",
+    "args": [
+      "--model",
+      "sonnet"
+    ],
+    "status": "pending",
+    "exit_code": null,
+    "duration_ms": null,
+    "json_output": null,
+    "retry_count": 0
+  },
+  {
+    "id": "task_003",
+    "prompt": "What is the capital of France? One word only.",
     "directory": "/tmp",
     "args": [],
     "status": "pending",
@@ -22,10 +39,10 @@
     "retry_count": 0
   },
   {
-    "id": "task_003",
-    "prompt": "What is the current date and time?",
+    "id": "test_001",
+    "prompt": "echo 'Hello from Claude Pool'",
     "directory": "/tmp",
-    "args": ["--model", "haiku"],
+    "args": [],
     "status": "pending",
     "exit_code": null,
     "duration_ms": null,
