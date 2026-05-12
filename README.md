@@ -16,17 +16,20 @@ Claude Pool TUI automates the execution of multiple Claude Code tasks in sequenc
 ### Requirements
 
 - Python 3.11+
-- `claude` CLI installed and authenticated
+- `claude` CLI installed and authenticated (optional for development)
 
-### Install from source
+### Quick Install
 
 ```bash
-git clone <repository-url>
-cd claude_pool
-python -m venv venv
-source venv/bin/activate  # or `. venv/bin/activate` on some shells
-pip install -e ".[dev]"
+git clone https://github.com/MrLouix/Claude_pool.git
+cd Claude_pool
+./claude-pool.sh install
 ```
+
+This will:
+- Create a Python virtual environment
+- Install all dependencies
+- Set up the `claude-pool` command
 
 ## Usage
 
@@ -46,17 +49,6 @@ pip install -e ".[dev]"
     "duration_ms": null,
     "json_output": null,
     "retry_count": 0
-  },
-  {
-    "id": "task_002",
-    "prompt": "Review the API endpoints and suggest improvements",
-    "directory": "/home/user/my-project",
-    "args": [],
-    "status": "pending",
-    "exit_code": null,
-    "duration_ms": null,
-    "json_output": null,
-    "retry_count": 0
   }
 ]
 ```
@@ -64,29 +56,44 @@ pip install -e ".[dev]"
 2. Run the TUI:
 
 ```bash
-claude-pool --pool pool.json
+./claude-pool.sh --pool pool.json
 ```
 
-Or with the installed package:
+Or try the example:
 
 ```bash
-python -m claude_pool --pool pool.json
-```
-
-### CLI Mode (No TUI)
-
-For headless execution:
-
-```bash
-claude-pool --pool pool.json --no-tui
+./claude-pool.sh --pool examples/pool.json
 ```
 
 ### Command Line Options
 
+```bash
+./claude-pool.sh [OPTIONS]
+
+Options:
+  --pool PATH       Path to pool.json file (default: pool.json)
+  --no-tui          Run in CLI mode without TUI
+  -v, --verbose     Enable verbose logging
+  -h, --help        Show help message
+
+Special:
+  install          Run installation/setup
 ```
---pool PATH       Path to pool.json file (default: pool.json)
---no-tui          Run in CLI mode without TUI
--v, --verbose     Enable verbose logging
+
+### Examples
+
+```bash
+# Run with TUI (interactive)
+./claude-pool.sh --pool examples/pool.json
+
+# Run in CLI mode (headless)
+./claude-pool.sh --pool pool.json --no-tui
+
+# Run with verbose logging
+./claude-pool.sh --pool pool.json -v
+
+# Reinstall or setup
+./claude-pool.sh install
 ```
 
 ## TUI Controls
@@ -147,6 +154,16 @@ When Claude hits rate limits:
 
 ## Development
 
+### Manual Setup
+
+If you prefer manual setup instead of the launcher script:
+
+```bash
+python -m venv venv
+. venv/bin/activate  # or `source venv/bin/activate` on some shells
+pip install -e ".[dev]"
+```
+
 ### Run Tests
 
 ```bash
@@ -192,6 +209,14 @@ which claude
 claude --version
 ```
 
+### "Virtual environment not found"
+
+Run the installation:
+
+```bash
+./claude-pool.sh install
+```
+
 ### Rate Limit Errors
 
 Check `session_usage_percent` in task output. If consistently hitting limits:
@@ -214,6 +239,14 @@ Verify:
 - **executor.py**: `TaskExecutor` with rate-limit logic
 - **tui.py**: Textual-based interactive interface
 - **__main__.py**: CLI entry point
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## License
 
