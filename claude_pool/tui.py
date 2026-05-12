@@ -305,6 +305,7 @@ class PoolTUI(App):
         ("d", "delete_task", "Delete"),
         ("enter", "show_detail", "Detail"),
         ("q", "quit", "Quit"),
+        ("r", "retry_task", "Retry"),
     ]
 
     def __init__(self, pool_file: Path) -> None:
@@ -480,6 +481,35 @@ class PoolTUI(App):
     def on_quit_pressed(self) -> None:
         """Handle quit button press."""
         self.exit()
+
+
+    def action_retry_task(self) -> None:
+        """Retry selected task by resetting it to pending."""
+        if not self.selected_task:
+            log_widget = self.query_one("#logs", LogWidget)
+            log_widget.add_log("[red]No task selected[/red]")
+            return
+        
+        task = self.selected_task
+        if task.status in ("failed", "success"):
+            task.status = "pending"
+            task.exit_code = None
+            task.retry_count = 0
+            
+            if self.executor:
+                self.executor._save_state()
+            
+            log_widget = self.query_one("#logs", LogWidget)
+            log_widget.add_log(f"[yellow]Task {task.id} reset to pending[/yellow]")
+            
+            task_list = self.query_one("#task_list_widget", TaskListWidget)
+            task_list.update_tasks()
+            
+            json_output = self.query_one("#json_output", JsonOutputWidget)
+            json_output.update_content(task)
+        else:
+            log_widget = self.query_one("#logs", LogWidget)
+            log_widget.add_log(f"[yellow]Task {task.id} is {task.status}, cannot retry[/yellow]")
 
     def action_quit(self) -> None:
         """Quit the application."""
