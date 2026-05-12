@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-TaskStatus = Literal["pending", "running", "success", "failed", "rate_limit_retry"]
+TaskStatus = Literal["pending", "running", "success", "failed", "skipped", "rate_limit_retry"]
 
 
 @dataclass

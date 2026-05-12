@@ -155,6 +155,7 @@ class TaskListWidget(Static):
                 "running": "▶",
                 "success": "✓",
                 "failed": "✗",
+                "skipped": "⏭",
                 "rate_limit_retry": "⟳",
             }.get(task.status, "?")
 

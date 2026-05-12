@@ -1,6 +1,7 @@
 """Task executor for running Claude Code CLI commands."""
 
 import asyncio
+import json
 import logging
 import signal
 import subprocess
@@ -194,7 +195,11 @@ class TaskExecutor:
             current_mtime = self.pool_file.stat().st_mtime
             if current_mtime > self.last_pool_mtime:
                 logger.info("Pool file modified, reloading tasks...")
-                new_tasks = load_pool(self.pool_file)
+                try:
+                    new_tasks = load_pool(self.pool_file)
+                except (json.JSONDecodeError, ValueError, KeyError) as e:
+                    logger.error(f"Invalid pool.json format: {e}")
+                    return False
                 
                 # Merge: keep existing tasks status, add new ones
                 existing_ids = {t.id for t in self.tasks}
@@ -267,7 +272,7 @@ class TaskExecutor:
         """Skip the current task."""
         if self.current_task:
             logger.info(f"Skipping task {self.current_task.id}")
-            self.current_task.status = "failed"
+            self.current_task.status = "skipped"
             self.current_task.json_output = {"result": "Task skipped by user"}
             self._notify_update(self.current_task)
             self._save_state()
