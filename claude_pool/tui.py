@@ -261,7 +261,7 @@ class PoolTUI(App):
         layout: vertical;
     }
 
-    #task_list {
+    #task_list_widget {
         height: 40%;
         border: solid green;
         padding: 1;
@@ -309,12 +309,21 @@ class PoolTUI(App):
     def compose(self) -> ComposeResult:
         """Compose the UI."""
         yield Header()
-        yield Container(
-            TaskListWidget(self.executor or TaskExecutor(self.pool_file)),
-            id="task_list",
+        
+        task_list_widget = TaskListWidget(
+            self.executor or TaskExecutor(self.pool_file)
         )
-        yield JsonOutputWidget(id="json_output")
-        yield LogWidget(id="logs")
+        task_list_widget.id = "task_list_widget"
+        yield task_list_widget
+        
+        json_widget = JsonOutputWidget()
+        json_widget.id = "json_output"
+        yield json_widget
+        
+        log_widget = LogWidget()
+        log_widget.id = "logs"
+        yield log_widget
+        
         yield Container(
             Button("Pause", id="pause_btn", variant="warning"),
             Button("Skip", id="skip_btn", variant="error"),
@@ -327,10 +336,12 @@ class PoolTUI(App):
     async def on_mount(self) -> None:
         """Called when app is mounted."""
         # Initialize executor
-        self.executor = TaskExecutor(self.pool_file, on_task_update=self._on_task_update)
+        self.executor = TaskExecutor(
+            self.pool_file, on_task_update=self._on_task_update
+        )
 
         # Update task list widget with executor
-        task_list = self.query_one("#task_list", TaskListWidget)
+        task_list = self.query_one("#task_list_widget", TaskListWidget)
         task_list.executor = self.executor
 
         # Load tasks
@@ -360,11 +371,11 @@ class PoolTUI(App):
     def _on_task_update(self, task: Task) -> None:
         """Called when a task is updated."""
         # Update UI from main thread
-        self.call_from_thread(self._update_ui, task)
+        self.call_later(self._update_ui, task)
 
     def _update_ui(self, task: Task) -> None:
         """Update UI elements."""
-        task_list = self.query_one("#task_list", TaskListWidget)
+        task_list = self.query_one("#task_list_widget", TaskListWidget)
         task_list.update_tasks()
 
         log_widget = self.query_one("#logs", LogWidget)
@@ -408,7 +419,9 @@ class PoolTUI(App):
         """Skip current task."""
         if self.executor and self.executor.current_task:
             log_widget = self.query_one("#logs", LogWidget)
-            log_widget.add_log(f"[yellow]Skipping task {self.executor.current_task.id}[/yellow]")
+            log_widget.add_log(
+                f"[yellow]Skipping task {self.executor.current_task.id}[/yellow]"
+            )
             self.executor.skip_current()
 
     async def action_delete_task(self) -> None:
@@ -419,7 +432,9 @@ class PoolTUI(App):
             return
 
         # Show confirmation dialog
-        result = await self.push_screen_wait(ConfirmDialog(f"Delete task {self.selected_task.id}?"))
+        result = await self.push_screen_wait(
+            ConfirmDialog(f"Delete task {self.selected_task.id}?")
+        )
 
         if result and self.executor:
             task_id = self.selected_task.id
@@ -427,7 +442,7 @@ class PoolTUI(App):
                 log_widget = self.query_one("#logs", LogWidget)
                 log_widget.add_log(f"[red]Deleted task {task_id}[/red]")
 
-                task_list = self.query_one("#task_list", TaskListWidget)
+                task_list = self.query_one("#task_list_widget", TaskListWidget)
                 task_list.update_tasks()
 
                 self.selected_task = None
