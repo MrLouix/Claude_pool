@@ -170,6 +170,7 @@ class TaskListWidget(Static):
 
             # Add input parameters as child nodes
             node.add_leaf(f"📁 {task.directory}")
+            node.add_leaf(f"📊 Status: {task.status}")
             if task.args:
                 node.add_leaf(f"⚙️  {" ".join(task.args)}")
             # Apply status-based styling
