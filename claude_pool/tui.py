@@ -60,13 +60,13 @@ class ConfirmDialog(ModalScreen[bool]):
 
     #dialog_buttons {
         width: 100%;
-        height: 2;
+        height: 3;
         align: center middle;
         layout: horizontal;
     }
 
     #dialog Button {
-        height: 2;
+        height: 3;
         margin: 0 1;
     }
     """
@@ -121,7 +121,7 @@ class DetailedOutputScreen(ModalScreen):
     }
 
     #detail_container Button {
-        height: 2;
+        height: 3;
         width: auto;
         margin-top: 1;
     }
@@ -289,12 +289,12 @@ class PoolTUI(App):
     }
 
     #controls {
-        height: 2;
+        height: 3;
         layout: horizontal;
     }
 
     Button {
-        height: 2;
+        height: 3;
         margin: 0 1;
     }
     """
