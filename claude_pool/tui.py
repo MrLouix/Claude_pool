@@ -60,13 +60,13 @@ class ConfirmDialog(ModalScreen[bool]):
 
     #dialog_buttons {
         width: 100%;
-        height: auto;
+        height: 3;
         align: center middle;
         layout: horizontal;
     }
 
     #dialog Button {
-        margin: 1;
+        margin: 0 1;
     }
     """
 
@@ -260,10 +260,6 @@ class PoolTUI(App):
     Screen {
         layout: vertical;
     }
-    CSS = """
-    Screen {
-        layout: vertical;
-    }
 
     #task_list_widget {
         height: 35%;
@@ -292,9 +288,6 @@ class PoolTUI(App):
 
     Button {
         margin: 0 1;
-    }
-    """
-        margin: 1;
     }
     """
 
@@ -394,6 +387,7 @@ class PoolTUI(App):
             json_output.update_content(task)
 
     @on(Tree.NodeSelected)
+    @on(Tree.NodeSelected)
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         """Handle task selection."""
         json_output = self.query_one("#json_output", JsonOutputWidget)
@@ -403,6 +397,7 @@ class PoolTUI(App):
         else:
             self.selected_task = None
             json_output.update_content(None)
+
     def action_show_detail(self) -> None:
         """Show detailed output for selected task."""
         if self.selected_task and self.selected_task.json_output:
