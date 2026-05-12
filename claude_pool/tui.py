@@ -67,7 +67,7 @@ class ConfirmDialog(ModalScreen[bool]):
 
     #dialog Button {
         height: 3;
-        margin: 0;
+        margin: 0 0.5;
         padding: 0 1;
     }
     """
@@ -297,7 +297,7 @@ class PoolTUI(App):
 
     Button {
         height: 3;
-        margin: 0;
+        margin: 0 0.5;
         padding: 0 1;
     }
     """

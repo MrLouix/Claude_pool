@@ -31,6 +31,7 @@ class TaskExecutor:
         self.paused = False
         self.should_stop = False
         self.on_task_update = on_task_update
+        self.last_pool_mtime = pool_file.stat().st_mtime if pool_file.exists() else 0
 
         # Setup signal handlers
         signal.signal(signal.SIGINT, self._handle_signal)
@@ -180,11 +181,43 @@ class TaskExecutor:
             self._notify_update(task)
             self._save_state()
 
+    def check_pool_updates(self) -> bool:
+        """Check if pool.json has been modified and reload if needed.
+        
+        Returns:
+            True if pool was reloaded, False otherwise
+        """
+        try:
+            if not self.pool_file.exists():
+                return False
+            
+            current_mtime = self.pool_file.stat().st_mtime
+            if current_mtime > self.last_pool_mtime:
+                logger.info("Pool file modified, reloading tasks...")
+                new_tasks = load_pool(self.pool_file)
+                
+                # Merge: keep existing tasks status, add new ones
+                existing_ids = {t.id for t in self.tasks}
+                for new_task in new_tasks:
+                    if new_task.id not in existing_ids:
+                        self.tasks.append(new_task)
+                        logger.info(f"Added new task: {new_task.id}")
+                        if self.on_task_update:
+                            self.on_task_update(new_task)
+                
+                self.last_pool_mtime = current_mtime
+                return True
+        except Exception as e:
+            logger.error(f"Error checking pool updates: {e}")
+        return False
+
     async def run_pool(self) -> None:
         """Run all pending tasks sequentially."""
         logger.info("Starting task pool execution")
 
         while not self.should_stop:
+            # Check for new tasks in pool.json
+            self.check_pool_updates()
             # Find next pending task
             pending_tasks = [t for t in self.tasks if t.status == "pending"]
             retry_tasks = [t for t in self.tasks if t.status == "rate_limit_retry"]
