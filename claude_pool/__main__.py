@@ -9,14 +9,32 @@ from pathlib import Path
 from .executor import TaskExecutor
 
 
-def setup_logging(verbose: bool = False) -> None:
-    """Setup logging configuration."""
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%H:%M:%S",
-    )
+def setup_logging(verbose: bool = False, tui_mode: bool = False) -> None:
+    """Setup logging configuration.
+    
+    Args:
+        verbose: Enable verbose logging
+        tui_mode: If True, disable console logging (use TUI log widget instead)
+    """
+    if tui_mode:
+        # In TUI mode, logs go through the TUI widget, not console
+        logging.basicConfig(
+            level=logging.WARNING,  # Only warnings and errors to stderr
+            format="%(asctime)s [%(levelname)s] %(message)s",
+            datefmt="%H:%M:%S",
+        )
+        # Disable propagation to avoid console output
+        for logger_name in ["claude_pool", "__main__"]:
+            logger = logging.getLogger(logger_name)
+            logger.propagate = False
+    else:
+        # CLI mode: normal logging to console
+        level = logging.DEBUG if verbose else logging.INFO
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s [%(levelname)s] %(message)s",
+            datefmt="%H:%M:%S",
+        )
 
 
 async def run_cli(pool_file: Path) -> int:
@@ -82,7 +100,9 @@ def main() -> None:
     )
 
     args = parser.parse_args()
-    setup_logging(args.verbose)
+    
+    # Setup logging based on mode
+    setup_logging(verbose=args.verbose, tui_mode=not args.no_tui)
 
     try:
         if args.no_tui:

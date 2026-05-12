@@ -4,10 +4,16 @@
     "prompt": "echo 'Hello from Claude Pool'",
     "directory": "/tmp",
     "args": [],
-    "status": "pending",
-    "exit_code": null,
-    "duration_ms": null,
-    "json_output": null,
+    "status": "success",
+    "exit_code": 0,
+    "duration_ms": 4321,
+    "json_output": {
+      "result": "Hello from Claude Pool",
+      "code_blocks": [],
+      "files_changed": [],
+      "tokens_used": 0,
+      "session_usage_percent": 0.0
+    },
     "retry_count": 0
   }
 ]
