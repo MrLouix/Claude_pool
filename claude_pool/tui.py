@@ -752,6 +752,7 @@ class PoolTUI(App):
         if result and self.executor:
             import uuid
             from datetime import datetime
+            from .storage import cleanup_old_tasks
             
             # Generate unique ID
             task_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
@@ -767,6 +768,12 @@ class PoolTUI(App):
             
             # Add to executor's pool
             self.executor.pool.tasks.append(new_task)
+            
+            # Automatic cleanup of old tasks (48+ hours)
+            removed = cleanup_old_tasks(self.executor.pool, max_age_hours=48)
+            if removed > 0:
+                logger.info(f"Automatically cleaned up {removed} old completed tasks")
+            
             self.executor._save_state()
             
             # Update UI
@@ -775,6 +782,8 @@ class PoolTUI(App):
             
             log_widget = self.query_one("#logs", LogWidget)
             log_widget.add_log(f"[green]Added new task {task_id}: {result['prompt'][:40]}...[/green]")
+            if removed > 0:
+                log_widget.add_log(f"[dim]Cleaned up {removed} old completed task(s)[/dim]")
 
     def action_quit(self) -> None:
         """Quit the application."""

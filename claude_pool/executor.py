@@ -356,6 +356,11 @@ class TaskExecutor:
                         changes_detected = True
                         if self.on_task_update:
                             self.on_task_update(new_task)
+                        
+                        # Automatic cleanup when new tasks are detected
+                        removed = cleanup_old_tasks(self.pool, max_age_hours=48)
+                        if removed > 0:
+                            logger.info(f"Automatically cleaned up {removed} old completed tasks")
                     else:
                         # Existing task - update if it was reset to pending
                         existing = existing_tasks[new_task.id]
