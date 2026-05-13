@@ -361,107 +361,71 @@ class JsonOutputWidget(Static):
         """Update the displayed JSON output."""
         self.current_task = task
 
-        # EXTREME TEST - Just display simple text
-        simple_test = "SIMPLE TEST - Can you see this?"
-        logger.debug(f"About to call self.update() with: {simple_test}")
-        self.update(simple_test)
-        logger.debug(f"Called self.update(), widget should now show: {simple_test}")
-        return
-        
-        # # Clear any previous content first
-        # self.renderable = ""
+        if task is None:
+            self.update("No task selected")
+            return
 
-        # if task is None:
-        #     self.update("No task selected")
-        #     return
+        # Build content using string concatenation instead of list
+        content = f"[bold]Task {task.id}[/bold]\n\n"
+        content += f"[bold]Prompt:[/bold] {task.prompt}\n\n"
 
-        # # Debug: log task info
-        # logger.debug(f"Updating content for task {task.id}, has output: {task.json_output is not None}")
-        # if task.json_output:
-        #     logger.debug(f"Result in output: {'result' in task.json_output}, value: {task.json_output.get('result', 'N/A')[:50]}")
-
-        lines = [f"[bold]Task {task.id}[/bold]\n"]
-
-        # Display full prompt
-        lines.append(f"[bold]Prompt:[/bold] {task.prompt}\n")
-
-        # Display exit_code, duration_ms, retry_count on one line
-        status_parts = []
+        # Status line
         if task.exit_code is not None:
             meaning = get_exit_code_meaning(task.exit_code)
-            status_parts.append(f"Exit: {task.exit_code} ({meaning})")
+            content += f"Exit: {task.exit_code} ({meaning}) | "
         else:
-            status_parts.append("Exit: -")
+            content += "Exit: - | "
 
         if task.duration_ms is not None:
-            status_parts.append(f"Duration: {task.duration_ms/1000:.1f}s")
+            content += f"Duration: {task.duration_ms/1000:.1f}s | "
         else:
-            status_parts.append("Duration: -")
+            content += "Duration: - | "
 
-        status_parts.append(f"Retry: {task.retry_count}")
-        lines.append(" | ".join(status_parts))
-        lines.append("")
+        content += f"Retry: {task.retry_count}\n\n"
 
-        # Display json_output fields
+        # JSON output
         if task.json_output is None:
-            lines.append("[dim]No output yet[/dim]")
+            content += "[dim]No output yet[/dim]"
         else:
             output = task.json_output
             
-            # Tokens and usage first (key metrics)
+            # Tokens
             if "tokens_used" in output:
-                tokens = output['tokens_used']
-                lines.append(f"[bold]Tokens used:[/bold] {tokens:,}")
+                content += f"[bold]Tokens used:[/bold] {output['tokens_used']:,}\n"
 
+            # Session usage
             if "session_usage_percent" in output:
                 usage = output["session_usage_percent"]
                 color = "red" if usage > 80 else "yellow" if usage > 50 else "green"
-                lines.append(f"[bold]Session usage:[/bold] [{color}]{usage}%[/{color}]\n")
+                content += f"[bold]Session usage:[/bold] [{color}]{usage}%[/{color}]\n\n"
             
-            # Result - TEST WITH FIXED TEXT
+            # Result
             result_value = output.get("result", "")
-            logger.debug(f"Result value type: {type(result_value)}, len: {len(str(result_value)) if result_value else 0}")
-            
-            # FORCE DISPLAY WITH FIXED TEXT FOR TESTING
-            lines.append("[bold]Result:[/bold]")
-            lines.append("THIS IS A FIXED TEST TEXT - If you see this, the display works!")
-            lines.append(f"Actual result length: {len(str(result_value))}")
-            lines.append("")
-            
-            # if result_value:
-            #     result = str(result_value).strip()
-            #     logger.debug(f"Result after strip, len: {len(result)}")
-            #     if len(result) > 400:
-            #         result = result[:400] + "..."
-            #     lines.append(f"[bold]Result:[/bold]")
-            #     lines.append(result)
-            #     lines.append("")
-            # else:
-            #     lines.append("[dim](No result)[/dim]\n")
+            if result_value:
+                result = str(result_value).strip()
+                if len(result) > 400:
+                    result = result[:400] + "..."
+                content += f"[bold]Result:[/bold]\n{result}\n\n"
 
             # Code blocks
             if "code_blocks" in output and output["code_blocks"]:
-                lines.append(f"[bold]Code blocks:[/bold] {len(output['code_blocks'])}")
+                content += f"[bold]Code blocks:[/bold] {len(output['code_blocks'])}\n"
                 for i, block in enumerate(output["code_blocks"][:5]):
                     lang = block.get("language", "unknown")
                     filename = block.get("filename", "")
-                    lines.append(f"  [{i+1}] {lang}: {filename}")
-                lines.append("")
+                    content += f"  [{i+1}] {lang}: {filename}\n"
+                content += "\n"
 
             # Files changed
             if "files_changed" in output and output["files_changed"]:
                 files = ', '.join(output['files_changed'][:5])
                 if len(output['files_changed']) > 5:
                     files += f" ... ({len(output['files_changed'])} total)"
-                lines.append(f"[bold]Files changed:[/bold] {files}\n")
+                content += f"[bold]Files changed:[/bold] {files}\n\n"
 
-        lines.append("\n[dim]Press Enter for detailed JSON view[/dim]")
-
-        content = "\n".join(lines)
-        logger.debug(f"Generated {len(lines)} lines, total length: {len(content)}")
-        logger.debug(f"First 200 chars: {content[:200]}")
+        content += "[dim]Press Enter for detailed JSON view[/dim]"
+        
         self.update(content)
-        self.refresh()
 
 
 class LogWidget(Static):
