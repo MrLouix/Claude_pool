@@ -351,6 +351,8 @@ class TaskListWidget(Static):
 
 class JsonOutputWidget(Static):
     """Widget displaying JSON output of selected task."""
+    
+    can_focus = True  # Allow widget to receive focus for scrolling
 
     def __init__(self) -> None:
         """Initialize the JSON output widget."""
@@ -428,6 +430,8 @@ class JsonOutputWidget(Static):
 
 class LogWidget(Static):
     """Widget displaying logs."""
+    
+    can_focus = True  # Allow widget to receive focus for scrolling
 
     def __init__(self) -> None:
         """Initialize the log widget."""
