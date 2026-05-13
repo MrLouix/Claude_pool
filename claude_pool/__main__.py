@@ -18,20 +18,33 @@ def setup_logging(verbose: bool = False, debug: bool = False, tui_mode: bool = F
         tui_mode: If True, disable console logging (use TUI log widget instead)
     """
     if tui_mode:
-        # In TUI mode, logs go through the TUI widget, not console
-        # But allow debug level if requested
+        # In TUI mode, write logs to file when debug is enabled
         if debug:
             level = logging.DEBUG
+            # Write debug logs to file to avoid polluting TUI
+            logging.basicConfig(
+                level=level,
+                format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                datefmt="%H:%M:%S",
+                filename="claude_pool_debug.log",
+                filemode="w",
+            )
+            # Also print to stderr that debug log file is created
+            print("Debug logging enabled. Logs written to: claude_pool_debug.log", file=sys.stderr)
         elif verbose:
             level = logging.INFO
+            logging.basicConfig(
+                level=level,
+                format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                datefmt="%H:%M:%S",
+            )
         else:
             level = logging.WARNING
-        
-        logging.basicConfig(
-            level=level,
-            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-            datefmt="%H:%M:%S",
-        )
+            logging.basicConfig(
+                level=level,
+                format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                datefmt="%H:%M:%S",
+            )
     else:
         # CLI mode: normal logging to console
         if debug:
