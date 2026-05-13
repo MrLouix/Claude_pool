@@ -9,30 +9,41 @@ from pathlib import Path
 from .executor import TaskExecutor
 
 
-def setup_logging(verbose: bool = False, tui_mode: bool = False) -> None:
+def setup_logging(verbose: bool = False, debug: bool = False, tui_mode: bool = False) -> None:
     """Setup logging configuration.
     
     Args:
-        verbose: Enable verbose logging
+        verbose: Enable verbose logging (INFO level)
+        debug: Enable debug logging (DEBUG level)
         tui_mode: If True, disable console logging (use TUI log widget instead)
     """
     if tui_mode:
         # In TUI mode, logs go through the TUI widget, not console
-        logging.basicConfig(
-            level=logging.WARNING,  # Only warnings and errors to stderr
-            format="%(asctime)s [%(levelname)s] %(message)s",
-            datefmt="%H:%M:%S",
-        )
-        # Disable propagation to avoid console output
-        for logger_name in ["claude_pool", "__main__"]:
-            logger = logging.getLogger(logger_name)
-            logger.propagate = False
-    else:
-        # CLI mode: normal logging to console
-        level = logging.DEBUG if verbose else logging.INFO
+        # But allow debug level if requested
+        if debug:
+            level = logging.DEBUG
+        elif verbose:
+            level = logging.INFO
+        else:
+            level = logging.WARNING
+        
         logging.basicConfig(
             level=level,
-            format="%(asctime)s [%(levelname)s] %(message)s",
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%H:%M:%S",
+        )
+    else:
+        # CLI mode: normal logging to console
+        if debug:
+            level = logging.DEBUG
+        elif verbose:
+            level = logging.INFO
+        else:
+            level = logging.WARNING
+            
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
             datefmt="%H:%M:%S",
         )
 
@@ -96,13 +107,18 @@ def main() -> None:
         "-v",
         "--verbose",
         action="store_true",
-        help="Enable verbose logging",
+        help="Enable verbose logging (INFO level)",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging (DEBUG level)",
     )
 
     args = parser.parse_args()
     
     # Setup logging based on mode
-    setup_logging(verbose=args.verbose, tui_mode=not args.no_tui)
+    setup_logging(verbose=args.verbose, debug=args.debug, tui_mode=not args.no_tui)
 
     try:
         if args.no_tui:
