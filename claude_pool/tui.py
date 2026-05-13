@@ -230,6 +230,9 @@ class JsonOutputWidget(Static):
 
         lines = [f"[bold]Task {task.id}[/bold]\n"]
 
+        # Display full prompt
+        lines.append(f"[bold]Prompt:[/bold]\n{task.prompt}\n")
+
         # Display exit_code, duration_ms, retry_count
         if task.exit_code is not None:
             meaning = get_exit_code_meaning(task.exit_code)
