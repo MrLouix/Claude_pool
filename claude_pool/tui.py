@@ -9,8 +9,7 @@ from textual import on, work
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Footer, Header, Label, Static, Tree
-from textual.widgets.tree import TreeNode
+from textual.widgets import Button, DataTable, Footer, Header, Label, Static
 
 from .executor import TaskExecutor
 from .models import Task
@@ -157,26 +156,34 @@ class DetailedOutputScreen(ModalScreen):
 
 
 class TaskListWidget(Static):
-    """Widget displaying the list of tasks."""
+    """Widget displaying the list of tasks in a table."""
 
     def __init__(self, executor: TaskExecutor) -> None:
         """Initialize the task list widget."""
         super().__init__()
         self.executor = executor
+        self.task_map: dict[str, Task] = {}
 
     def compose(self) -> ComposeResult:
         """Compose the widget."""
-        yield Tree("Tasks")
+        table = DataTable()
+        table.add_columns("ID", "Prompt", "Directory", "Status")
+        table.cursor_type = "row"
+        yield table
 
     def update_tasks(self) -> None:
         """Update the task list display."""
-        tree = self.query_one(Tree)
-        tree.clear()
-        root = tree.root
-        root.expand()
+        table = self.query_one(DataTable)
+        table.clear()
+        self.task_map.clear()
 
         for task in self.executor.pool.tasks:
-            # Format task line with status color
+            # Format task fields
+            task_id = task.id
+            prompt = task.prompt[:20] + ("..." if len(task.prompt) > 20 else "")
+            directory = str(task.directory)
+            
+            # Format status with emoji and color
             status_emoji = {
                 "pending": "⏸",
                 "running": "▶",
@@ -185,24 +192,22 @@ class TaskListWidget(Static):
                 "skipped": "⏭",
                 "rate_limit_retry": "⟳",
             }.get(task.status, "?")
-
-            label = f"{status_emoji} {task.id}: {task.prompt[:40]}"
-
-            if task.status == "success" and task.json_output:
-                tokens = task.json_output.get("tokens_used", 0)
-                label += f" ({tokens} tokens)"
-            elif task.duration_ms:
-                label += f" ({task.duration_ms}ms)"
-
-            node = root.add(label, data=task)
+            
+            status_text = f"{status_emoji} {task.status}"
+            
+            # Apply color based on status
             if task.status == "success":
-                node.set_label(f"[green]{label}[/green]")
+                status_display = f"[green]{status_text}[/green]"
             elif task.status == "failed":
-                node.set_label(f"[red]{label}[/red]")
+                status_display = f"[red]{status_text}[/red]"
             elif task.status in ("running", "rate_limit_retry"):
-                node.set_label(f"[yellow]{label}[/yellow]")
+                status_display = f"[yellow]{status_text}[/yellow]"
             else:
-                node.set_label(f"[dim]{label}[/dim]")
+                status_display = f"[dim]{status_text}[/dim]"
+            
+            # Add row and store task mapping
+            row_key = table.add_row(task_id, prompt, directory, status_display)
+            self.task_map[str(row_key.value)] = task
 
 
 class JsonOutputWidget(Static):
@@ -221,44 +226,64 @@ class JsonOutputWidget(Static):
             self.update("No task selected")
             return
 
-        if task.json_output is None:
-            self.update(f"Task {task.id}: No output yet")
-            return
+        lines = [f"[bold]Task {task.id}[/bold]\n"]
 
-        # Format compact JSON display
-        output = task.json_output
-        lines = [f"[bold]Task {task.id} Output:[/bold]"]
-
-        if "result" in output:
-            result = str(output["result"])[:200]
-            lines.append(f"Result: {result}")
-
-        if "code_blocks" in output and output["code_blocks"]:
-            lines.append(f"Code blocks: {len(output['code_blocks'])}")
-            for i, block in enumerate(output["code_blocks"][:3]):
-                lang = block.get("language", "unknown")
-                filename = block.get("filename", "")
-                lines.append(f"  [{i+1}] {lang}: {filename}")
-
-        if "files_changed" in output and output["files_changed"]:
-            lines.append(f"Files changed: {', '.join(output['files_changed'][:3])}")
-
-        if "tokens_used" in output:
-            lines.append(f"Tokens: {output['tokens_used']}")
-
-        if "session_usage_percent" in output:
-            usage = output["session_usage_percent"]
-            color = "red" if usage > 80 else "yellow" if usage > 50 else "green"
-            lines.append(f"Session usage: [{color}]{usage}%[/{color}]")
-
+        # Display exit_code, duration_ms, retry_count
         if task.exit_code is not None:
             meaning = get_exit_code_meaning(task.exit_code)
             lines.append(f"Exit code: {task.exit_code} - {meaning}")
+        else:
+            lines.append("Exit code: -")
 
-        if task.duration_ms:
+        if task.duration_ms is not None:
             lines.append(f"Duration: {task.duration_ms}ms ({task.duration_ms/1000:.1f}s)")
+        else:
+            lines.append("Duration: -")
 
-        lines.append("\n[dim]Press Enter for detailed view[/dim]")
+        lines.append(f"Retry count: {task.retry_count}")
+        lines.append("")
+
+        # Display all json_output fields
+        if task.json_output is None:
+            lines.append("[dim]No output yet[/dim]")
+        else:
+            output = task.json_output
+            
+            # Result
+            if "result" in output:
+                result = str(output["result"])
+                if len(result) > 500:
+                    result = result[:500] + "..."
+                lines.append(f"[bold]Result:[/bold]\n{result}\n")
+
+            # Code blocks
+            if "code_blocks" in output and output["code_blocks"]:
+                lines.append(f"[bold]Code blocks:[/bold] {len(output['code_blocks'])}")
+                for i, block in enumerate(output["code_blocks"][:5]):
+                    lang = block.get("language", "unknown")
+                    filename = block.get("filename", "")
+                    lines.append(f"  [{i+1}] {lang}: {filename}")
+                lines.append("")
+
+            # Files changed
+            if "files_changed" in output and output["files_changed"]:
+                files = ', '.join(output['files_changed'][:5])
+                if len(output['files_changed']) > 5:
+                    files += f" ... ({len(output['files_changed'])} total)"
+                lines.append(f"[bold]Files changed:[/bold] {files}\n")
+
+            # Tokens
+            if "tokens_used" in output:
+                tokens = output['tokens_used']
+                lines.append(f"[bold]Tokens used:[/bold] {tokens:,}")
+
+            # Session usage
+            if "session_usage_percent" in output:
+                usage = output["session_usage_percent"]
+                color = "red" if usage > 80 else "yellow" if usage > 50 else "green"
+                lines.append(f"[bold]Session usage:[/bold] [{color}]{usage}%[/{color}]")
+
+        lines.append("\n[dim]Press Enter for detailed JSON view[/dim]")
 
         self.update("\n".join(lines))
 
@@ -420,28 +445,18 @@ class PoolTUI(App):
             json_output = self.query_one("#json_output", JsonOutputWidget)
             json_output.update_content(task)
 
-    @on(Tree.NodeSelected)
-    @on(Tree.NodeSelected)
-    def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
-        """Handle task selection."""
+    @on(DataTable.RowHighlighted)
+    def on_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        """Handle task row selection."""
         json_output = self.query_one("#json_output", JsonOutputWidget)
-        if event.node.data:
-            self.selected_task = event.node.data
+        task_list = self.query_one("#task_list_widget", TaskListWidget)
+        
+        if event.row_key and str(event.row_key.value) in task_list.task_map:
+            self.selected_task = task_list.task_map[str(event.row_key.value)]
             json_output.update_content(self.selected_task)
         else:
             self.selected_task = None
             json_output.update_content(None)
-
-
-    @on(Tree.NodeExpanded)
-    def on_tree_node_expanded(self, event: Tree.NodeExpanded) -> None:
-        """Handle task node expansion - add parameter details on first expand."""
-        if event.node.data and not event.node.children:
-            task = event.node.data
-            event.node.add_leaf(f"📁 {task.directory}")
-            event.node.add_leaf(f"📊 Status: {task.status}")
-            if task.args:
-                event.node.add_leaf(f"⚙️  {' '.join(task.args)}")
     def action_show_detail(self) -> None:
         """Show detailed output for selected task."""
         if self.selected_task and self.selected_task.json_output:

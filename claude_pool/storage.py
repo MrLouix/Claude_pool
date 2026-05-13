@@ -1,6 +1,7 @@
 """Storage functions for loading and saving task pools."""
 
 import json
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -43,16 +44,43 @@ def load_pool(pool_file: Path) -> PoolState:
     tasks_raw = raw_data.get("tasks", [])
 
     tasks = []
+    existing_ids = set()
+    
     for item in tasks_raw:
         if not isinstance(item, dict):
             raise ValueError(f"Invalid task data: {item}")
 
-        required_fields = ["id", "prompt", "directory"]
-        for field in required_fields:
-            if field not in item:
-                raise KeyError(
-                    f"Missing required field '{field}' in task: {item.get('id', 'unknown')}"
-                )
+        # Validate and auto-complete task fields
+        # Required: prompt and directory
+        if "prompt" not in item:
+            raise KeyError(f"Missing required field 'prompt' in task: {item}")
+        if "directory" not in item:
+            raise KeyError(f"Missing required field 'directory' in task: {item}")
+        
+        # Auto-generate unique ID if missing
+        if "id" not in item or not item["id"]:
+            # Generate unique ID based on timestamp and UUID
+            new_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+            item["id"] = new_id
+        
+        # Ensure ID is unique
+        while item["id"] in existing_ids:
+            item["id"] = f"{item['id']}_{uuid.uuid4().hex[:4]}"
+        existing_ids.add(item["id"])
+        
+        # Auto-initialize optional fields with defaults if missing
+        if "args" not in item:
+            item["args"] = []
+        if "status" not in item:
+            item["status"] = "pending"
+        if "exit_code" not in item:
+            item["exit_code"] = None
+        if "duration_ms" not in item:
+            item["duration_ms"] = None
+        if "json_output" not in item:
+            item["json_output"] = None
+        if "retry_count" not in item:
+            item["retry_count"] = 0
 
         tasks.append(Task.from_dict(item))
 

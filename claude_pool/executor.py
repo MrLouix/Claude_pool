@@ -341,11 +341,14 @@ class TaskExecutor:
                 
                 # Merge: add new tasks and update modified ones
                 existing_tasks = {t.id: t for t in self.pool.tasks}
+                changes_detected = False
+                
                 for new_task in new_pool.tasks:
                     if new_task.id not in existing_tasks:
                         # New task - add it
                         self.pool.tasks.append(new_task)
-                        logger.info(f"Added new task: {new_task.id}")
+                        logger.info(f"Added new task: {new_task.id} (waiting 1s for file completion)")
+                        changes_detected = True
                         if self.on_task_update:
                             self.on_task_update(new_task)
                     else:
@@ -358,15 +361,25 @@ class TaskExecutor:
                             existing.duration_ms = new_task.duration_ms
                             existing.json_output = new_task.json_output
                             existing.retry_count = new_task.retry_count
-                            logger.info(f"Task {new_task.id} was reset to pending (retry #{existing.retry_count})")
+                            logger.info(f"Task {new_task.id} was reset to pending (retry #{existing.retry_count}, waiting 1s)")
+                            changes_detected = True
                             if self.on_task_update:
                                 self.on_task_update(existing)
+                
+                # Wait 1 second after detecting changes to ensure file is fully written
+                if changes_detected:
+                    import time
+                    time.sleep(1)
                 
                 # Preserve pool metadata from the file
                 self.pool.retry_count = new_pool.retry_count
                 self.pool.suspended_until = new_pool.suspended_until
 
                 self.last_pool_mtime = current_mtime
+                
+                # Save back to file to persist auto-generated IDs and initialized fields
+                self._save_state()
+                
                 return True
         except Exception as e:
             logger.error(f"Error checking pool updates: {e}")

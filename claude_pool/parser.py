@@ -52,7 +52,7 @@ def parse_claude_output(stdout: bytes) -> dict[str, Any]:
                         "parse_error": True,
                     }
 
-        # Handle new format: {"type":"result","result":"..."}
+        # Handle new format: {"type":"result","result":"...","usage":{...}}
         if data.get("type") == "result":
             result_text = data.get("result", "")
             # Extract code from markdown if present
@@ -65,12 +65,25 @@ def parse_claude_output(stdout: bytes) -> dict[str, Any]:
                     "content": content.strip(),
                 })
             
+            # Extract token usage from usage field
+            usage = data.get("usage", {})
+            total_tokens = 0
+            if isinstance(usage, dict):
+                # Sum all token types
+                total_tokens += usage.get("input_tokens", 0)
+                total_tokens += usage.get("output_tokens", 0)
+                total_tokens += usage.get("cache_read_input_tokens", 0)
+                total_tokens += usage.get("cache_creation_input_tokens", 0)
+            
+            # Calculate session usage (estimate based on 200k context window)
+            session_usage_percent = min(100.0, (total_tokens / 200000) * 100) if total_tokens > 0 else 0.0
+            
             return {
                 "result": result_text,
                 "code_blocks": code_blocks,
                 "files_changed": [],
-                "tokens_used": 0,
-                "session_usage_percent": 0.0,
+                "tokens_used": total_tokens,
+                "session_usage_percent": round(session_usage_percent, 2),
             }
 
         # Original format handling
