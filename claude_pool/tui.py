@@ -410,11 +410,15 @@ class JsonOutputWidget(Static):
             
             # Result
             result_value = output.get("result", "")
+            logger.debug(f"Result value type: {type(result_value)}, len: {len(str(result_value)) if result_value else 0}")
             if result_value:
                 result = str(result_value).strip()
+                logger.debug(f"Result after strip, len: {len(result)}")
                 if len(result) > 400:
                     result = result[:400] + "..."
-                lines.append(f"[bold]Result:[/bold]\n{result}\n")
+                lines.append(f"[bold]Result:[/bold]")
+                lines.append(result)
+                lines.append("")
             else:
                 lines.append("[dim](No result)[/dim]\n")
 
@@ -436,7 +440,11 @@ class JsonOutputWidget(Static):
 
         lines.append("\n[dim]Press Enter for detailed JSON view[/dim]")
 
-        self.update("\n".join(lines))
+        content = "\n".join(lines)
+        logger.debug(f"Generated {len(lines)} lines, total length: {len(content)}")
+        logger.debug(f"First 200 chars: {content[:200]}")
+        self.update(content)
+        self.refresh()
 
 
 class LogWidget(Static):
