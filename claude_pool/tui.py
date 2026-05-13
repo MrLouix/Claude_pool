@@ -7,7 +7,7 @@ from pathlib import Path
 
 from textual import on, work
 from textual.app import App, ComposeResult
-from textual.containers import Container, Vertical, VerticalScroll
+from textual.containers import Container, ScrollableContainer, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, Select, Static
 
@@ -464,18 +464,26 @@ class PoolTUI(App):
         padding: 1;
     }
 
-    #json_output {
+    #json_output_container {
         height: 50%;
         border: solid blue;
+    }
+    
+    #json_output {
+        width: 100%;
+        height: auto;
         padding: 1;
-        overflow-y: scroll;
     }
 
-    #logs {
+    #logs_container {
         height: 18%;
         border: solid yellow;
+    }
+    
+    #logs {
+        width: 100%;
+        height: auto;
         padding: 1;
-        overflow-y: scroll;
     }
 
     #controls {
@@ -517,13 +525,17 @@ class PoolTUI(App):
         task_list_widget.id = "task_list_widget"
         yield task_list_widget
         
-        json_widget = JsonOutputWidget()
-        json_widget.id = "json_output"
-        yield json_widget
+        # Wrap json output in scrollable container
+        with ScrollableContainer(id="json_output_container"):
+            json_widget = JsonOutputWidget()
+            json_widget.id = "json_output"
+            yield json_widget
         
-        log_widget = LogWidget()
-        log_widget.id = "logs"
-        yield log_widget
+        # Wrap logs in scrollable container
+        with ScrollableContainer(id="logs_container"):
+            log_widget = LogWidget()
+            log_widget.id = "logs"
+            yield log_widget
         
         yield Container(
             Button("Add Task", id="add_task_btn", variant="success"),
