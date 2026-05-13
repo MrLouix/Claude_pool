@@ -457,20 +457,20 @@ class PoolTUI(App):
     }
 
     #task_list_widget {
-        height: 35%;
+        height: 25%;
         border: solid green;
         padding: 1;
     }
 
     #json_output {
-        height: 30%;
+        height: 50%;
         border: solid blue;
         padding: 1;
         overflow-y: scroll;
     }
 
     #logs {
-        height: 28%;
+        height: 18%;
         border: solid yellow;
         padding: 1;
         overflow-y: scroll;
