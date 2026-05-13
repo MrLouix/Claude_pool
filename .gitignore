@@ -29,12 +29,8 @@ wheels/
 htmlcov/
 .tox/
 
-# Claude docs
-CLAUDE.md
-.claude
-
-# Project documentation
-docs/
+# Claude settings (keep CLAUDE.md but ignore local settings)
+.claude/settings.local.json
 
 # Type checking
 .mypy_cache/
@@ -50,4 +46,10 @@ dmypy.json
 
 # Project specific
 pool.json
+test_pool.json
 *.log
+claude_pool_debug.log
+
+# Test files
+hello.txt
+test*.txt

@@ -5,11 +5,13 @@ A Text User Interface (TUI) application for managing sequential pools of Claude 
 ## Overview
 
 Claude Pool TUI automates the execution of multiple Claude Code tasks in sequence, with:
-- **Rate-limit handling**: Automatic exponential backoff when hitting rate limits
-- **Interactive TUI**: Real-time monitoring with Textual framework
-- **Task management**: Pause, skip, delete tasks on the fly
+- **Rate-limit handling**: Automatic exponential backoff and global pool suspension on rate limits
+- **Interactive TUI**: Real-time monitoring with Textual framework and DataTable display
+- **Task management**: Add, pause, delete, retry tasks on the fly
 - **Persistent state**: Tasks saved to `pool.json` after each execution
-- **Structured output**: Parses Claude's JSON output for easy integration
+- **Structured output**: Parses Claude's JSON output with token tracking
+- **Auto-completion**: Minimal task definition (only prompt & directory required)
+- **Scrollable panels**: Full result display with scroll support
 
 ## Installation
 
@@ -35,23 +37,20 @@ This will:
 
 ### Quick Start
 
-1. Create a `pool.json` file with your tasks:
+1. Create a `pool.json` file with your tasks (minimal format):
 
 ```json
-[
-  {
-    "id": "task_001",
-    "prompt": "Fix the login bug in auth.py",
-    "directory": "/home/user/my-project",
-    "args": ["--model", "sonnet"],
-    "status": "pending",
-    "exit_code": null,
-    "duration_ms": null,
-    "json_output": null,
-    "retry_count": 0
-  }
-]
+{
+  "tasks": [
+    {
+      "prompt": "Fix the login bug in auth.py",
+      "directory": "/home/user/my-project"
+    }
+  ]
+}
 ```
+
+All other fields (`id`, `args`, `status`, etc.) are auto-generated if missing.
 
 2. Run the TUI:
 
@@ -73,7 +72,8 @@ Or try the example:
 Options:
   --pool PATH       Path to pool.json file (default: pool.json)
   --no-tui          Run in CLI mode without TUI
-  -v, --verbose     Enable verbose logging
+  -v, --verbose     Enable verbose logging (INFO level)
+  --debug           Enable debug logging (DEBUG level, writes to file in TUI mode)
   -h, --help        Show help message
 
 Special:
@@ -110,29 +110,44 @@ Or use full model names like `claude-sonnet-4-6`.
 
 | Key | Action |
 |-----|--------|
-| **↑ / ↓** | Navigate tasks |
-| **Enter** | Show detailed JSON output |
+| **↑ / ↓** | Navigate tasks / Scroll in focused panel |
+| **Tab** | Switch focus between panels |
+| **Click** | Select task or focus panel |
+| **A** | Add new task (opens form dialog) |
 | **P** | Pause/Resume execution |
-| **S** | Skip current task |
 | **D** | Delete selected task (with confirmation) |
+| **R** | Retry selected task (reset to pending) |
+| **Enter** | Show detailed JSON output (modal) |
 | **Q** | Quit application |
+
+### TUI Layout
+
+- **Top Panel (25%)**: Task list in table format (ID, Prompt preview, Directory, Status)
+- **Middle Panel (50%)**: Selected task details (Prompt, Exit code, Duration, Tokens, Result, Files)
+- **Bottom Panel (18%)**: Real-time logs
+- **Control Bar**: Buttons for quick actions
+
+All panels support scrolling when content exceeds visible area.
 
 ## Task JSON Schema
 
-### Required Fields
+### Required Fields (User-Provided)
 
-- `id` (string): Unique task identifier
 - `prompt` (string): Task description passed to `claude -p`
 - `directory` (string): Working directory for task execution
 
+### Auto-Generated Fields
+
+- `id` (string): Auto-generated unique identifier (format: `task_YYYYMMDD_HHMMSS_uuid`)
+
 ### Optional Fields
 
-- `args` (array): Additional CLI arguments for claude
-- `status` (string): `pending`, `running`, `success`, `failed`, `rate_limit_retry`
+- `args` (array): Additional CLI arguments for claude (e.g., `["--model", "haiku"]`)
+- `status` (string): `pending`, `running`, `success`, `failed`, `skipped`, `rate_limit_retry`
 - `exit_code` (int|null): Exit code from claude command
 - `duration_ms` (int|null): Execution time in milliseconds
 - `json_output` (object|null): Parsed output from claude
-- `retry_count` (int): Number of rate-limit retries (default: 0)
+- `retry_count` (int): Number of retries (default: 0)
 
 ### JSON Output Structure
 
@@ -156,11 +171,13 @@ After execution, `json_output` contains:
 
 ## Rate Limiting
 
-When Claude hits rate limits:
-- Tasks automatically enter `rate_limit_retry` status
-- Exponential backoff: `min(60 * 2^retry_count, 18000)` seconds
-- Maximum 5 retries per task
-- Pool execution pauses during backoff
+When Claude hits rate limits (exit code 1 or session usage ≥ 80%):
+- **Global pool suspension**: All execution pauses
+- **Exponential backoff**: `min(60 * 2^pool_retry_count, 5 hours)` seconds
+- **Maximum 5 retries** for the entire pool
+- **Automatic resume**: Pool resumes after suspension period
+- **Task retry**: Failed task is retried first after resume
+- **Session tracking**: Monitors `session_usage_percent` to prevent limits
 
 ## Development
 
