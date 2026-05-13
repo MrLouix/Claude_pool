@@ -7,9 +7,9 @@ from pathlib import Path
 
 from textual import on, work
 from textual.app import App, ComposeResult
-from textual.containers import Container, Vertical
+from textual.containers import Container, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Footer, Header, Label, Static
+from textual.widgets import Button, DataTable, Footer, Header, Input, Label, Static
 
 from .executor import TaskExecutor
 from .models import Task
@@ -42,6 +42,113 @@ def get_exit_code_meaning(exit_code: int | None) -> str:
     else:
         return f"⚠ Error code {exit_code}"
 
+
+
+class AddTaskScreen(ModalScreen[dict | None]):
+    """Modal screen for adding a new task."""
+
+    def compose(self) -> ComposeResult:
+        """Compose the add task form."""
+        yield Container(
+            Label("[bold]Add New Task[/bold]"),
+            VerticalScroll(
+                Label("Directory (required):"),
+                Input(placeholder="/path/to/directory", id="directory_input"),
+                Label("Prompt (required):"),
+                Input(placeholder="Enter task prompt...", id="prompt_input"),
+                Label("Model (optional):"),
+                Input(placeholder="haiku, sonnet, opus", id="model_input"),
+                Label("Additional args (optional, space-separated):"),
+                Input(placeholder="--arg1 value1 --arg2", id="args_input"),
+            ),
+            Container(
+                Button("Create", id="create", variant="success"),
+                Button("Cancel", id="cancel", variant="primary"),
+                id="add_task_buttons",
+            ),
+            id="add_task_dialog",
+        )
+
+    @on(Button.Pressed, "#create")
+    def on_create(self) -> None:
+        """Handle create button."""
+        directory = self.query_one("#directory_input", Input).value.strip()
+        prompt = self.query_one("#prompt_input", Input).value.strip()
+        model = self.query_one("#model_input", Input).value.strip()
+        args = self.query_one("#args_input", Input).value.strip()
+
+        # Validate required fields
+        if not directory:
+            self.notify("Directory is required", severity="error")
+            return
+        if not prompt:
+            self.notify("Prompt is required", severity="error")
+            return
+
+        # Build args list
+        args_list = []
+        if model:
+            args_list.extend(["--model", model])
+        if args:
+            # Split by spaces, respecting quotes
+            args_list.extend(args.split())
+
+        self.dismiss({
+            "directory": directory,
+            "prompt": prompt,
+            "args": args_list,
+        })
+
+    @on(Button.Pressed, "#cancel")
+    def on_cancel(self) -> None:
+        """Handle cancel button."""
+        self.dismiss(None)
+
+    def on_key(self, event) -> None:
+        """Handle key press."""
+        if event.key == "escape":
+            self.dismiss(None)
+
+    CSS = """
+    #add_task_dialog {
+        width: 80;
+        height: auto;
+        max-height: 90%;
+        border: thick $background 80%;
+        background: $surface;
+        padding: 1;
+        align: center middle;
+    }
+
+    #add_task_dialog VerticalScroll {
+        width: 100%;
+        height: auto;
+        max-height: 30;
+        margin: 1 0;
+    }
+
+    #add_task_dialog Label {
+        margin-top: 1;
+    }
+
+    #add_task_dialog Input {
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    #add_task_buttons {
+        width: 100%;
+        height: 3;
+        align: center middle;
+        layout: horizontal;
+    }
+
+    #add_task_buttons Button {
+        height: 3;
+        margin: 0 1;
+        padding: 0 2;
+    }
+    """
 
 
 class ConfirmDialog(ModalScreen[bool]):
@@ -360,6 +467,7 @@ class PoolTUI(App):
         ("enter", "show_detail", "Detail"),
         ("q", "quit", "Quit"),
         ("r", "retry_task", "Retry"),
+        ("a", "add_task", "Add Task"),
     ]
 
     def __init__(self, pool_file: Path) -> None:
@@ -388,6 +496,7 @@ class PoolTUI(App):
         yield log_widget
         
         yield Container(
+            Button("Add Task", id="add_task_btn", variant="success"),
             Button("Pause", id="pause_btn", variant="warning"),
             # Button("Skip", id="skip_btn", variant="error"),  # Disabled for future use
             Button("Delete", id="delete_btn", variant="error"),
@@ -530,6 +639,11 @@ class PoolTUI(App):
                 json_output = self.query_one("#json_output", JsonOutputWidget)
                 json_output.update_content(None)
 
+    @on(Button.Pressed, "#add_task_btn")
+    def on_add_task_pressed(self) -> None:
+        """Handle add task button press."""
+        self.run_worker(self.action_add_task())
+
     @on(Button.Pressed, "#pause_btn")
     def on_pause_pressed(self) -> None:
         """Handle pause button press."""
@@ -588,6 +702,37 @@ class PoolTUI(App):
         else:
             log_widget = self.query_one("#logs", LogWidget)
             log_widget.add_log(f"[yellow]Task {task.id} is {task.status}, cannot retry[/yellow]")
+
+    async def action_add_task(self) -> None:
+        """Show add task dialog."""
+        result = await self.push_screen_wait(AddTaskScreen())
+        
+        if result and self.executor:
+            import uuid
+            from datetime import datetime
+            
+            # Generate unique ID
+            task_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+            
+            # Create new task
+            new_task = Task(
+                id=task_id,
+                prompt=result["prompt"],
+                directory=Path(result["directory"]),
+                args=result["args"],
+                status="pending",
+            )
+            
+            # Add to executor's pool
+            self.executor.pool.tasks.append(new_task)
+            self.executor._save_state()
+            
+            # Update UI
+            task_list = self.query_one("#task_list_widget", TaskListWidget)
+            task_list.update_tasks()
+            
+            log_widget = self.query_one("#logs", LogWidget)
+            log_widget.add_log(f"[green]Added new task {task_id}: {result['prompt'][:40]}...[/green]")
 
     def action_quit(self) -> None:
         """Quit the application."""
