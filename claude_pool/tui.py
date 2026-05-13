@@ -368,34 +368,46 @@ class JsonOutputWidget(Static):
         lines = [f"[bold]Task {task.id}[/bold]\n"]
 
         # Display full prompt
-        lines.append(f"[bold]Prompt:[/bold]\n{task.prompt}\n")
+        lines.append(f"[bold]Prompt:[/bold] {task.prompt}\n")
 
-        # Display exit_code, duration_ms, retry_count
+        # Display exit_code, duration_ms, retry_count on one line
+        status_parts = []
         if task.exit_code is not None:
             meaning = get_exit_code_meaning(task.exit_code)
-            lines.append(f"Exit code: {task.exit_code} - {meaning}")
+            status_parts.append(f"Exit: {task.exit_code} ({meaning})")
         else:
-            lines.append("Exit code: -")
+            status_parts.append("Exit: -")
 
         if task.duration_ms is not None:
-            lines.append(f"Duration: {task.duration_ms}ms ({task.duration_ms/1000:.1f}s)")
+            status_parts.append(f"Duration: {task.duration_ms/1000:.1f}s")
         else:
-            lines.append("Duration: -")
+            status_parts.append("Duration: -")
 
-        lines.append(f"Retry count: {task.retry_count}")
+        status_parts.append(f"Retry: {task.retry_count}")
+        lines.append(" | ".join(status_parts))
         lines.append("")
 
-        # Display all json_output fields
+        # Display json_output fields
         if task.json_output is None:
             lines.append("[dim]No output yet[/dim]")
         else:
             output = task.json_output
             
+            # Tokens and usage first (key metrics)
+            if "tokens_used" in output:
+                tokens = output['tokens_used']
+                lines.append(f"[bold]Tokens used:[/bold] {tokens:,}")
+
+            if "session_usage_percent" in output:
+                usage = output["session_usage_percent"]
+                color = "red" if usage > 80 else "yellow" if usage > 50 else "green"
+                lines.append(f"[bold]Session usage:[/bold] [{color}]{usage}%[/{color}]\n")
+            
             # Result
-            if "result" in output:
+            if "result" in output and output["result"]:
                 result = str(output["result"])
-                if len(result) > 500:
-                    result = result[:500] + "..."
+                if len(result) > 400:
+                    result = result[:400] + "..."
                 lines.append(f"[bold]Result:[/bold]\n{result}\n")
 
             # Code blocks
@@ -413,17 +425,6 @@ class JsonOutputWidget(Static):
                 if len(output['files_changed']) > 5:
                     files += f" ... ({len(output['files_changed'])} total)"
                 lines.append(f"[bold]Files changed:[/bold] {files}\n")
-
-            # Tokens
-            if "tokens_used" in output:
-                tokens = output['tokens_used']
-                lines.append(f"[bold]Tokens used:[/bold] {tokens:,}")
-
-            # Session usage
-            if "session_usage_percent" in output:
-                usage = output["session_usage_percent"]
-                color = "red" if usage > 80 else "yellow" if usage > 50 else "green"
-                lines.append(f"[bold]Session usage:[/bold] [{color}]{usage}%[/{color}]")
 
         lines.append("\n[dim]Press Enter for detailed JSON view[/dim]")
 
