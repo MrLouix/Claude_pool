@@ -411,19 +411,26 @@ class JsonOutputWidget(Static):
                 color = "red" if usage > 80 else "yellow" if usage > 50 else "green"
                 lines.append(f"[bold]Session usage:[/bold] [{color}]{usage}%[/{color}]\n")
             
-            # Result
+            # Result - TEST WITH FIXED TEXT
             result_value = output.get("result", "")
             logger.debug(f"Result value type: {type(result_value)}, len: {len(str(result_value)) if result_value else 0}")
-            if result_value:
-                result = str(result_value).strip()
-                logger.debug(f"Result after strip, len: {len(result)}")
-                if len(result) > 400:
-                    result = result[:400] + "..."
-                lines.append(f"[bold]Result:[/bold]")
-                lines.append(result)
-                lines.append("")
-            else:
-                lines.append("[dim](No result)[/dim]\n")
+            
+            # FORCE DISPLAY WITH FIXED TEXT FOR TESTING
+            lines.append("[bold]Result:[/bold]")
+            lines.append("THIS IS A FIXED TEST TEXT - If you see this, the display works!")
+            lines.append(f"Actual result length: {len(str(result_value))}")
+            lines.append("")
+            
+            # if result_value:
+            #     result = str(result_value).strip()
+            #     logger.debug(f"Result after strip, len: {len(result)}")
+            #     if len(result) > 400:
+            #         result = result[:400] + "..."
+            #     lines.append(f"[bold]Result:[/bold]")
+            #     lines.append(result)
+            #     lines.append("")
+            # else:
+            #     lines.append("[dim](No result)[/dim]\n")
 
             # Code blocks
             if "code_blocks" in output and output["code_blocks"]:
