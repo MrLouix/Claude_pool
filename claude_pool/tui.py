@@ -177,7 +177,7 @@ class TaskListWidget(Static):
         table.clear()
         self.task_map.clear()
 
-        for task in self.executor.pool.tasks:
+        for idx, task in enumerate(self.executor.pool.tasks):
             # Format task fields
             task_id = task.id
             prompt = task.prompt[:20] + ("..." if len(task.prompt) > 20 else "")
@@ -205,9 +205,11 @@ class TaskListWidget(Static):
             else:
                 status_display = f"[dim]{status_text}[/dim]"
             
-            # Add row and store task mapping
+            # Add row and store task mapping by row index
             row_key = table.add_row(task_id, prompt, directory, status_display)
-            self.task_map[str(row_key.value)] = task
+            # Store by both row_key value (int) and task_id (str) for flexibility
+            self.task_map[str(idx)] = task
+            self.task_map[task_id] = task
 
 
 class JsonOutputWidget(Static):
@@ -451,9 +453,17 @@ class PoolTUI(App):
         json_output = self.query_one("#json_output", JsonOutputWidget)
         task_list = self.query_one("#task_list_widget", TaskListWidget)
         
-        if event.row_key and str(event.row_key.value) in task_list.task_map:
-            self.selected_task = task_list.task_map[str(event.row_key.value)]
-            json_output.update_content(self.selected_task)
+        if event.row_key is not None:
+            # Get the row index (cursor_row is 0-based)
+            table = self.query_one("#task_list_widget DataTable", DataTable)
+            row_idx = table.cursor_row
+            
+            if str(row_idx) in task_list.task_map:
+                self.selected_task = task_list.task_map[str(row_idx)]
+                json_output.update_content(self.selected_task)
+            else:
+                self.selected_task = None
+                json_output.update_content(None)
         else:
             self.selected_task = None
             json_output.update_content(None)
