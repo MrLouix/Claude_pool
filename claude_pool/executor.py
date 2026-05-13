@@ -89,6 +89,7 @@ class TaskExecutor:
             task.prompt,
             "--output-format",
             "json",
+            "--dangerously-skip-permissions",
         ] + task.args
 
         try:
@@ -294,8 +295,9 @@ class TaskExecutor:
                 break
 
             if not pending_tasks:
-                logger.info("All tasks completed")
-                break
+                # No pending tasks - wait and check again for file updates
+                await asyncio.sleep(1)
+                continue
 
             # Execute next pending task
             task = pending_tasks[0]
@@ -337,14 +339,28 @@ class TaskExecutor:
                     logger.error(f"Invalid pool.json format: {e}")
                     return False
                 
-                # Merge: keep existing tasks status, add new ones
-                existing_ids = {t.id for t in self.pool.tasks}
+                # Merge: add new tasks and update modified ones
+                existing_tasks = {t.id: t for t in self.pool.tasks}
                 for new_task in new_pool.tasks:
-                    if new_task.id not in existing_ids:
+                    if new_task.id not in existing_tasks:
+                        # New task - add it
                         self.pool.tasks.append(new_task)
                         logger.info(f"Added new task: {new_task.id}")
                         if self.on_task_update:
                             self.on_task_update(new_task)
+                    else:
+                        # Existing task - update if it was reset to pending
+                        existing = existing_tasks[new_task.id]
+                        if new_task.status == "pending" and existing.status != "pending":
+                            # Task was reset - update all fields
+                            existing.status = new_task.status
+                            existing.exit_code = new_task.exit_code
+                            existing.duration_ms = new_task.duration_ms
+                            existing.json_output = new_task.json_output
+                            existing.retry_count = new_task.retry_count
+                            logger.info(f"Task {new_task.id} was reset to pending (retry #{existing.retry_count})")
+                            if self.on_task_update:
+                                self.on_task_update(existing)
                 
                 # Preserve pool metadata from the file
                 self.pool.retry_count = new_pool.retry_count

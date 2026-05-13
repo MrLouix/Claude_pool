@@ -325,7 +325,7 @@ class PoolTUI(App):
 
     BINDINGS = [
         ("p", "toggle_pause", "Pause/Resume"),
-        ("s", "skip_task", "Skip"),
+        # ("s", "skip_task", "Skip"),  # Disabled for future use
         ("d", "delete_task", "Delete"),
         ("enter", "show_detail", "Detail"),
         ("q", "quit", "Quit"),
@@ -359,7 +359,7 @@ class PoolTUI(App):
         
         yield Container(
             Button("Pause", id="pause_btn", variant="warning"),
-            Button("Skip", id="skip_btn", variant="error"),
+            # Button("Skip", id="skip_btn", variant="error"),  # Disabled for future use
             Button("Delete", id="delete_btn", variant="error"),
             Button("Retry", id="retry_btn", variant="warning"),
             Button("Quit", id="quit_btn", variant="primary"),
@@ -463,18 +463,19 @@ class PoolTUI(App):
                 btn = self.query_one("#pause_btn", Button)
                 btn.label = "Resume"
 
-    def action_skip_task(self) -> None:
-        """Skip current task."""
-        if self.executor and self.executor.current_task:
-            log_widget = self.query_one("#logs", LogWidget)
-            log_widget.add_log(
-                f"[yellow]Skipping task {self.executor.current_task.id}[/yellow]"
-            )
-            self.executor.skip_current()
-            
-            # Refresh UI
-            task_list = self.query_one("#task_list_widget", TaskListWidget)
-            task_list.update_tasks()
+    # Disabled for future use
+    # def action_skip_task(self) -> None:
+    #     """Skip current task."""
+    #     if self.executor and self.executor.current_task:
+    #         log_widget = self.query_one("#logs", LogWidget)
+    #         log_widget.add_log(
+    #             f"[yellow]Skipping task {self.executor.current_task.id}[/yellow]"
+    #         )
+    #         self.executor.skip_current()
+    #         
+    #         # Refresh UI
+    #         task_list = self.query_one("#task_list_widget", TaskListWidget)
+    #         task_list.update_tasks()
 
     async def action_delete_task(self) -> None:
         """Delete selected task."""
@@ -506,10 +507,11 @@ class PoolTUI(App):
         """Handle pause button press."""
         self.action_toggle_pause()
 
-    @on(Button.Pressed, "#skip_btn")
-    def on_skip_pressed(self) -> None:
-        """Handle skip button press."""
-        self.action_skip_task()
+    # Disabled for future use
+    # @on(Button.Pressed, "#skip_btn")
+    # def on_skip_pressed(self) -> None:
+    #     """Handle skip button press."""
+    #     self.action_skip_task()
 
     @on(Button.Pressed, "#delete_btn")
     def on_delete_pressed(self) -> None:
@@ -528,7 +530,7 @@ class PoolTUI(App):
 
 
     def action_retry_task(self) -> None:
-        """Retry selected task by resetting it to pending."""
+        """Retry selected task by resetting it to pending and incrementing retry count."""
         if not self.selected_task:
             log_widget = self.query_one("#logs", LogWidget)
             log_widget.add_log("[red]No task selected[/red]")
@@ -536,15 +538,19 @@ class PoolTUI(App):
         
         task = self.selected_task
         if task.status in ("failed", "success"):
+            # Reset task fields
             task.status = "pending"
             task.exit_code = None
-            task.retry_count = 0
+            task.duration_ms = None
+            task.json_output = None
+            # Increment retry count
+            task.retry_count += 1
             
             if self.executor:
                 self.executor._save_state()
             
             log_widget = self.query_one("#logs", LogWidget)
-            log_widget.add_log(f"[yellow]Task {task.id} reset to pending[/yellow]")
+            log_widget.add_log(f"[yellow]Task {task.id} reset to pending (retry #{task.retry_count})[/yellow]")
             
             task_list = self.query_one("#task_list_widget", TaskListWidget)
             task_list.update_tasks()
