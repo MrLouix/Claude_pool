@@ -11,7 +11,7 @@ from typing import Callable
 
 from .models import PoolState, Task
 from .parser import parse_claude_output
-from .storage import load_pool, save_pool
+from .storage import cleanup_old_tasks, load_pool, save_pool
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,11 @@ class TaskExecutor:
             # Ensure pool_file is preserved after load
             self.pool.pool_file = self.pool_file
             logger.info(f"Loaded {len(self.pool.tasks)} tasks from {self.pool_file}")
+            
+            # Automatic cleanup of old tasks (older than 48 hours)
+            removed = cleanup_old_tasks(self.pool, max_age_hours=48)
+            if removed > 0:
+                logger.info(f"Automatically cleaned up {removed} old completed tasks")
         except FileNotFoundError:
             logger.warning(f"Pool file {self.pool_file} not found, starting with empty pool")
             self.pool = PoolState(pool_file=self.pool_file)
