@@ -360,18 +360,25 @@ class JsonOutputWidget(Static):
     def update_content(self, task: Task | None) -> None:
         """Update the displayed JSON output."""
         self.current_task = task
+
+        # EXTREME TEST - Just display simple text
+        simple_test = "SIMPLE TEST - Can you see this?"
+        logger.debug(f"About to call self.update() with: {simple_test}")
+        self.update(simple_test)
+        logger.debug(f"Called self.update(), widget should now show: {simple_test}")
+        return
         
-        # Clear any previous content first
-        self.renderable = ""
+        # # Clear any previous content first
+        # self.renderable = ""
 
-        if task is None:
-            self.update("No task selected")
-            return
+        # if task is None:
+        #     self.update("No task selected")
+        #     return
 
-        # Debug: log task info
-        logger.debug(f"Updating content for task {task.id}, has output: {task.json_output is not None}")
-        if task.json_output:
-            logger.debug(f"Result in output: {'result' in task.json_output}, value: {task.json_output.get('result', 'N/A')[:50]}")
+        # # Debug: log task info
+        # logger.debug(f"Updating content for task {task.id}, has output: {task.json_output is not None}")
+        # if task.json_output:
+        #     logger.debug(f"Result in output: {'result' in task.json_output}, value: {task.json_output.get('result', 'N/A')[:50]}")
 
         lines = [f"[bold]Task {task.id}[/bold]\n"]
 
