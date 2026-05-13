@@ -94,10 +94,18 @@ class AddTaskScreen(ModalScreen[dict | None]):
     @on(Button.Pressed, "#create")
     def on_create(self) -> None:
         """Handle create button."""
+        from textual.widgets._select import NoSelection
+        
         directory = self.query_one("#directory_input", Input).value.strip()
         prompt = self.query_one("#prompt_input", Input).value.strip()
-        model = self.query_one("#model_select", Select).value or ""
-        effort = self.query_one("#effort_select", Select).value or ""
+        
+        # Handle Select widgets that may return NoSelection
+        model_value = self.query_one("#model_select", Select).value
+        model = "" if isinstance(model_value, NoSelection) or model_value == "" else str(model_value)
+        
+        effort_value = self.query_one("#effort_select", Select).value
+        effort = "" if isinstance(effort_value, NoSelection) or effort_value == "" else str(effort_value)
+        
         args = self.query_one("#args_input", Input).value.strip()
 
         # Validate required fields
@@ -106,6 +114,20 @@ class AddTaskScreen(ModalScreen[dict | None]):
             return
         if not prompt:
             self.notify("Prompt is required", severity="error")
+            return
+        
+        # Validate directory path
+        from pathlib import Path
+        try:
+            dir_path = Path(directory).expanduser().resolve()
+            if not dir_path.exists():
+                self.notify(f"Directory does not exist: {directory}", severity="error")
+                return
+            if not dir_path.is_dir():
+                self.notify(f"Path is not a directory: {directory}", severity="error")
+                return
+        except Exception as e:
+            self.notify(f"Invalid directory path: {e}", severity="error")
             return
 
         # Build args list
@@ -119,7 +141,7 @@ class AddTaskScreen(ModalScreen[dict | None]):
             args_list.extend(args.split())
 
         self.dismiss({
-            "directory": directory,
+            "directory": str(dir_path),
             "prompt": prompt,
             "args": args_list,
         })
