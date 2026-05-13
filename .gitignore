@@ -29,8 +29,10 @@ wheels/
 htmlcov/
 .tox/
 
-# Claude settings (keep CLAUDE.md but ignore local settings)
-.claude/settings.local.json
+# Claude settings and docs (local development only)
+CLAUDE.md
+.claude/
+docs/
 
 # Type checking
 .mypy_cache/
