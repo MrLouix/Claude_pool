@@ -422,8 +422,6 @@ class JsonOutputWidget(Static):
                 if len(output['files_changed']) > 5:
                     files += f" ... ({len(output['files_changed'])} total)"
                 content += f"[bold]Files changed:[/bold] {files}\n\n"
-
-        content += "[dim]Press Enter for detailed JSON view[/dim]"
         
         self.update(content)
 
@@ -592,18 +590,20 @@ class PoolTUI(App):
         """Handle task row selection."""
         json_output = self.query_one("#json_output", JsonOutputWidget)
         task_list = self.query_one("#task_list_widget", TaskListWidget)
+        table = self.query_one("#task_list_widget DataTable", DataTable)
         
-        if event.row_key is not None:
-            # Get the row index (cursor_row is 0-based)
-            table = self.query_one("#task_list_widget DataTable", DataTable)
-            row_idx = table.cursor_row
-            
-            if str(row_idx) in task_list.task_map:
-                self.selected_task = task_list.task_map[str(row_idx)]
-                json_output.update_content(self.selected_task)
-            else:
-                self.selected_task = None
-                json_output.update_content(None)
+        # If clicking on header (cursor_row == -1 or row_key is None), deselect
+        if event.row_key is None or table.cursor_row < 0:
+            self.selected_task = None
+            json_output.update_content(None)
+            return
+        
+        # Get the row index (cursor_row is 0-based)
+        row_idx = table.cursor_row
+        
+        if str(row_idx) in task_list.task_map:
+            self.selected_task = task_list.task_map[str(row_idx)]
+            json_output.update_content(self.selected_task)
         else:
             self.selected_task = None
             json_output.update_content(None)
