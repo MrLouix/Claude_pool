@@ -9,7 +9,7 @@ from textual import on, work
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Footer, Header, Input, Label, Static
+from textual.widgets import Button, DataTable, Footer, Header, Input, Label, Select, Static
 
 from .executor import TaskExecutor
 from .models import Task
@@ -57,9 +57,31 @@ class AddTaskScreen(ModalScreen[dict | None]):
                 Label("Prompt (required):"),
                 Input(placeholder="Enter task prompt...", id="prompt_input"),
                 Label("Model (optional):"),
-                Input(placeholder="haiku, sonnet, opus", id="model_input"),
+                Select(
+                    [
+                        ("(None)", ""),
+                        ("Haiku", "haiku"),
+                        ("Sonnet", "sonnet"),
+                        ("Opus", "opus"),
+                    ],
+                    allow_blank=True,
+                    id="model_select",
+                ),
+                Label("Effort level (optional):"),
+                Select(
+                    [
+                        ("(None)", ""),
+                        ("Low", "low"),
+                        ("Medium", "medium"),
+                        ("High", "high"),
+                        ("Extra High", "xhigh"),
+                        ("Maximum", "max"),
+                    ],
+                    allow_blank=True,
+                    id="effort_select",
+                ),
                 Label("Additional args (optional, space-separated):"),
-                Input(placeholder="--arg1 value1 --arg2", id="args_input"),
+                Input(placeholder="--add-dir /path --max-budget-usd 1.0", id="args_input"),
             ),
             Container(
                 Button("Create", id="create", variant="success"),
@@ -74,7 +96,8 @@ class AddTaskScreen(ModalScreen[dict | None]):
         """Handle create button."""
         directory = self.query_one("#directory_input", Input).value.strip()
         prompt = self.query_one("#prompt_input", Input).value.strip()
-        model = self.query_one("#model_input", Input).value.strip()
+        model = self.query_one("#model_select", Select).value or ""
+        effort = self.query_one("#effort_select", Select).value or ""
         args = self.query_one("#args_input", Input).value.strip()
 
         # Validate required fields
@@ -89,6 +112,8 @@ class AddTaskScreen(ModalScreen[dict | None]):
         args_list = []
         if model:
             args_list.extend(["--model", model])
+        if effort:
+            args_list.extend(["--effort", effort])
         if args:
             # Split by spaces, respecting quotes
             args_list.extend(args.split())
@@ -132,6 +157,11 @@ class AddTaskScreen(ModalScreen[dict | None]):
     }
 
     #add_task_dialog Input {
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    #add_task_dialog Select {
         width: 100%;
         margin-bottom: 1;
     }
