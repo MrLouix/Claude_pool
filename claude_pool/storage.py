@@ -1,11 +1,14 @@
 """Storage functions for loading and saving task pools."""
 
 import json
+import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .models import PoolState, Task
+
+logger = logging.getLogger(__name__)
 
 
 def load_pool(pool_file: Path) -> PoolState:
@@ -114,3 +117,37 @@ def save_pool(state: PoolState) -> None:
     }
     content = json.dumps(data, indent=2, ensure_ascii=False)
     state.pool_file.write_text(content, encoding="utf-8")
+
+
+def cleanup_old_tasks(state: PoolState, max_age_hours: int = 48) -> int:
+    """Remove completed/failed tasks older than max_age_hours.
+    
+    Only removes tasks with status: success, failed, or skipped.
+    Pending and running tasks are never removed.
+    
+    Args:
+        state: PoolState object to clean
+        max_age_hours: Maximum age in hours (default: 48)
+    
+    Returns:
+        Number of tasks removed
+    """
+    cutoff_time = datetime.now() - timedelta(hours=max_age_hours)
+    initial_count = len(state.tasks)
+    
+    # Keep tasks that are:
+    # - pending or running (regardless of age)
+    # - OR created within the max_age window
+    state.tasks = [
+        task for task in state.tasks
+        if task.status in ("pending", "running", "rate_limit_retry")
+        or datetime.fromisoformat(task.created_at) > cutoff_time
+    ]
+    
+    removed_count = initial_count - len(state.tasks)
+    
+    if removed_count > 0:
+        logger.info(f"Cleaned up {removed_count} old tasks (older than {max_age_hours}h)")
+        save_pool(state)
+    
+    return removed_count

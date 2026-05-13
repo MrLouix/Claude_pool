@@ -91,7 +91,15 @@ else:
 ### Step 2: Add your task
 
 ```python
+import uuid
+from datetime import datetime
+
+# Generate a custom ID for easy retrieval
+# Format: task_YYYYMMDD_HHMMSS_<8char_uuid>
+custom_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+
 new_task = {
+    "id": custom_id,  # Recommended: set your own ID for easy lookup
     "prompt": "Explain how the authentication system works",
     "directory": "/home/user/my-project",
     # Optional: add model and effort level
@@ -99,7 +107,12 @@ new_task = {
 }
 
 pool["tasks"].append(new_task)
+
+# Save the ID for later retrieval
+return custom_id  # Use this to find your task later
 ```
+
+**Note:** While `id` is auto-generated if omitted, it's **highly recommended** for AI agents to set their own ID using the format above. This makes task tracking much easier.
 
 ### Step 3: Save pool.json
 
@@ -343,15 +356,68 @@ if pool.get("pool_suspended_until"):
     print(f"Pool suspended until {resume_time}")
 ```
 
+## Task Cleanup
+
+Old completed tasks should be cleaned up regularly to keep pool.json manageable.
+
+### Automatic Cleanup Function
+
+```python
+from datetime import datetime, timedelta
+
+def cleanup_old_tasks(pool_file, max_age_hours=48):
+    """Remove completed/failed tasks older than max_age_hours.
+    
+    Only removes tasks with status: success, failed, or skipped.
+    Pending and running tasks are never removed.
+    """
+    with open(pool_file, 'r') as f:
+        pool = json.load(f)
+    
+    cutoff_time = datetime.now() - timedelta(hours=max_age_hours)
+    initial_count = len(pool["tasks"])
+    
+    # Keep tasks that are:
+    # - pending or running (regardless of age)
+    # - OR created within the max_age window
+    pool["tasks"] = [
+        task for task in pool["tasks"]
+        if task["status"] in ("pending", "running", "rate_limit_retry")
+        or datetime.fromisoformat(task["created_at"]) > cutoff_time
+    ]
+    
+    removed_count = initial_count - len(pool["tasks"])
+    
+    if removed_count > 0:
+        with open(pool_file, 'w') as f:
+            json.dump(pool, f, indent=2)
+        print(f"Cleaned up {removed_count} old tasks")
+    
+    return removed_count
+
+# Usage: run daily or weekly
+cleanup_old_tasks("pool.json", max_age_hours=48)
+```
+
+### When to Clean
+
+- **Daily**: For high-volume automation (100+ tasks/day)
+- **Weekly**: For moderate use (10-50 tasks/day)
+- **Monthly**: For occasional use (<10 tasks/day)
+- **Before adding tasks**: If pool.json is getting large (>1MB)
+
 ## Best Practices
 
-1. **Always read before write**: Load existing pool.json before adding tasks
-2. **Use appropriate models**: `haiku` for simple tasks, `sonnet` for most work, `opus` for complex analysis
-3. **Set effort levels**: Use `low` for quick responses, `high` for thorough analysis
-4. **Monitor session usage**: Check `session_usage_percent` to avoid rate limits
-5. **Handle failures**: Check `status` and `exit_code` for error handling
-6. **Poll wisely**: Don't poll too frequently (5-10 second intervals are good)
-7. **Use absolute paths**: For `directory` field to avoid ambiguity
+1. **Set your own task ID**: Use format `task_YYYYMMDD_HHMMSS_<uuid>` for easy retrieval
+2. **Always read before write**: Load existing pool.json before adding tasks
+3. **Use appropriate models**: `haiku` for simple tasks, `sonnet` for most work, `opus` for complex analysis
+4. **Set effort levels**: Use `low` for quick responses, `high` for thorough analysis
+5. **Monitor session usage**: Check `session_usage_percent` to avoid rate limits
+6. **Handle failures**: Check `status` and `exit_code` for error handling
+7. **Poll wisely**: Don't poll too frequently (5-10 second intervals are good)
+8. **Use absolute paths**: For `directory` field to avoid ambiguity
+9. **Clean up regularly**: Remove old completed tasks to keep pool.json manageable
+10. **Track created_at**: The `created_at` timestamp is auto-generated for all tasks
 
 ## Integration Examples
 
