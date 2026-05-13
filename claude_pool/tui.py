@@ -405,8 +405,6 @@ class JsonOutputWidget(Static):
             result_value = output.get("result", "")
             if result_value:
                 result = str(result_value).strip()
-                if len(result) > 400:
-                    result = result[:400] + "..."
                 content += f"[bold]Result:[/bold]\n{result}\n\n"
 
             # Code blocks
