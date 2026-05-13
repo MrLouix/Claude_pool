@@ -64,9 +64,6 @@ class TaskExecutor:
             removed = cleanup_old_tasks(self.pool, max_age_hours=48)
             if removed > 0:
                 logger.info(f"Automatically cleaned up {removed} old completed tasks")
-        except FileNotFoundError:
-            logger.warning(f"Pool file {self.pool_file} not found, starting with empty pool")
-            self.pool = PoolState(pool_file=self.pool_file)
         except Exception as e:
             logger.error(f"Error loading tasks: {e}")
             raise

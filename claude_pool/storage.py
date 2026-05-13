@@ -17,6 +17,8 @@ def load_pool(pool_file: Path) -> PoolState:
     Supports both the wrapped format (dict with 'tasks' key) and the legacy
     bare-array format for backward compatibility.
 
+    If the file doesn't exist or is empty, initializes it with an empty pool.
+
     Args:
         pool_file: Path to the pool.json file
 
@@ -24,13 +26,24 @@ def load_pool(pool_file: Path) -> PoolState:
         PoolState object containing tasks and pool metadata
 
     Raises:
-        FileNotFoundError: If pool file doesn't exist
         json.JSONDecodeError: If pool file contains invalid JSON
     """
+    # Initialize empty pool if file doesn't exist
     if not pool_file.exists():
-        raise FileNotFoundError(f"Pool file not found: {pool_file}")
+        logger.info(f"Pool file not found, creating new empty pool: {pool_file}")
+        state = PoolState(pool_file=pool_file)
+        save_pool(state)
+        return state
 
-    content = pool_file.read_text(encoding="utf-8")
+    content = pool_file.read_text(encoding="utf-8").strip()
+    
+    # Initialize empty pool if file is empty
+    if not content:
+        logger.info(f"Pool file is empty, initializing: {pool_file}")
+        state = PoolState(pool_file=pool_file)
+        save_pool(state)
+        return state
+    
     raw_data = json.loads(content)
 
     # Backward compatibility: legacy bare task array
