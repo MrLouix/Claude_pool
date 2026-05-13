@@ -360,6 +360,9 @@ class JsonOutputWidget(Static):
     def update_content(self, task: Task | None) -> None:
         """Update the displayed JSON output."""
         self.current_task = task
+        
+        # Clear any previous content first
+        self.renderable = ""
 
         if task is None:
             self.update("No task selected")
