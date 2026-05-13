@@ -365,6 +365,11 @@ class JsonOutputWidget(Static):
             self.update("No task selected")
             return
 
+        # Debug: log task info
+        logger.debug(f"Updating content for task {task.id}, has output: {task.json_output is not None}")
+        if task.json_output:
+            logger.debug(f"Result in output: {'result' in task.json_output}, value: {task.json_output.get('result', 'N/A')[:50]}")
+
         lines = [f"[bold]Task {task.id}[/bold]\n"]
 
         # Display full prompt
@@ -404,11 +409,14 @@ class JsonOutputWidget(Static):
                 lines.append(f"[bold]Session usage:[/bold] [{color}]{usage}%[/{color}]\n")
             
             # Result
-            if "result" in output and output["result"]:
-                result = str(output["result"])
+            result_value = output.get("result", "")
+            if result_value:
+                result = str(result_value).strip()
                 if len(result) > 400:
                     result = result[:400] + "..."
                 lines.append(f"[bold]Result:[/bold]\n{result}\n")
+            else:
+                lines.append("[dim](No result)[/dim]\n")
 
             # Code blocks
             if "code_blocks" in output and output["code_blocks"]:
