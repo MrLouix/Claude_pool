@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import os
 import signal
 import time
 from datetime import datetime, timedelta
@@ -33,6 +34,7 @@ class TaskExecutor:
         self.should_stop = False
         self.on_task_update = on_task_update
         self.last_pool_mtime = pool_file.stat().st_mtime if pool_file.exists() else 0
+        self._last_save_mtime = 0.0  # Track our own saves to avoid self-triggered reloads
 
         # Setup signal handlers
         signal.signal(signal.SIGINT, self._handle_signal)
@@ -48,6 +50,9 @@ class TaskExecutor:
         """Save current state to pool file."""
         try:
             save_pool(self.pool)
+            # Track our own mtime so check_pool_updates doesn't trigger on our writes
+            if self.pool_file.exists():
+                self._last_save_mtime = os.path.getmtime(str(self.pool_file))
             logger.info("State saved successfully")
         except Exception as e:
             logger.error(f"Failed to save state: {e}")
@@ -200,15 +205,14 @@ class TaskExecutor:
         self.pool.retry_count += 1
         task.status = "rate_limit_retry"
 
-        # Use shorter backoff if session usage was already high (section 9.5)
-        base_delay = 30 if task.json_output and task.json_output.get("session_usage_percent", 0) >= 80 else 60
-        wait_seconds = min(base_delay * (2 ** self.pool.retry_count), 5 * 3600)
+        # Fixed 1-hour backoff between retries
+        wait_seconds = 3600
 
         self.pool.suspended_until = datetime.now() + timedelta(seconds=wait_seconds)
 
         logger.info(
             f"Rate limit detected; pool suspended for {wait_seconds}s "
-            f"(retry {self.pool.retry_count}/5, resuming at {self.pool.suspended_until:%H:%M:%S})"
+            f"(retry #{self.pool.retry_count}, resuming at {self.pool.suspended_until:%H:%M:%S})"
         )
 
         self._save_state()
@@ -261,20 +265,19 @@ class TaskExecutor:
                 self.pool.suspended_until = None
                 self._save_state()
 
-                # Re-attempt the task that triggered the suspension first
-                retry_task = self._find_rate_limit_task()
-                if retry_task:
-                    retry_task.status = "pending"
-                    self._notify_update(retry_task)
-                    await self.execute_task(retry_task)
+            # After suspension: retry the rate-limited task first
+            retry_task = self._find_rate_limit_task()
+            if retry_task:
+                logger.info(f"Retrying rate-limited task: {retry_task.id}")
+                await self.execute_task(retry_task)
 
-                    # If it succeeded, reset the global retry counter
-                    if retry_task.status == "success":
-                        self.pool.retry_count = 0
-                        logger.info("Retry task succeeded, pool retry counter reset to 0")
-                    continue  # Loop back to check remaining tasks
-                
-                # No rate-limit task found — fall through to pending tasks
+                # If it succeeded, reset the global retry counter
+                if retry_task.status == "success":
+                    self.pool.retry_count = 0
+                    logger.info("Retry task succeeded — pool retry counter reset to 0")
+                continue  # Loop back to check remaining tasks
+            
+            # No rate-limit task found after suspension — fall through to pending tasks
 
             # Handle paused state (manual pause)
             while self.paused and not self.should_stop:
@@ -285,16 +288,6 @@ class TaskExecutor:
 
             # Find next pending task
             pending_tasks = [t for t in self.pool.tasks if t.status == "pending"]
-
-            # Check for exhaustion
-            if self.pool.retry_count >= 5:
-                for t in self.pool.tasks:
-                    if t.status in ("pending", "rate_limit_retry"):
-                        t.status = "failed"
-                        t.json_output = {"result": f"Pool exhausted: rate limit retries exhausted ({self.pool.retry_count}/5)"}
-                logger.error(f"Pool exhausted after {self.pool.retry_count} rate-limit retries")
-                self._save_state()
-                break
 
             if not pending_tasks:
                 # No pending tasks - wait and check again for file updates
@@ -323,7 +316,9 @@ class TaskExecutor:
         return None
 
     def check_pool_updates(self) -> bool:
-        """Check if pool.json has been modified and reload if needed.
+        """Check if pool.json has been modified by an external source and reload if needed.
+        
+        Ignores modifications made by our own _save_state() to prevent self-triggered reloads.
         
         Returns:
             True if pool was reloaded, False otherwise
@@ -332,62 +327,64 @@ class TaskExecutor:
             if not self.pool_file.exists():
                 return False
             
-            current_mtime = self.pool_file.stat().st_mtime
-            if current_mtime > self.last_pool_mtime:
-                logger.info("Pool file modified, reloading tasks...")
-                try:
-                    new_pool = load_pool(self.pool_file)
-                except (json.JSONDecodeError, ValueError, KeyError) as e:
-                    logger.error(f"Invalid pool.json format: {e}")
-                    return False
-                
-                # Merge: add new tasks and update modified ones
-                existing_tasks = {t.id: t for t in self.pool.tasks}
-                changes_detected = False
-                
-                for new_task in new_pool.tasks:
-                    if new_task.id not in existing_tasks:
-                        # New task - add it
-                        self.pool.tasks.append(new_task)
-                        logger.info(f"Added new task: {new_task.id} (waiting 1s for file completion)")
+            current_mtime = os.path.getmtime(str(self.pool_file))
+            
+            # Ignore our own saves — only react to external modifications
+            if current_mtime <= self._last_save_mtime:
+                return False
+            
+            # Allow a small debounce window for our own saves (filesystem mtime granularity)
+            if current_mtime - self._last_save_mtime < 0.1:
+                return False
+            
+            self.last_pool_mtime = current_mtime
+            logger.info("Pool file modified externally, reloading tasks...")
+            try:
+                new_pool = load_pool(self.pool_file)
+            except (json.JSONDecodeError, ValueError, KeyError) as e:
+                logger.error(f"Invalid pool.json format: {e}")
+                return False
+            
+            # Merge: add new tasks and update modified ones
+            existing_tasks = {t.id: t for t in self.pool.tasks}
+            changes_detected = False
+            
+            for new_task in new_pool.tasks:
+                if new_task.id not in existing_tasks:
+                    # New task - add it
+                    self.pool.tasks.append(new_task)
+                    logger.info(f"Added new task: {new_task.id}")
+                    changes_detected = True
+                    if self.on_task_update:
+                        self.on_task_update(new_task)
+                    
+                    # Automatic cleanup when new tasks are detected
+                    removed = cleanup_old_tasks(self.pool, max_age_hours=48)
+                    if removed > 0:
+                        logger.info(f"Automatically cleaned up {removed} old completed tasks")
+                else:
+                    # Existing task - update if it was reset to pending
+                    existing = existing_tasks[new_task.id]
+                    if new_task.status == "pending" and existing.status != "pending":
+                        # Task was reset - update all fields
+                        existing.status = new_task.status
+                        existing.exit_code = new_task.exit_code
+                        existing.duration_ms = new_task.duration_ms
+                        existing.json_output = new_task.json_output
+                        existing.retry_count = new_task.retry_count
+                        logger.info(f"Task {new_task.id} was reset to pending (retry #{existing.retry_count})")
                         changes_detected = True
                         if self.on_task_update:
-                            self.on_task_update(new_task)
-                        
-                        # Automatic cleanup when new tasks are detected
-                        removed = cleanup_old_tasks(self.pool, max_age_hours=48)
-                        if removed > 0:
-                            logger.info(f"Automatically cleaned up {removed} old completed tasks")
-                    else:
-                        # Existing task - update if it was reset to pending
-                        existing = existing_tasks[new_task.id]
-                        if new_task.status == "pending" and existing.status != "pending":
-                            # Task was reset - update all fields
-                            existing.status = new_task.status
-                            existing.exit_code = new_task.exit_code
-                            existing.duration_ms = new_task.duration_ms
-                            existing.json_output = new_task.json_output
-                            existing.retry_count = new_task.retry_count
-                            logger.info(f"Task {new_task.id} was reset to pending (retry #{existing.retry_count}, waiting 1s)")
-                            changes_detected = True
-                            if self.on_task_update:
-                                self.on_task_update(existing)
-                
-                # Wait 1 second after detecting changes to ensure file is fully written
-                if changes_detected:
-                    import time
-                    time.sleep(1)
-                
-                # Preserve pool metadata from the file
-                self.pool.retry_count = new_pool.retry_count
-                self.pool.suspended_until = new_pool.suspended_until
-
-                self.last_pool_mtime = current_mtime
-                
-                # Save back to file to persist auto-generated IDs and initialized fields
-                self._save_state()
-                
-                return True
+                            self.on_task_update(existing)
+            
+            # Preserve pool metadata from the file
+            self.pool.retry_count = new_pool.retry_count
+            self.pool.suspended_until = new_pool.suspended_until
+            
+            # Save back to file to persist auto-generated IDs and initialized fields
+            self._save_state()
+            
+            return True
         except Exception as e:
             logger.error(f"Error checking pool updates: {e}")
         return False
