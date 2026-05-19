@@ -377,9 +377,12 @@ class TaskExecutor:
                         if self.on_task_update:
                             self.on_task_update(existing)
             
-            # Preserve pool metadata from the file
+            # Preserve pool metadata from the file, but keep in-memory
+            # suspended_until if the pool is currently suspended (an external
+            # edit must not erase a suspension computed by _on_rate_limit_detected)
             self.pool.retry_count = new_pool.retry_count
-            self.pool.suspended_until = new_pool.suspended_until
+            if not self.pool.is_suspended:
+                self.pool.suspended_until = new_pool.suspended_until
             
             # Save back to file to persist auto-generated IDs and initialized fields
             self._save_state()
