@@ -223,3 +223,41 @@ def test_parse_code_blocks_not_list():
     result = parse_claude_output(stdout)
 
     assert result["code_blocks"] == []
+
+
+def test_parse_with_session_id():
+    """Test extraction of session_id from Claude output."""
+    test_session_id = "sess_abc123def456"
+    output_data = {
+        "result": "Task completed with session",
+        "code_blocks": [],
+        "files_changed": [],
+        "tokens_used": 100,
+        "session_usage_percent": 5.0,
+        "session_id": test_session_id,
+    }
+
+    stdout = json.dumps(output_data).encode("utf-8")
+    result = parse_claude_output(stdout)
+
+    assert result["session_id"] == test_session_id
+
+
+def test_parse_new_format_with_session_id():
+    """Test extraction of session_id from new format output."""
+    test_session_id = "sess_new_format_123"
+    output_data = {
+        "type": "result",
+        "result": "Success with new format",
+        "usage": {
+            "input_tokens": 100,
+            "output_tokens": 50,
+        },
+        "session_id": test_session_id,
+    }
+
+    stdout = json.dumps(output_data).encode("utf-8")
+    result = parse_claude_output(stdout)
+
+    assert result["session_id"] == test_session_id
+    assert result["result"] == "Success with new format"

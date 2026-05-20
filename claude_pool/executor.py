@@ -73,6 +73,32 @@ class TaskExecutor:
             logger.error(f"Error loading tasks: {e}")
             raise
 
+    def _find_session_for_directory(self, directory: Path) -> str | None:
+        """Find the most recent session_id for tasks in a given directory.
+
+        Searches for the most recently completed task with status == "success"
+        in the same directory and with a non-None session_id.
+
+        Args:
+            directory: Directory to search for
+
+        Returns:
+            session_id if found, None otherwise
+        """
+        matching_tasks = [
+            t for t in self.pool.tasks
+            if (t.status == "success" and
+                t.directory == directory and
+                t.session_id is not None)
+        ]
+
+        if not matching_tasks:
+            return None
+
+        # Sort by created_at descending (most recent first)
+        matching_tasks.sort(key=lambda t: t.created_at, reverse=True)
+        return matching_tasks[0].session_id
+
     async def execute_task(self, task: Task) -> None:
         """Execute a single task.
 
@@ -89,6 +115,9 @@ class TaskExecutor:
         logger.info(f"Executing task {task.id}: {task.prompt[:50]}...")
         logger.info(f"Working directory: {task.directory}")
 
+        # Check for existing session in the same directory
+        session_id = self._find_session_for_directory(task.directory)
+
         # Build command
         cmd = [
             "claude",
@@ -97,7 +126,14 @@ class TaskExecutor:
             "--output-format",
             "json",
             "--dangerously-skip-permissions",
-        ] + task.args
+        ]
+
+        # Add session resume if one exists
+        if session_id:
+            logger.info(f"Resuming session {session_id} for directory {task.directory}")
+            cmd.extend(["--resume", session_id])
+
+        cmd.extend(task.args)
 
         try:
             # Execute with timeout (30 minutes)
@@ -138,6 +174,13 @@ class TaskExecutor:
             if task.exit_code == 0:
                 task.status = "success"
                 logger.info(f"Task {task.id} completed successfully")
+
+                # Extract and persist session_id if present
+                if task.json_output:
+                    session_id = task.json_output.get("session_id")
+                    if session_id:
+                        task.session_id = session_id
+                        logger.info(f"Persisted session_id for task {task.id}: {session_id}")
 
                 # Check post-success session usage — if ≥80%, set warning flag
                 usage = task.json_output.get("session_usage_percent", 0)
@@ -293,6 +336,9 @@ class TaskExecutor:
                 # No pending tasks - wait and check again for file updates
                 await asyncio.sleep(1)
                 continue
+
+            # Sort pending tasks by created_at (chronological order)
+            pending_tasks.sort(key=lambda t: t.created_at)
 
             # Execute next pending task
             task = pending_tasks[0]

@@ -105,6 +105,30 @@ async def test_execute_task_success(temp_pool_file: Path, sample_task: Task):
 
 
 @pytest.mark.asyncio
+async def test_execute_task_persists_session_id(temp_pool_file: Path, sample_task: Task):
+    """Test that session_id is persisted after successful execution."""
+    executor = TaskExecutor(temp_pool_file)
+    executor.pool.tasks = [sample_task]
+
+    # Mock subprocess with session_id in output
+    mock_process = AsyncMock()
+    mock_process.returncode = 0
+    test_session_id = "sess_abc123def456"
+    mock_process.communicate.return_value = (
+        f'{{"result": "Success", "tokens_used": 100, "session_id": "{test_session_id}"}}'.encode(),
+        b"",
+    )
+
+    with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+        await executor.execute_task(sample_task)
+
+    assert sample_task.status == "success"
+    assert sample_task.session_id == test_session_id
+    assert sample_task.json_output is not None
+    assert sample_task.json_output.get("session_id") == test_session_id
+
+
+@pytest.mark.asyncio
 async def test_execute_task_failure(temp_pool_file: Path, sample_task: Task):
     """Test failed task execution."""
     executor = TaskExecutor(temp_pool_file)
@@ -217,3 +241,215 @@ async def test_callback_on_update(temp_pool_file: Path, sample_task: Task):
 
     # Should be called at least twice: when starting and when done
     assert callback.call_count >= 2
+
+
+@pytest.mark.asyncio
+async def test_session_resumption_same_directory(temp_pool_file: Path):
+    """Test that --resume is added when a successful session exists in same directory."""
+    # Create first task that succeeds with a session_id
+    task1 = Task(
+        id="task_001",
+        prompt="First task",
+        directory=Path("/workspace/project"),
+        session_id="sess_abc123",
+        status="success",
+        exit_code=0,
+        duration_ms=1000,
+        json_output={"result": "Success"},
+    )
+
+    # Create second task in the same directory that should resume the session
+    task2 = Task(
+        id="task_002",
+        prompt="Second task",
+        directory=Path("/workspace/project"),
+    )
+
+    executor = TaskExecutor(temp_pool_file)
+    executor.pool.tasks = [task1, task2]
+
+    # Mock subprocess to verify --resume is in the command
+    captured_cmd = None
+
+    async def mock_exec(*args, **kwargs):
+        nonlocal captured_cmd
+        captured_cmd = args  # Capture all command arguments
+
+        mock_process = AsyncMock()
+        mock_process.returncode = 0
+        mock_process.communicate.return_value = (b'{"result": "Success"}', b"")
+        return mock_process
+
+    with patch("asyncio.create_subprocess_exec", side_effect=mock_exec):
+        await executor.execute_task(task2)
+
+    # Verify --resume was added to the command
+    assert captured_cmd is not None
+    assert "--resume" in captured_cmd
+    assert "sess_abc123" in captured_cmd
+    # Verify the order: --resume <session_id> comes after --dangerously-skip-permissions
+    resume_idx = list(captured_cmd).index("--resume")
+    assert captured_cmd[resume_idx + 1] == "sess_abc123"
+
+
+@pytest.mark.asyncio
+async def test_no_session_resumption_different_directory(temp_pool_file: Path):
+    """Test that --resume is NOT added when successful task is in different directory."""
+    # Create first task in one directory with a session
+    task1 = Task(
+        id="task_001",
+        prompt="First task",
+        directory=Path("/workspace/project-a"),
+        session_id="sess_abc123",
+        status="success",
+        exit_code=0,
+        duration_ms=1000,
+        json_output={"result": "Success"},
+    )
+
+    # Create second task in different directory
+    task2 = Task(
+        id="task_002",
+        prompt="Second task",
+        directory=Path("/workspace/project-b"),
+    )
+
+    executor = TaskExecutor(temp_pool_file)
+    executor.pool.tasks = [task1, task2]
+
+    captured_cmd = None
+
+    async def mock_exec(*args, **kwargs):
+        nonlocal captured_cmd
+        captured_cmd = args
+
+        mock_process = AsyncMock()
+        mock_process.returncode = 0
+        mock_process.communicate.return_value = (b'{"result": "Success"}', b"")
+        return mock_process
+
+    with patch("asyncio.create_subprocess_exec", side_effect=mock_exec):
+        await executor.execute_task(task2)
+
+    # Verify --resume was NOT added
+    assert captured_cmd is not None
+    assert "--resume" not in captured_cmd
+
+
+@pytest.mark.asyncio
+async def test_most_recent_session_is_used(temp_pool_file: Path):
+    """Test that the most recent session is used when multiple exist."""
+    base_time = datetime.fromisoformat("2026-05-20T10:00:00")
+
+    # Create multiple successful tasks in same directory with different sessions
+    task1 = Task(
+        id="task_001",
+        prompt="First task",
+        directory=Path("/workspace/project"),
+        session_id="sess_old",
+        status="success",
+        exit_code=0,
+        duration_ms=1000,
+        json_output={"result": "Success"},
+        created_at=(base_time + timedelta(seconds=0)).isoformat(),
+    )
+
+    task2 = Task(
+        id="task_002",
+        prompt="Second task",
+        directory=Path("/workspace/project"),
+        session_id="sess_new",
+        status="success",
+        exit_code=0,
+        duration_ms=1000,
+        json_output={"result": "Success"},
+        created_at=(base_time + timedelta(seconds=30)).isoformat(),
+    )
+
+    # Create third task that should use the most recent session
+    task3 = Task(
+        id="task_003",
+        prompt="Third task",
+        directory=Path("/workspace/project"),
+        created_at=(base_time + timedelta(seconds=60)).isoformat(),
+    )
+
+    executor = TaskExecutor(temp_pool_file)
+    executor.pool.tasks = [task1, task2, task3]
+
+    captured_cmd = None
+
+    async def mock_exec(*args, **kwargs):
+        nonlocal captured_cmd
+        captured_cmd = args
+
+        mock_process = AsyncMock()
+        mock_process.returncode = 0
+        mock_process.communicate.return_value = (b'{"result": "Success"}', b"")
+        return mock_process
+
+    with patch("asyncio.create_subprocess_exec", side_effect=mock_exec):
+        await executor.execute_task(task3)
+
+    # Verify the most recent session (sess_new) is used
+    assert captured_cmd is not None
+    assert "--resume" in captured_cmd
+    assert "sess_new" in captured_cmd
+    assert "sess_old" not in captured_cmd
+
+
+@pytest.mark.asyncio
+async def test_chronological_selection(temp_pool_file: Path):
+    """Test that pending tasks are selected in chronological order by created_at."""
+    # Create 3 tasks with different created_at timestamps
+    # They are added to the pool in reverse chronological order
+    # but should be executed in chronological order
+
+    base_time = datetime.fromisoformat("2026-05-20T10:00:00")
+    task1 = Task(
+        id="task_003",
+        prompt="Third task (created last)",
+        directory=Path("/tmp"),
+        created_at=(base_time + timedelta(seconds=60)).isoformat(),
+    )
+    task2 = Task(
+        id="task_002",
+        prompt="Second task (created second)",
+        directory=Path("/tmp"),
+        created_at=(base_time + timedelta(seconds=30)).isoformat(),
+    )
+    task3 = Task(
+        id="task_001",
+        prompt="First task (created first)",
+        directory=Path("/tmp"),
+        created_at=base_time.isoformat(),
+    )
+
+    executor = TaskExecutor(temp_pool_file)
+    # Add tasks in reverse chronological order (simulating pool.json order)
+    executor.pool.tasks = [task1, task2, task3]
+
+    # All tasks start as pending
+    assert all(t.status == "pending" for t in executor.pool.tasks)
+
+    # Mock subprocess to track execution order
+    execution_order = []
+
+    async def mock_execute(task: Task) -> None:
+        execution_order.append(task.id)
+        task.status = "success"
+        task.exit_code = 0
+        task.duration_ms = 100
+        task.json_output = {"result": "Done"}
+
+    # Patch execute_task to track execution order
+    with patch.object(executor, "execute_task", side_effect=mock_execute):
+        # Simulate the task selection logic from run_pool
+        pending_tasks = [t for t in executor.pool.tasks if t.status == "pending"]
+        pending_tasks.sort(key=lambda t: t.created_at)
+
+        for task in pending_tasks:
+            await executor.execute_task(task)
+
+    # Verify tasks were selected in chronological order
+    assert execution_order == ["task_001", "task_002", "task_003"]

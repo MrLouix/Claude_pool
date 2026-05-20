@@ -64,7 +64,7 @@ def parse_claude_output(stdout: bytes) -> dict[str, Any]:
                     "filename": f"code_{i}.txt",
                     "content": content.strip(),
                 })
-            
+
             # Extract token usage from usage field
             usage = data.get("usage", {})
             total_tokens = 0
@@ -74,17 +74,23 @@ def parse_claude_output(stdout: bytes) -> dict[str, Any]:
                 total_tokens += usage.get("output_tokens", 0)
                 total_tokens += usage.get("cache_read_input_tokens", 0)
                 total_tokens += usage.get("cache_creation_input_tokens", 0)
-            
+
             # Calculate session usage (estimate based on 200k context window)
             session_usage_percent = min(100.0, (total_tokens / 200000) * 100) if total_tokens > 0 else 0.0
-            
-            return {
+
+            # Extract session_id if present
+            session_id = data.get("session_id") or data.get("sessionKey")
+
+            result = {
                 "result": result_text,
                 "code_blocks": code_blocks,
                 "files_changed": [],
                 "tokens_used": total_tokens,
                 "session_usage_percent": round(session_usage_percent, 2),
             }
+            if session_id:
+                result["session_id"] = session_id
+            return result
 
         # Original format handling
         # Extract code blocks
@@ -106,13 +112,19 @@ def parse_claude_output(stdout: bytes) -> dict[str, Any]:
         if not isinstance(files_changed, list):
             files_changed = []
 
-        return {
+        # Extract session_id if present
+        session_id = data.get("session_id") or data.get("sessionKey")
+
+        result = {
             "result": str(data.get("result", "")),
             "code_blocks": code_blocks,
             "files_changed": files_changed,
             "tokens_used": int(data.get("tokens_used", 0)),
             "session_usage_percent": float(data.get("session_usage_percent", 0.0)),
         }
+        if session_id:
+            result["session_id"] = session_id
+        return result
 
     except (json.JSONDecodeError, ValueError, AttributeError) as e:
         # If parsing fails, return raw text with error flag

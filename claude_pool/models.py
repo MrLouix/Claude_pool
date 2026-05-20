@@ -42,30 +42,35 @@ class Task:
     json_output: dict[str, Any] | None = None
     retry_count: int = 0
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    session_id: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Task":
         """Create a Task from a dictionary."""
         args_raw = data.get("args", [])
         args_list = list(args_raw) if isinstance(args_raw, list) else []
-        
+
         exit_code_raw = data.get("exit_code")
         exit_code = int(exit_code_raw) if exit_code_raw is not None else None
-        
+
         duration_ms_raw = data.get("duration_ms")
         duration_ms = int(duration_ms_raw) if duration_ms_raw is not None else None
-        
+
         json_output_raw = data.get("json_output")
         json_output = dict(json_output_raw) if isinstance(json_output_raw, dict) else None
-        
+
         retry_count_raw = data.get("retry_count", 0)
         retry_count = int(retry_count_raw) if retry_count_raw is not None else 0
-        
+
         # Handle created_at (auto-generate if missing for backward compatibility)
         created_at = data.get("created_at")
         if not created_at:
             created_at = datetime.now().isoformat()
-        
+
+        # Handle session_id (optional, backward compatible)
+        session_id = data.get("session_id")
+        session_id = str(session_id) if session_id is not None else None
+
         return cls(
             id=str(data["id"]),
             prompt=str(data["prompt"]),
@@ -77,6 +82,7 @@ class Task:
             json_output=json_output,
             retry_count=retry_count,
             created_at=str(created_at),
+            session_id=session_id,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -92,4 +98,5 @@ class Task:
             "json_output": self.json_output,
             "retry_count": self.retry_count,
             "created_at": self.created_at,
+            "session_id": self.session_id,
         }
