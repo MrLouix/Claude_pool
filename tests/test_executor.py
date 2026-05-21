@@ -461,3 +461,75 @@ async def test_chronological_selection(temp_pool_file: Path):
 
     # Verify tasks were selected in chronological order
     assert execution_order == ["task_001", "task_002", "task_003"]
+
+
+@pytest.mark.asyncio
+async def test_retry_count_reset_suspension_expires_no_task(temp_pool_file: Path):
+    """When suspension timer expires but no rate_limit_retry task exists,
+    pool retry_count must be reset to 0 so the pool fully unblocks."""
+    executor = TaskExecutor(temp_pool_file)
+    # Start with a suspended pool whose timer already expired
+    executor.pool.retry_count = 2
+    past_time = datetime.now() - timedelta(seconds=5)
+    executor.pool.suspended_until = past_time
+    executor.pool.tasks = [
+        Task(id="task_old", prompt="old task", directory=Path("/tmp"), status="success")
+    ]
+
+    # is_suspended should be False since timer expired
+    assert not executor.pool.is_suspended
+
+    # Run briefly — it will detect no rate_limit_retry task and reset counter
+    called_tasks = []
+
+    async def mock_execute(task):
+        called_tasks.append(task)
+
+    with patch.object(executor, "execute_task", side_effect=mock_execute):
+        task = asyncio.create_task(executor.run_pool())
+        await asyncio.sleep(0.1)
+        executor.should_stop = True
+        try:
+            await asyncio.wait_for(task, timeout=3)
+        except asyncio.TimeoutError:
+            executor.should_stop = True
+
+    assert executor.pool.retry_count == 0
+
+
+@pytest.mark.asyncio
+async def test_retry_count_reset_suspension_expired_with_pending(temp_pool_file: Path):
+    """If new pending tasks are added while suspended, after timer expires
+    and no rate_limit task, retry_count resets and pending task executes."""
+    executor = TaskExecutor(temp_pool_file)
+    # Timer already expired (past time) — simulates user deleting rate_limit tasks
+    executor.pool.retry_count = 3
+    past_time = datetime.now() - timedelta(seconds=5)
+    task_pending = Task(id="task_new", prompt="new task", directory=Path("/tmp"))
+    executor.pool.tasks = [task_pending]
+    executor.pool.suspended_until = past_time
+
+    assert not executor.pool.is_suspended
+
+    captured_task = None
+
+    async def mock_execute(task):
+        nonlocal captured_task
+        captured_task = task
+        task.status = "success"
+        task.exit_code = 0
+        task.duration_ms = 50
+
+    with patch.object(executor, "execute_task", side_effect=mock_execute):
+        task_runner = asyncio.create_task(executor.run_pool())
+        await asyncio.sleep(0.2)
+        executor.should_stop = True
+        try:
+            await asyncio.wait_for(task_runner, timeout=3)
+        except asyncio.TimeoutError:
+            executor.should_stop = True
+
+    # retry_count should have been reset to 0 before executing pending task
+    assert executor.pool.retry_count == 0
+    assert captured_task is not None
+    assert captured_task.id == "task_new"

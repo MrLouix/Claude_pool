@@ -358,7 +358,11 @@ class TaskExecutor:
                     logger.info("Retry task succeeded — pool retry counter reset to 0")
                 continue  # Loop back to check remaining tasks
 
-            # No rate-limit task found after suspension — fall through to pending tasks
+            # No rate-limit task found after suspension — reset counter and fall through
+            if self.pool.retry_count > 0:
+                self.pool.retry_count = 0
+                logger.info("No rate-limit task after suspension — retry counter reset to 0")
+                await self._save_state_async()
 
             # Handle paused state (manual pause)
             while self.paused and not self.should_stop:
@@ -431,6 +435,14 @@ class TaskExecutor:
 
             # Get pending tasks and retry task
             retry_task = self._find_rate_limit_task()
+
+            # If the timer expired but no rate-limit task exists anymore (user deleted it),
+            # reset the global counter so the pool is fully unblocked.
+            if not retry_task and self.pool.retry_count > 0:
+                self.pool.retry_count = 0
+                logger.info("No rate-limit task after suspension — retry counter reset to 0")
+                await self._save_state_async()
+
             pending_tasks = [t for t in self.pool.tasks if t.status == "pending"]
 
             if retry_task:
