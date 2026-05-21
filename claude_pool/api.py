@@ -97,7 +97,7 @@ class ApiServer:
         @self.app.get("/")
         async def root():
             """Return dashboard HTML."""
-            frontend_path = Path(__file__).parent.parent / "frontend" / "index.html"
+            frontend_path = Path(__file__).parent / "frontend" / "index.html"
             if frontend_path.exists():
                 return HTMLResponse(content=frontend_path.read_text())
             return {"message": "Claude Pool API"}
