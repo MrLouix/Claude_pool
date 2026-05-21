@@ -18,6 +18,9 @@ dependencies = [
 [tool.setuptools.packages.find]
 include = ["claude_pool*"]
 
+[tool.setuptools.package-data]
+claude_pool = ["frontend/*.html", "n8n_workflows/*.json"]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4.0",
