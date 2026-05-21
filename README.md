@@ -1,280 +1,193 @@
-# Claude Pool TUI
+# Claude Pool
 
-A Text User Interface (TUI) application for managing sequential pools of Claude Code CLI tasks.
+**A sequential (and parallel) task pool for Claude Code CLI.**
 
-## Overview
+Claude Pool dispatches coding tasks to the `claude -p` CLI — with a real-time TUI, optional REST/WebSocket API, rate-limit handling, and up to 2 concurrent executions.
 
-Claude Pool TUI automates the execution of multiple Claude Code tasks in sequence, with:
-- **Rate-limit handling**: Automatic exponential backoff and global pool suspension on rate limits
-- **Interactive TUI**: Real-time monitoring with Textual framework and DataTable display
-- **Task management**: Add, pause, delete, retry tasks on the fly
-- **Persistent state**: Tasks saved to `pool.json` after each execution
-- **Structured output**: Parses Claude's JSON output with token tracking
-- **Auto-completion**: Minimal task definition (only prompt & directory required)
-- **Scrollable panels**: Full result display with scroll support
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **Sequential execution** | Tasks run one after another, each via `claude -p` |
+| **Parallel execution** | Up to 2 concurrent tasks with rate-limit isolation |
+| **Interactive TUI** | Real-time monitoring, add/delete/skip/retry/pause tasks |
+| **Rate-limit handling** | Auto-suspension + fixed 1h backoff, no retry limit |
+| **Web API** | REST endpoints + WebSocket for remote monitoring & control |
+| **n8n integration** | Exportable workflow JSON for CI/CD, Slack, GitHub PRs |
+| **Session reuse** | Persistent sessions per directory (no re-auth per task) |
+| **Hot-reload** | Detects external `pool.json` changes (added by APIs/crons) |
+| **CLI mode** | Headless `--no-tui` for server/daemon usage |
 
 ## Installation
 
 ### Requirements
 
 - Python 3.11+
-- `claude` CLI installed and authenticated (optional for development)
+- `claude` CLI installed and authenticated (required for task execution)
 
-### Quick Install
+### From wheel (production)
+
+```bash
+pip install claude_pool-1.0.0-py3-none-any.whl
+```
+
+### From source (development)
 
 ```bash
 git clone https://github.com/MrLouix/Claude_pool.git
 cd Claude_pool
-./claude-pool.sh install
+python -m venv venv && source venv/bin/activate
+pip install -e ".[dev]"
 ```
 
-This will:
-- Create a Python virtual environment
-- Install all dependencies
-- Set up the `claude-pool` command
+## Quick Start
 
-## Usage
-
-### Quick Start
-
-1. Create a `pool.json` file with your tasks (minimal format):
+### 1. Create a pool
 
 ```json
 {
   "tasks": [
     {
-      "prompt": "Fix the login bug in auth.py",
-      "directory": "/home/user/my-project"
+      "id": "example_task",
+      "prompt": "Create a hello_world.py that prints Hello World",
+      "directory": "/tmp/myproject"
     }
-  ]
+  ],
+  "pool_retry_count": 0
 }
 ```
 
-All other fields (`id`, `args`, `status`, etc.) are auto-generated if missing.
+Save as `data/pool.json`.
 
-2. Run the TUI:
-
-```bash
-./claude-pool.sh --pool pool.json
-```
-
-Or try the example:
+### 2. Launch
 
 ```bash
-./claude-pool.sh --pool examples/pool.json
+# Interactive TUI
+claude-pool --pool data/pool.json
+
+# Headless mode (no TUI)
+claude-pool --pool data/pool.json --no-tui
+
+# With Web API on port 8000
+claude-pool --pool data/pool.json --serve --port 8000
+
+# Parallel mode (up to 2 concurrent tasks)
+claude-pool --pool data/pool.json --no-tui --parallel 2
 ```
 
-### Command Line Options
+## CLI Flags
 
-```bash
-./claude-pool.sh [OPTIONS]
+| Flag | Description |
+|------|-------------|
+| `--pool PATH` | Path to pool.json **(required)** |
+| `--no-tui` | Run headless (no Textual UI) |
+| `--serve` | Start FastAPI server alongside pool execution |
+| `--port PORT` | Port for the API server (default: 8000) |
+| `--parallel N` | Max concurrent tasks (default: 1, sequential) |
 
-Options:
-  --pool PATH       Path to pool.json file (default: pool.json)
-  --no-tui          Run in CLI mode without TUI
-  -v, --verbose     Enable verbose logging (INFO level)
-  --debug           Enable debug logging (DEBUG level, writes to file in TUI mode)
-  -h, --help        Show help message
+## Web API Endpoints
 
-Special:
-  install          Run installation/setup
-```
+When launched with `--serve`:
 
-### Examples
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/status` | Pool state (suspended, retry_count, task list) |
+| `GET` | `/api/tasks` | Full task list |
+| `POST` | `/api/tasks` | Add a task (body: `{prompt, directory, args}`) |
+| `POST` | `/api/tasks/{id}/retry` | Reset a task to pending |
+| `POST` | `/api/tasks/{id}/skip` | Skip a task |
+| `WS` | `/ws/events` | WebSocket stream of task updates |
 
-```bash
-# Run with TUI (interactive)
-./claude-pool.sh --pool examples/pool.json
+A basic HTML dashboard is included at `frontend/index.html` — served statically or via the API server.
 
-# Run in CLI mode (headless)
-./claude-pool.sh --pool pool.json --no-tui
-
-
-### Valid Model Names
-
-Use these model aliases in the `args` field:
-- `haiku` - Fastest, most cost-effective
-- `sonnet` - Balanced performance
-- `opus` - Most capable
-
-Or use full model names like `claude-sonnet-4-6`.
-
-# Run with verbose logging
-./claude-pool.sh --pool pool.json -v
-
-# Reinstall or setup
-./claude-pool.sh install
-```
-
-## TUI Controls
-
-| Key | Action |
-|-----|--------|
-| **↑ / ↓** | Navigate tasks / Scroll in focused panel |
-| **Tab** | Switch focus between panels |
-| **Click** | Select task or focus panel |
-| **A** | Add new task (opens form dialog) |
-| **P** | Pause/Resume execution |
-| **D** | Delete selected task (with confirmation) |
-| **R** | Retry selected task (reset to pending) |
-| **Enter** | Show detailed JSON output (modal) |
-| **Q** | Quit application |
-
-### TUI Layout
-
-- **Top Panel (25%)**: Task list in table format (ID, Prompt preview, Directory, Status)
-- **Middle Panel (50%)**: Selected task details (Prompt, Exit code, Duration, Tokens, Result, Files)
-- **Bottom Panel (18%)**: Real-time logs
-- **Control Bar**: Buttons for quick actions
-
-All panels support scrolling when content exceeds visible area.
-
-## Task JSON Schema
-
-### Required Fields (User-Provided)
-
-- `prompt` (string): Task description passed to `claude -p`
-- `directory` (string): Working directory for task execution
-
-### Auto-Generated Fields
-
-- `id` (string): Auto-generated unique identifier (format: `task_YYYYMMDD_HHMMSS_uuid`)
-
-### Optional Fields
-
-- `args` (array): Additional CLI arguments for claude (e.g., `["--model", "haiku"]`)
-- `status` (string): `pending`, `running`, `success`, `failed`, `skipped`, `rate_limit_retry`
-- `exit_code` (int|null): Exit code from claude command
-- `duration_ms` (int|null): Execution time in milliseconds
-- `json_output` (object|null): Parsed output from claude
-- `retry_count` (int): Number of retries (default: 0)
-
-### JSON Output Structure
-
-After execution, `json_output` contains:
+## pool.json Format
 
 ```json
 {
-  "result": "Task summary",
-  "code_blocks": [
+  "tasks": [
     {
-      "language": "python",
-      "filename": "auth.py",
-      "content": "def login(...)..."
+      "id": "task_20260521_001",
+      "prompt": "Detailed instructions for Claude",
+      "directory": "/absolute/path/to/project",
+      "status": "pending",
+      "args": ["--model", "haiku", "--effort", "low"],
+      "exit_code": null,
+      "duration_ms": null,
+      "json_output": null,
+      "retry_count": 0
     }
   ],
-  "files_changed": ["/path/to/file1.py", "/path/to/file2.py"],
-  "tokens_used": 1500,
-  "session_usage_percent": 25.5
+  "pool_retry_count": 0,
+  "pool_suspended_until": null
 }
 ```
 
-## Rate Limiting
+### Task statuses
 
-When Claude hits rate limits (exit code 1 or session usage ≥ 80%):
-- **Global pool suspension**: All execution pauses
-- **Exponential backoff**: `min(60 * 2^pool_retry_count, 5 hours)` seconds
-- **Maximum 5 retries** for the entire pool
-- **Automatic resume**: Pool resumes after suspension period
-- **Task retry**: Failed task is retried first after resume
-- **Session tracking**: Monitors `session_usage_percent` to prevent limits
+`pending` → `running` → `success` / `failed` / `skipped` / `rate_limit_retry`
 
-## Development
+### Task args
 
-### Manual Setup
+| Arg | Values | Default |
+|-----|--------|---------|
+| `--model` | `haiku`, `sonnet`, `opus` | `sonnet` |
+| `--effort` | `low`, `medium`, `high`, `max` | `medium` |
+| `--max-budget-usd` | Any float | No limit |
+| `--add-dir` | Additional working directory | None |
 
-If you prefer manual setup instead of the launcher script:
+## Project Structure
 
-```bash
-python -m venv venv
-. venv/bin/activate  # or `source venv/bin/activate` on some shells
-pip install -e ".[dev]"
+```
+claude_pool/
+├── __init__.py          # Package init
+├── __main__.py          # CLI entry point (argparse)
+├── models.py            # Task, PoolState dataclasses
+├── executor.py          # TaskExecutor — sequential & parallel execution
+├── concurrency.py       # TaskSemaphore for parallel mode
+├── api.py               # FastAPI app with REST + WebSocket
+├── storage.py           # pool.json load/save with state tracking
+├── parser.py            # Claude JSON output parser
+└── tui.py               # Textual TUI application
+tests/                   # 108 unit + integration tests
+docs/                    # Technical docs (see below)
+n8n_workflows/           # Exportable n8n workflow JSONs
+frontend/                # HTML dashboard
+examples/                # Sample pool configurations
 ```
 
-### Run Tests
+## Documentation
+
+| File | Description |
+|------|-------------|
+| `docs/spec.md` | Complete technical specification (schemas, architecture) |
+| `docs/ROADMAP.md` | Next steps and feature roadmap |
+| `docs/FUTURE_STEPS.md` | Long-term vision and planned enhancements |
+| `docs/N8N_INTEGRATION.md` | Guide for n8n workflow integration |
+
+## Running Tests
 
 ```bash
-make test
+cd claude_pool
+source venv/bin/activate
+pytest -v
 ```
 
-### Format Code
+108 tests — executor, TUI, models, parser, storage, concurrency, e2e.
 
-```bash
-make format
-```
+## n8n Integration
 
-### Type Check
+The `n8n_workflows/` directory contains 4 ready-to-import workflows:
 
-```bash
-make lint
-```
+| Workflow | Purpose |
+|----------|---------|
+| `read_completed_tasks.json` | Read & filter completed tasks from pool.json |
+| `create_github_pr.json` | Create a PR from Claude's code blocks |
+| `notify_slack.json` | Send Slack notifications on task events |
+| `trigger_ci.json` | Trigger CI/CD when files change |
 
-### All Commands
+See `docs/N8N_INTEGRATION.md` for setup instructions.
 
-```bash
-make help
-```
+---
 
-## Integration Examples
-
-### n8n Workflow
-
-Read `pool.json` with a File node, extract `json_output.code_blocks[0].content`, and apply patches with a Function node.
-
-### Home Assistant / OpenClaw
-
-Monitor `pool.json` for status changes and display `session_usage_percent` in dashboards.
-
-## Troubleshooting
-
-### "claude: command not found"
-
-Ensure `claude` CLI is installed and in your PATH:
-
-```bash
-which claude
-claude --version
-```
-
-### "Virtual environment not found"
-
-Run the installation:
-
-```bash
-./claude-pool.sh install
-```
-
-### Rate Limit Errors
-
-Check `session_usage_percent` in task output. If consistently hitting limits:
-- Reduce concurrent tasks
-- Increase backoff time
-- Spread tasks across multiple sessions
-
-### Tasks Not Starting
-
-Verify:
-- `pool.json` exists and is valid JSON
-- `directory` paths exist and are accessible
-- `claude` is authenticated (`claude auth status`)
-
-## Architecture
-
-- **models.py**: `Task` dataclass
-- **storage.py**: `load_pool()` / `save_pool()` functions
-- **parser.py**: `parse_claude_output()` for JSON extraction
-- **executor.py**: `TaskExecutor` with rate-limit logic
-- **tui.py**: Textual-based interactive interface
-- **__main__.py**: CLI entry point
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for version history.
-
-## License
-
-See LICENSE file for details.
+**Repository**: [github.com/MrLouix/Claude_pool](https://github.com/MrLouix/Claude_pool)
+**License**: MIT
