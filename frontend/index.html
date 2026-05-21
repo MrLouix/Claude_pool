@@ -88,10 +88,33 @@
             color: #667eea;
         }
 
-        .stat-card.pending .number { color: #f59e0b; }
-        .stat-card.running .number { color: #3b82f6; }
-        .stat-card.success .number { color: #10b981; }
-        .stat-card.failed .number { color: #ef4444; }
+    .stat-card.pending .number { color: #f59e0b; }
+    .stat-card.running .number { color: #3b82f6; }
+    .stat-card.success .number { color: #10b981; }
+    .stat-card.failed .number { color: #ef4444; }
+
+
+    /* ---- Mobile / responsive helpers ---- */
+
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+    }
+
+    .task-actions {
+        display: flex;
+        gap: 5px;
+        flex-shrink: 0;
+    }
+
+    .task-actions button {
+        padding: 5px 10px;
+        font-size: 12px;
+        white-space: nowrap;
+    }
+
+
 
         .controls {
             display: flex;
@@ -167,12 +190,19 @@
         }
 
         .form-group input,
-        .form-group textarea {
+        .form-group textarea,
+        .form-group select {
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 5px;
             font-family: inherit;
             font-size: 14px;
+        }
+
+        .form-group select {
+            cursor: pointer;
+            background: white;
+            appearance: auto;
         }
 
         .form-group textarea {
@@ -268,6 +298,249 @@
             color: #6b7280;
             margin-right: 10px;
         }
+
+        /* ---- Directory explorer ---- */
+        .directory-input-row {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+
+        .directory-input-row input {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .btn-browse {
+            padding: 10px 6px;
+            font-size: 16px;
+            line-height: 1;
+            background: #f3f4f6;
+            color: #333;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 700;
+            flex-shrink: 0;
+            width: 28px;
+            text-align: center;
+        }
+
+        .btn-browse:hover {
+            background: #e5e7eb;
+        }
+
+        /* Directory browser modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-box {
+            background: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 520px;
+            max-height: 70vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .modal-header h3 {
+            font-size: 16px;
+            margin: 0;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 22px;
+            cursor: pointer;
+            color: #666;
+            padding: 0 4px;
+            line-height: 1;
+            width: auto;
+        }
+
+        .modal-close:hover {
+            color: #333;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .modal-body {
+            padding: 12px 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .dir-breadcrumb {
+            font-size: 13px;
+            color: #666;
+            padding: 8px 0 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+        }
+
+        .dir-breadcrumb span {
+            cursor: pointer;
+            color: #667eea;
+        }
+
+        .dir-breadcrumb span:hover {
+            text-decoration: underline;
+        }
+
+        .dir-breadcrumb .separator {
+            cursor: default;
+            color: #999;
+        }
+
+        .dir-breadcrumb .separator:hover {
+            text-decoration: none;
+        }
+
+        .dir-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .dir-item:hover {
+            background: #f0f0ff;
+        }
+
+        .dir-item .dir-icon {
+            font-size: 16px;
+            flex-shrink: 0;
+            width: 20px;
+            text-align: center;
+        }
+
+        .dir-item .dir-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .dir-item .dir-arrow {
+            color: #aaa;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .dir-empty {
+            color: #999;
+            text-align: center;
+            padding: 20px;
+            font-size: 14px;
+        }
+
+        .modal-footer {
+            padding: 12px 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .btn-modal-confirm {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            min-width: auto;
+        }
+
+        .btn-modal-confirm:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+
+            .header { padding: 20px; }
+
+            .stats {
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+
+            .stat-card { padding: 15px; }
+            .stat-card .number { font-size: 24px; }
+
+            /* Stacked Model/Effort row */
+            .form-row {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            /* Task items stack vertically */
+            .task-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .task-actions {
+                align-self: flex-end;
+            }
+
+            /* Buttons stack on very small screens */
+            button {
+                width: 100%;
+            }
+
+            .controls {
+                flex-wrap: wrap;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stats {
+                grid-template-columns: 1fr;
+            }
+
+            .stat-card .number { font-size: 28px; }
+
+            .task-actions {
+                width: 100%;
+            }
+
+            .task-actions button {
+                flex: 1;
+            }
+        }
     </style>
 </head>
 <body>
@@ -317,16 +590,31 @@
                     </div>
                     <div class="form-group">
                         <label for="directory">Directory (required)</label>
-                        <input type="text" id="directory" name="directory" placeholder="/path/to/directory" required>
+                        <div class="directory-input-row">
+                            <input type="text" id="directory" name="directory" placeholder="/path/to/directory" required>
+                            <button type="button" class="btn-browse" id="btn-browse-dir" title="Browse folders">⋯</button>
+                        </div>
                     </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="form-row">
                         <div class="form-group">
                             <label for="model">Model</label>
-                            <input type="text" id="model" name="model" placeholder="haiku, sonnet, opus">
+                            <select id="model" name="model">
+                                <option value="">— Default —</option>
+                                <option value="haiku">haiku</option>
+                                <option value="sonnet">sonnet</option>
+                                <option value="opus">opus</option>
+                            </select>
                         </div>
                         <div class="form-group">
                             <label for="effort">Effort</label>
-                            <input type="text" id="effort" name="effort" placeholder="low, medium, high, xhigh, max">
+                            <select id="effort" name="effort">
+                                <option value="">— Default —</option>
+                                <option value="low">low</option>
+                                <option value="medium">medium</option>
+                                <option value="high">high</option>
+                                <option value="xhigh">xhigh</option>
+                                <option value="max">max</option>
+                            </select>
                         </div>
                     </div>
                     <button type="submit" class="btn-primary">Create Task</button>
@@ -349,6 +637,24 @@
                 <div class="log-container" id="event-log">
                     <div class="log-line"><span class="log-timestamp">[00:00:00]</span> Waiting for events...</div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Directory browser modal -->
+    <div class="modal-overlay" id="dir-modal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Browse Directory</h3>
+                <button class="modal-close" id="dir-modal-close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="dir-breadcrumb" id="dir-breadcrumb"></div>
+                <div id="dir-list"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-close" style="background:#f3f4f6;padding:8px 16px;border-radius:5px;border:1px solid #ddd;font-size:14px;" id="dir-modal-cancel">Cancel</button>
+                <button class="btn-modal-confirm" id="dir-modal-confirm">Select this folder</button>
             </div>
         </div>
     </div>
@@ -511,7 +817,8 @@
                 if (response.ok) {
                     const task = await response.json();
                     logEvent(`Task created: ${task.id}`, 'info');
-                    document.getElementById('add-task-form').reset();
+                    // Only reset prompt, keep directory/model/effort for next task
+                    document.getElementById('prompt').value = '';
                     fetchTasks();
                 } else {
                     const error = await response.json();
@@ -528,6 +835,110 @@
 
         // Refresh task list every 5 seconds
         setInterval(fetchTasks, 5000);
+
+        /* ---- Directory Browser Modal ---- */
+        const dirModal = document.getElementById('dir-modal');
+        const dirListEl = document.getElementById('dir-list');
+        const dirBreadcrumbEl = document.getElementById('dir-breadcrumb');
+        const btnBrowseDir = document.getElementById('btn-browse-dir');
+        const btnDirModalClose = document.getElementById('dir-modal-close');
+        const btnDirModalCancel = document.getElementById('dir-modal-cancel');
+        const btnDirModalConfirm = document.getElementById('dir-modal-confirm');
+        let currentModalPath = '/';
+        let selectedPath = null;
+
+        function openDirModal(startPath) {
+            currentModalPath = startPath || '/home/ai_agent';
+            selectedPath = currentModalPath;
+            dirModal.classList.add('active');
+            loadDir(currentModalPath);
+        }
+
+        function closeDirModal() {
+            dirModal.classList.remove('active');
+        }
+
+        async function loadDir(path) {
+            currentModalPath = path;
+            try {
+                const res = await fetch(`/api/directories?path=${encodeURIComponent(path)}`);
+                const data = await res.json();
+                renderBreadcrumb(data.current, data.parent);
+                renderDirList(data.entries, path);
+                updateConfirmButton(path);
+            } catch (e) {
+                dirListEl.innerHTML = '<div class="dir-empty">Failed to load directories</div>';
+            }
+        }
+
+        function renderBreadcrumb(current, parent) {
+            const parts = current.split('/').filter(Boolean);
+            let html = parent ? `<span onclick="loadDir('${parent}')">..</span> <span class="separator">/</span>` : '';
+            let build = '';
+            for (const p of parts) {
+                build += '/' + p;
+                const isLast = (build === current);
+                html += isLast
+                    ? `<span style="color:#333;cursor:default;font-weight:600;">${p}</span>`
+                    : `<span onclick="loadDir('${build}')">${p}</span> <span class="separator">/</span> `;
+            }
+            dirBreadcrumbEl.innerHTML = html;
+        }
+
+        function renderDirList(entries, basePath) {
+            if (!entries.length) {
+                dirListEl.innerHTML = '<div class="dir-empty">Empty directory</div>';
+                return;
+            }
+            let html = '<div style="display:grid;gap:2px;">';
+            for (const entry of entries) {
+                const fullPath = basePath + '/' + entry.name;
+                const escaped = fullPath.replace(/'/g, "\\'");
+                html += `<div class="dir-item" onclick="navigateDir('${escaped}')">
+                    <span class="dir-icon">📁</span>
+                    <span class="dir-name">${entry.name}</span>
+                    <span class="dir-arrow">›</span>
+                </div>`;
+            }
+            html += '</div>';
+            dirListEl.innerHTML = html;
+        }
+
+        window.navigateDir = function(path) {
+            selectedPath = path;
+            updateConfirmButton(path);
+        };
+
+        // Double-click also navigates into the folder
+        dirListEl.addEventListener('dblclick', (e) => {
+            const item = e.target.closest('.dir-item');
+            if (item && item.getAttribute('onclick')) {
+                const match = item.getAttribute('onclick').match(/'(.+?)'/);
+                if (match) loadDir(match[1]);
+            }
+        });
+
+        function updateConfirmButton(path) {
+            selectedPath = path;
+            btnDirModalConfirm.textContent = `Select: ${path}`;
+        }
+
+        // Make loadDir callable from inline HTML
+        window.loadDir = loadDir;
+
+        btnBrowseDir.addEventListener('click', () => openDirModal('/home/ai_agent'));
+        btnDirModalClose.addEventListener('click', closeDirModal);
+        btnDirModalCancel.addEventListener('click', closeDirModal);
+        btnDirModalConfirm.addEventListener('click', () => {
+            const dirInput = document.getElementById('directory');
+            dirInput.value = selectedPath;
+            closeDirModal();
+        });
+
+        // Close modal on overlay click
+        dirModal.addEventListener('click', (e) => {
+            if (e.target === dirModal) closeDirModal();
+        });
     </script>
 </body>
 </html>

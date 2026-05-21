@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Set
@@ -248,6 +249,44 @@ class ApiServer:
                 duration_ms=task.duration_ms,
                 retry_count=task.retry_count,
             )
+
+        @self.app.get("/api/directories")
+        async def list_directories(path: Optional[str] = None) -> dict:
+            """List subdirectories for the directory browser.
+            
+            Returns only real directories (not dot-pref, except .claude/.hermes projects).
+            Security: path must be under /home/ to prevent traversal.
+            """
+            target = Path(path) if path else Path.home()
+            
+            # Security: reject paths outside /home
+            try:
+                resolved = target.resolve()
+                str_resolved = str(resolved)
+                if not str_resolved.startswith('/home') and not str_resolved.startswith('/mnt'):
+                    raise HTTPException(status_code=403, detail="Access denied")
+            except HTTPException:
+                raise
+            
+            if not resolved.is_dir():
+                raise HTTPException(status_code=404, detail="Directory not found")
+            
+            entries = []
+            try:
+                for item in sorted(resolved.iterdir()):
+                    if item.is_dir() and not item.name.startswith('.'):
+                        entries.append({"name": item.name, "type": "directory"})
+            except PermissionError:
+                raise HTTPException(status_code=403, detail="Permission denied")
+            
+            # Parent path for breadcrumb
+            parent = str(resolved.parent) if resolved != Path(resolved.anchor) else None
+            
+            return {
+                "current": str(resolved),
+                "parent": parent,
+                "entries": entries,
+            }
 
         @self.app.post("/api/tasks/{task_id}/skip")
         async def skip_task(task_id: str) -> TaskResponse:
