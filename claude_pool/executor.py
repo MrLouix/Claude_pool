@@ -8,8 +8,9 @@ import signal
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
+from .concurrency import TaskSemaphore
 from .models import PoolState, Task
 from .parser import parse_claude_output
 from .storage import cleanup_old_tasks, load_pool, save_pool
@@ -20,21 +21,28 @@ logger = logging.getLogger(__name__)
 class TaskExecutor:
     """Executes tasks from a pool sequentially with global rate-limit handling."""
 
-    def __init__(self, pool_file: Path, on_task_update: Callable[[Task], None] | None = None):
+    def __init__(self, pool_file: Path, on_task_update: Callable[[Task], None] | None = None, max_concurrent: int = 1):
         """Initialize the executor.
 
         Args:
             pool_file: Path to pool.json
             on_task_update: Optional callback called when a task is updated
+            max_concurrent: Maximum number of tasks to run concurrently (default: 1)
         """
         self.pool_file = pool_file
         self.pool = PoolState(pool_file=pool_file)
         self.current_task: Task | None = None
         self.paused = False
         self.should_stop = False
+        self.skip_requested = False
         self.on_task_update = on_task_update
         self.last_pool_mtime = pool_file.stat().st_mtime if pool_file.exists() else 0
         self._last_save_mtime = 0.0  # Track our own saves to avoid self-triggered reloads
+
+        # Concurrency control
+        self.max_concurrent = max_concurrent
+        self.semaphore = TaskSemaphore(max_concurrent)
+        self._save_lock = asyncio.Lock()  # Thread-safe state saving
 
         # Setup signal handlers
         signal.signal(signal.SIGINT, self._handle_signal)
@@ -46,14 +54,26 @@ class TaskExecutor:
         self.should_stop = True
         self._save_state()
 
+    async def _save_state_async(self) -> None:
+        """Save current state to pool file (async, thread-safe)."""
+        async with self._save_lock:
+            try:
+                save_pool(self.pool)
+                # Track our own mtime so check_pool_updates doesn't trigger on our writes
+                if self.pool_file.exists():
+                    self._last_save_mtime = os.path.getmtime(str(self.pool_file))
+                logger.debug("State saved successfully")
+            except Exception as e:
+                logger.error(f"Failed to save state: {e}")
+
     def _save_state(self) -> None:
-        """Save current state to pool file."""
+        """Save current state to pool file (sync version for signal handlers)."""
         try:
             save_pool(self.pool)
             # Track our own mtime so check_pool_updates doesn't trigger on our writes
             if self.pool_file.exists():
                 self._last_save_mtime = os.path.getmtime(str(self.pool_file))
-            logger.info("State saved successfully")
+            logger.debug("State saved successfully")
         except Exception as e:
             logger.error(f"Failed to save state: {e}")
 
@@ -109,6 +129,17 @@ class TaskExecutor:
         task.status = "running"
         self._notify_update(task)
         self._save_state()
+
+        # Check if skip was requested before executing
+        if self.skip_requested:
+            logger.info(f"Skipping task {task.id} as requested")
+            self.skip_requested = False
+            task.status = "skipped"
+            task.json_output = {"result": "Task skipped by user"}
+            self.current_task = None
+            self._notify_update(task)
+            self._save_state()
+            return
 
         start_time = time.time()
 
@@ -276,8 +307,15 @@ class TaskExecutor:
         pass  # No-op — the pool loop handles this via wait_for_suspension
 
     async def run_pool(self) -> None:
+        """Run tasks with concurrency support."""
+        if self.max_concurrent > 1:
+            await self.run_pool_concurrent()
+        else:
+            await self.run_pool_sequential()
+
+    async def run_pool_sequential(self) -> None:
         """Run all pending tasks sequentially with global rate-limit suspension."""
-        logger.info("Starting task pool execution")
+        logger.info("Starting task pool execution (sequential mode)")
 
         # If the pool was loaded while already suspended (e.g. restart), wait
         if self.pool.is_suspended:
@@ -306,7 +344,7 @@ class TaskExecutor:
 
                 logger.info("Pool suspension ended, resuming execution")
                 self.pool.suspended_until = None
-                self._save_state()
+                await self._save_state_async()
 
             # After suspension: retry the rate-limited task first
             retry_task = self._find_rate_limit_task()
@@ -319,7 +357,7 @@ class TaskExecutor:
                     self.pool.retry_count = 0
                     logger.info("Retry task succeeded — pool retry counter reset to 0")
                 continue  # Loop back to check remaining tasks
-            
+
             # No rate-limit task found after suspension — fall through to pending tasks
 
             # Handle paused state (manual pause)
@@ -346,6 +384,87 @@ class TaskExecutor:
 
             if self.should_stop:
                 break
+
+        logger.info("Task pool execution finished")
+        self._save_state()
+
+    async def run_pool_concurrent(self) -> None:
+        """Run up to N tasks concurrently with global rate-limit blocking."""
+        logger.info(f"Starting task pool execution (concurrent mode, max {self.max_concurrent})")
+
+        # If the pool was loaded while already suspended, wait
+        if self.pool.is_suspended:
+            logger.info(
+                f"Pool was suspended on load, waiting until {self.pool.suspended_until:%H:%M:%S}"
+            )
+            await self.wait_for_suspension()
+            if self.should_stop:
+                return
+            self.pool.suspended_until = None
+
+        while not self.should_stop:
+            # Check for new tasks
+            self.check_pool_updates()
+
+            # If pool is currently suspended, block ALL tasks
+            if self.pool.is_suspended:
+                resume_time = self.pool.suspended_until
+                logger.info(
+                    f"Pool suspended (blocking all {self.semaphore.active_count} active tasks), "
+                    f"resuming at {resume_time:%H:%M:%S} "
+                    f"({self.pool.suspension_remaining:.0f}s remaining)"
+                )
+                await self.wait_for_suspension()
+                if self.should_stop:
+                    break
+
+                logger.info("Pool suspension ended, resuming execution")
+                self.pool.suspended_until = None
+                await self._save_state_async()
+
+            # Handle paused state
+            while self.paused and not self.should_stop:
+                await asyncio.sleep(1)
+
+            if self.should_stop:
+                break
+
+            # Get pending tasks and retry task
+            retry_task = self._find_rate_limit_task()
+            pending_tasks = [t for t in self.pool.tasks if t.status == "pending"]
+
+            if retry_task:
+                # Retry task takes priority
+                tasks_to_execute = [retry_task]
+                # Then add more pending tasks up to max_concurrent
+                available_slots = self.max_concurrent - len(tasks_to_execute)
+                if available_slots > 0:
+                    pending_tasks.sort(key=lambda t: t.created_at)
+                    tasks_to_execute.extend(pending_tasks[:available_slots])
+            else:
+                # Execute pending tasks up to max_concurrent
+                pending_tasks.sort(key=lambda t: t.created_at)
+                tasks_to_execute = pending_tasks[:self.max_concurrent]
+
+            if not tasks_to_execute:
+                # No tasks to execute, wait and check again
+                await asyncio.sleep(1)
+                continue
+
+            # Create execution coroutines with semaphore protection
+            coros = [
+                self.semaphore.execute_with_limit(self.execute_task(task))
+                for task in tasks_to_execute
+            ]
+
+            # Execute all coroutines concurrently
+            logger.debug(f"Executing {len(tasks_to_execute)} tasks concurrently")
+            await asyncio.gather(*coros, return_exceptions=False)
+
+            # Check if retry task succeeded
+            if retry_task and retry_task.status == "success":
+                self.pool.retry_count = 0
+                logger.info("Retry task succeeded — pool retry counter reset to 0")
 
         logger.info("Task pool execution finished")
         self._save_state()
@@ -454,13 +573,12 @@ class TaskExecutor:
         logger.info("Execution resumed")
 
     def skip_current(self) -> None:
-        """Skip the current task."""
+        """Request to skip the current task."""
         if self.current_task:
-            logger.info(f"Skipping task {self.current_task.id}")
-            self.current_task.status = "skipped"
-            self.current_task.json_output = {"result": "Task skipped by user"}
-            self._notify_update(self.current_task)
-            self._save_state()
+            logger.info(f"Skip requested for task {self.current_task.id}")
+            self.skip_requested = True
+        else:
+            logger.warning("No current task to skip")
 
     def delete_task(self, task_id: str) -> bool:
         """Delete a task from the pool.

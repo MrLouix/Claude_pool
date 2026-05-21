@@ -110,6 +110,7 @@ def mock_executor(temp_pool_file: Path, multiple_tasks: list[Task]) -> MagicMock
     executor.should_stop = False
     executor.current_task = None
     executor.on_task_update = None
+    executor.skip_requested = False
 
     # Create a real PoolState with test tasks
     pool = PoolState(tasks=multiple_tasks, pool_file=temp_pool_file)
@@ -123,6 +124,7 @@ def mock_executor(temp_pool_file: Path, multiple_tasks: list[Task]) -> MagicMock
     # Mock sync methods
     executor.pause = MagicMock()
     executor.resume = MagicMock()
+    executor.skip_current = MagicMock()
     executor.delete_task = MagicMock(return_value=True)
     executor._save_state = MagicMock()
 
@@ -138,6 +140,7 @@ def mock_executor_empty(temp_pool_file: Path) -> MagicMock:
     executor.should_stop = False
     executor.current_task = None
     executor.on_task_update = None
+    executor.skip_requested = False
 
     pool = PoolState(tasks=[], pool_file=temp_pool_file)
     executor.pool = pool
@@ -147,6 +150,7 @@ def mock_executor_empty(temp_pool_file: Path) -> MagicMock:
     executor.execute_task = AsyncMock()
     executor.pause = MagicMock()
     executor.resume = MagicMock()
+    executor.skip_current = MagicMock()
     executor.delete_task = MagicMock(return_value=True)
     executor._save_state = MagicMock()
 

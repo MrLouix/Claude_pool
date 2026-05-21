@@ -520,7 +520,7 @@ class PoolTUI(App):
 
     BINDINGS = [
         ("p", "toggle_pause", "Pause/Resume"),
-        # ("s", "skip_task", "Skip"),  # Disabled for future use
+        ("s", "skip_task", "Skip"),
         ("d", "delete_task", "Delete"),
         ("enter", "show_detail", "Detail"),
         ("q", "quit", "Quit"),
@@ -528,10 +528,11 @@ class PoolTUI(App):
         ("a", "add_task", "Add Task"),
     ]
 
-    def __init__(self, pool_file: Path) -> None:
+    def __init__(self, pool_file: Path, max_concurrent: int = 1) -> None:
         """Initialize the TUI application."""
         super().__init__()
         self.pool_file = pool_file
+        self.max_concurrent = max_concurrent
         self.executor: TaskExecutor | None = None
         self.selected_task: Task | None = None
 
@@ -560,7 +561,7 @@ class PoolTUI(App):
         yield Container(
             Button("Add Task", id="add_task_btn", variant="success"),
             Button("Pause", id="pause_btn", variant="warning"),
-            # Button("Skip", id="skip_btn", variant="error"),  # Disabled for future use
+            Button("Skip", id="skip_btn", variant="error"),
             Button("Delete", id="delete_btn", variant="error"),
             Button("Retry", id="retry_btn", variant="warning"),
             Button("Quit", id="quit_btn", variant="primary"),
@@ -572,7 +573,7 @@ class PoolTUI(App):
         """Called when app is mounted."""
         # Initialize executor
         self.executor = TaskExecutor(
-            self.pool_file, on_task_update=self._on_task_update
+            self.pool_file, on_task_update=self._on_task_update, max_concurrent=self.max_concurrent
         )
 
         # Update task list widget with executor
@@ -664,19 +665,14 @@ class PoolTUI(App):
                 btn = self.query_one("#pause_btn", Button)
                 btn.label = "Resume"
 
-    # Disabled for future use
-    # def action_skip_task(self) -> None:
-    #     """Skip current task."""
-    #     if self.executor and self.executor.current_task:
-    #         log_widget = self.query_one("#logs", LogWidget)
-    #         log_widget.add_log(
-    #             f"[yellow]Skipping task {self.executor.current_task.id}[/yellow]"
-    #         )
-    #         self.executor.skip_current()
-    #         
-    #         # Refresh UI
-    #         task_list = self.query_one("#task_list_widget", TaskListWidget)
-    #         task_list.update_tasks()
+    def action_skip_task(self) -> None:
+        """Skip current task."""
+        if self.executor and self.executor.current_task:
+            log_widget = self.query_one("#logs", LogWidget)
+            log_widget.add_log(
+                f"[yellow]Skipping task {self.executor.current_task.id}[/yellow]"
+            )
+            self.executor.skip_current()
 
     async def action_delete_task(self) -> None:
         """Delete selected task."""
@@ -713,11 +709,10 @@ class PoolTUI(App):
         """Handle pause button press."""
         self.action_toggle_pause()
 
-    # Disabled for future use
-    # @on(Button.Pressed, "#skip_btn")
-    # def on_skip_pressed(self) -> None:
-    #     """Handle skip button press."""
-    #     self.action_skip_task()
+    @on(Button.Pressed, "#skip_btn")
+    def on_skip_pressed(self) -> None:
+        """Handle skip button press."""
+        self.action_skip_task()
 
     @on(Button.Pressed, "#delete_btn")
     def on_delete_pressed(self) -> None:
@@ -814,7 +809,7 @@ class PoolTUI(App):
         self.exit()
 
 
-async def run_tui(pool_file: Path) -> None:
+async def run_tui(pool_file: Path, max_concurrent: int = 1) -> None:
     """Run the TUI application."""
-    app = PoolTUI(pool_file)
+    app = PoolTUI(pool_file, max_concurrent=max_concurrent)
     await app.run_async()

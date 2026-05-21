@@ -61,16 +61,17 @@ def setup_logging(verbose: bool = False, debug: bool = False, tui_mode: bool = F
         )
 
 
-async def run_cli(pool_file: Path) -> int:
+async def run_cli(pool_file: Path, max_concurrent: int = 1) -> int:
     """Run in CLI mode (no TUI).
 
     Args:
         pool_file: Path to pool.json
+        max_concurrent: Maximum number of concurrent tasks
 
     Returns:
         Exit code
     """
-    executor = TaskExecutor(pool_file)
+    executor = TaskExecutor(pool_file, max_concurrent=max_concurrent)
 
     try:
         await executor.load_tasks()
@@ -81,11 +82,12 @@ async def run_cli(pool_file: Path) -> int:
         return 1
 
 
-async def run_tui_mode(pool_file: Path) -> int:
+async def run_tui_mode(pool_file: Path, max_concurrent: int = 1) -> int:
     """Run in TUI mode.
 
     Args:
         pool_file: Path to pool.json
+        max_concurrent: Maximum number of concurrent tasks (not used in TUI)
 
     Returns:
         Exit code
@@ -93,7 +95,34 @@ async def run_tui_mode(pool_file: Path) -> int:
     from .tui import run_tui
 
     try:
-        await run_tui(pool_file)
+        await run_tui(pool_file, max_concurrent=max_concurrent)
+        return 0
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        return 1
+
+
+def run_api_server(pool_file: Path, host: str = "0.0.0.0", port: int = 8000) -> int:
+    """Run API server with FastAPI/Uvicorn.
+
+    Args:
+        pool_file: Path to pool.json
+        host: Host to bind to
+        port: Port to bind to
+
+    Returns:
+        Exit code
+    """
+    try:
+        import uvicorn
+        from .api import create_app
+
+        app = create_app(pool_file)
+        logging.info(f"Starting API server on http://{host}:{port}")
+        logging.info(f"Dashboard: http://{host}:{port}")
+        logging.info(f"WebSocket: ws://{host}:{port}/ws/events")
+
+        uvicorn.run(app, host=host, port=port, log_level="info")
         return 0
     except Exception as e:
         logging.error(f"Error: {e}")
@@ -103,7 +132,7 @@ async def run_tui_mode(pool_file: Path) -> int:
 def main() -> None:
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Claude Pool TUI - Manage sequential Claude Code task pools"
+        description="Claude Pool - Manage sequential Claude Code task pools"
     )
     parser.add_argument(
         "--pool",
@@ -117,6 +146,23 @@ def main() -> None:
         help="Run in CLI mode without TUI",
     )
     parser.add_argument(
+        "--serve",
+        action="store_true",
+        help="Run API server with FastAPI (default: 0.0.0.0:8000)",
+    )
+    parser.add_argument(
+        "--host",
+        type=str,
+        default="0.0.0.0",
+        help="API server host (default: 0.0.0.0)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="API server port (default: 8000)",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -127,16 +173,29 @@ def main() -> None:
         action="store_true",
         help="Enable debug logging (DEBUG level)",
     )
+    parser.add_argument(
+        "--parallel",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Run up to N tasks concurrently (default: 1, sequential)",
+    )
 
     args = parser.parse_args()
-    
+
     # Setup logging based on mode
-    setup_logging(verbose=args.verbose, debug=args.debug, tui_mode=not args.no_tui)
+    setup_logging(verbose=args.verbose, debug=args.debug, tui_mode=not args.no_tui and not args.serve)
 
     try:
-        if args.no_tui:
-            exit_code = asyncio.run(run_cli(args.pool))
+        if args.serve:
+            exit_code = run_api_server(args.pool, host=args.host, port=args.port)
+        elif args.no_tui:
+            if args.parallel > 1:
+                logging.info(f"Running with {args.parallel} concurrent tasks")
+            exit_code = asyncio.run(run_cli(args.pool, max_concurrent=args.parallel))
         else:
+            if args.parallel > 1:
+                logging.warning("Parallel execution not supported in TUI mode, using sequential execution")
             exit_code = asyncio.run(run_tui_mode(args.pool))
         sys.exit(exit_code)
     except KeyboardInterrupt:

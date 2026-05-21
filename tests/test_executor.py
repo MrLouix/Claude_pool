@@ -212,17 +212,25 @@ async def test_pool_retry_count_exhaustion(temp_pool_file: Path, sample_task: Ta
 
 
 @pytest.mark.asyncio
-async def test_skip_current(temp_pool_file: Path, sample_task: Task):
-    """Test skipping current task."""
+async def test_skip_current_task(temp_pool_file: Path, sample_task: Task):
+    """Test skipping current task via skip_requested flag."""
     executor = TaskExecutor(temp_pool_file)
+    executor.pool.tasks = [sample_task]
     executor.current_task = sample_task
-    sample_task.status = "running"
+    sample_task.status = "pending"
 
+    # Request skip before execution
     executor.skip_current()
+    assert executor.skip_requested is True
 
+    # Execute task - should skip instead of running subprocess
+    await executor.execute_task(sample_task)
+
+    # Verify task was skipped without running subprocess
     assert sample_task.status == "skipped"
     assert sample_task.json_output is not None
     assert "skipped" in sample_task.json_output["result"].lower()
+    assert executor.skip_requested is False  # Flag should be cleared
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,123 @@
+{
+  "name": "Notify Slack on Task Completion",
+  "description": "Send Slack notification when Claude Pool tasks complete",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "http://localhost:8000/ws/events",
+        "webhookUrl": "wss://localhost:8000/ws/events"
+      },
+      "id": "websocket-trigger",
+      "name": "WebSocket Trigger",
+      "type": "n8n-nodes-base.webHook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "claude-pool-slack-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": [
+            {
+              "condition": "string",
+              "key": "json.type",
+              "operation": "equals",
+              "type": "string",
+              "value": "task_update"
+            },
+            {
+              "condition": "string",
+              "key": "json.status",
+              "operation": "regex",
+              "type": "string",
+              "value": "success|failed|skipped"
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "filter-completion",
+      "name": "Filter Completion Events",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const status = $input.first().json.status;\nconst taskId = $input.first().json.task_id;\nconst emoji = status === 'success' ? '✅' : status === 'failed' ? '❌' : '⏭️';\nconst color = status === 'success' ? '#36a64f' : status === 'failed' ? '#ff0000' : '#ffa500';\n\nreturn {\n  text: `Task ${taskId} ${status}`,\n  emoji: emoji,\n  color: color,\n  status: status\n}"
+      },
+      "id": "format-message",
+      "name": "Format Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "webhookUrl",
+        "webhookUrl": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "otherOptions": {},
+        "text": "{{ $node['Format Message'].json.emoji }} Task `{{ $node['WebSocket Trigger'].json.task_id }}` - **{{ $node['Format Message'].json.status }}**"
+      },
+      "id": "send-slack",
+      "name": "Send Slack Message",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "WebSocket Trigger": {
+      "main": [
+        [
+          {
+            "node": "Filter Completion Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Completion Events": {
+      "main": [
+        [
+          {
+            "node": "Format Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Message": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "triggerNodes": [
+    "websocket-trigger"
+  ]
+}

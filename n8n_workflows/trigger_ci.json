@@ -1,0 +1,196 @@
+{
+  "name": "Trigger CI on Task Completion",
+  "description": "Automatically trigger CI/CD pipeline when Claude Pool tasks generate code changes",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "readFile",
+        "filePath": "pool.json"
+      },
+      "id": "read-pool-file",
+      "name": "File",
+      "type": "n8n-nodes-base.fileReadBinary",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsonData": "={{ $node['File'].binary.data.toString() | parseJson() }}"
+      },
+      "id": "parse-json",
+      "name": "Parse JSON",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "dataPropertyName": "tasks",
+        "mode": "combine"
+      },
+      "id": "split-tasks",
+      "name": "Split Tasks",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": [
+            {
+              "condition": "string",
+              "key": "status",
+              "operation": "equals",
+              "type": "string",
+              "value": "success"
+            },
+            {
+              "condition": "string",
+              "key": "json_output.files_changed",
+              "operation": "isNotEmpty",
+              "type": "string"
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "filter-with-changes",
+      "name": "Filter Tasks with Changes",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const task = $input.first().json;\nconst output = task.json_output || {};\nconst filesChanged = output.files_changed || [];\n\nreturn {\n  branch: `claude-pool/${task.id.substring(5)}`,\n  commit_message: `Apply changes from Claude Pool task ${task.id}`,\n  files: filesChanged,\n  task_id: task.id\n}"
+      },
+      "id": "extract-ci-data",
+      "name": "Extract CI Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CI_WEBHOOK_URL }}",
+        "authentication": "headerAuth",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-CI-Token",
+              "value": "={{ $env.CI_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event",
+              "value": "code_changes"
+            },
+            {
+              "name": "branch",
+              "value": "={{ $node['Extract CI Data'].json.branch }}"
+            },
+            {
+              "name": "files",
+              "value": "={{ JSON.stringify($node['Extract CI Data'].json.files) }}"
+            },
+            {
+              "name": "source",
+              "value": "claude-pool"
+            }
+          ]
+        }
+      },
+      "id": "trigger-ci",
+      "name": "Trigger CI Pipeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "File": {
+      "main": [
+        [
+          {
+            "node": "Parse JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JSON": {
+      "main": [
+        [
+          {
+            "node": "Split Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Tasks": {
+      "main": [
+        [
+          {
+            "node": "Filter Tasks with Changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Tasks with Changes": {
+      "main": [
+        [
+          {
+            "node": "Extract CI Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract CI Data": {
+      "main": [
+        [
+          {
+            "node": "Trigger CI Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "triggerNodes": []
+}

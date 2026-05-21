@@ -102,9 +102,12 @@ def test_load_pool(temp_pool_file: Path, sample_pool_data: dict):
 
 
 def test_load_pool_file_not_found(temp_pool_file: Path):
-    """Test loading from non-existent file raises FileNotFoundError."""
-    with pytest.raises(FileNotFoundError):
-        load_pool(temp_pool_file)
+    """Test loading from non-existent file auto-creates empty pool."""
+    state = load_pool(temp_pool_file)
+
+    assert isinstance(state, PoolState)
+    assert len(state.tasks) == 0
+    assert temp_pool_file.exists()
 
 
 def test_load_pool_invalid_json(temp_pool_file: Path):

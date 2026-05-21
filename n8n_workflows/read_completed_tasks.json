@@ -1,0 +1,134 @@
+{
+  "name": "Read Completed Tasks",
+  "description": "Read completed tasks from Claude Pool and filter for successful executions",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "readFile",
+        "filePath": "pool.json"
+      },
+      "id": "read-pool-file",
+      "name": "File",
+      "type": "n8n-nodes-base.fileReadBinary",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsonData": "={{ $node['File'].binary.data.toString() | parseJson() }}"
+      },
+      "id": "parse-json",
+      "name": "Parse JSON",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "dataPropertyName": "tasks",
+        "mode": "combine"
+      },
+      "id": "split-tasks",
+      "name": "Split Tasks",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": [
+            {
+              "condition": "string",
+              "key": "status",
+              "operation": "equals",
+              "type": "string",
+              "value": "success"
+            }
+          ]
+        }
+      },
+      "id": "filter-success",
+      "name": "Filter Success Tasks",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({\n  id: item.json.id,\n  prompt: item.json.prompt,\n  directory: item.json.directory,\n  status: item.json.status,\n  exit_code: item.json.exit_code,\n  duration_ms: item.json.duration_ms,\n  output: item.json.json_output\n}))"
+      },
+      "id": "format-output",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "File": {
+      "main": [
+        [
+          {
+            "node": "Parse JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JSON": {
+      "main": [
+        [
+          {
+            "node": "Split Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Tasks": {
+      "main": [
+        [
+          {
+            "node": "Filter Success Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Success Tasks": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "triggerNodes": []
+}
