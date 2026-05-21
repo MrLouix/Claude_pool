@@ -352,9 +352,10 @@ class TaskExecutor:
                 logger.info(f"Retrying rate-limited task: {retry_task.id}")
                 await self.execute_task(retry_task)
 
-                # If it succeeded, reset the global retry counter
+                # If it succeeded, reset the global retry counter and clear suspension
                 if retry_task.status == "success":
                     self.pool.retry_count = 0
+                    self.pool.suspended_until = None
                     logger.info("Retry task succeeded — pool retry counter reset to 0")
                 continue  # Loop back to check remaining tasks
 
@@ -559,7 +560,10 @@ class TaskExecutor:
             # edit must not erase a suspension computed by _on_rate_limit_detected)
             self.pool.retry_count = new_pool.retry_count
             if not self.pool.is_suspended:
-                self.pool.suspended_until = new_pool.suspended_until
+                # Only reload suspended_until from file if it's still in the future.
+                # If it's expired, don't reload a stale date — keep it cleared.
+                if new_pool.suspended_until is not None and new_pool.is_suspended:
+                    self.pool.suspended_until = new_pool.suspended_until
             
             # Save back to file to persist auto-generated IDs and initialized fields
             self._save_state()
@@ -570,7 +574,7 @@ class TaskExecutor:
         return False
 
     def _notify_update(self, task: Task) -> None:
-        """Notify callback of task update."""
+        """Notify callback of task update, passing bucket_id in the task object."""
         if self.on_task_update:
             self.on_task_update(task)
 
@@ -608,3 +612,40 @@ class TaskExecutor:
                 self._save_state()
                 return True
         return False
+
+    def delete_bucket(self, bucket_id: str) -> int:
+        """Delete a chat bucket and all its tasks.
+
+        If the currently running task belongs to the bucket, a skip is
+        requested so the executor loop abandons it on the next iteration.
+
+        Args:
+            bucket_id: ID of the bucket to delete.
+
+        Returns:
+            Number of tasks removed.
+
+        Raises:
+            ValueError: When bucket_id is "main" (immutable).
+        """
+        if bucket_id == "main":
+            raise ValueError("The 'main' bucket cannot be deleted")
+
+        # Ask the executor to abandon the running task if it belongs to this bucket
+        if self.current_task and self.current_task.bucket_id == bucket_id:
+            logger.info(
+                f"Running task {self.current_task.id} belongs to bucket {bucket_id}; "
+                "requesting skip before deletion"
+            )
+            self.skip_requested = True
+
+        before = len(self.pool.tasks)
+        self.pool.tasks = [t for t in self.pool.tasks if t.bucket_id != bucket_id]
+        removed = before - len(self.pool.tasks)
+
+        if bucket_id in self.pool.buckets:
+            del self.pool.buckets[bucket_id]
+
+        logger.info(f"Deleted bucket {bucket_id} ({removed} tasks removed)")
+        self._save_state()
+        return removed
