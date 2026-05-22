@@ -237,7 +237,7 @@ class ApiServer:
         async def root():
             frontend_path = Path(__file__).parent / "frontend" / "index.html"
             if frontend_path.exists():
-                return HTMLResponse(content=frontend_path.read_text())
+                return HTMLResponse(content=frontend_path.read_text(encoding="utf-8"))
             return {"message": "Claude Pool API"}
 
         # ── Pool status ───────────────────────────────────────────
