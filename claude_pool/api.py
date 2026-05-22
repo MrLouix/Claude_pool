@@ -138,13 +138,20 @@ def _validate_directory(directory: str) -> Path:
     Raises HTTPException(404) if the path does not exist.
     """
     import platform
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"_validate_directory called with: {directory!r}")
+    # Normalize path separators for cross-platform compatibility
+    directory = directory.replace("\\", "/")
     resolved = Path(directory).resolve()
+    logger.info(f"Resolved path: {resolved}")
     s = str(resolved)
     if platform.system() != "Windows":
         if not s.startswith("/home") and not s.startswith("/mnt"):
             raise HTTPException(status_code=403, detail="Access denied: directory outside allow-list")
     if not resolved.is_dir():
-        raise HTTPException(status_code=404, detail="Directory not found")
+        logger.error(f"Directory not found: {resolved} (original: {directory!r})")
+        raise HTTPException(status_code=404, detail=f"Directory not found: {directory}")
     return resolved
 
 
