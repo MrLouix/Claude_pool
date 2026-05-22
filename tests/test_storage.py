@@ -261,6 +261,7 @@ def test_save_pool_creates_parent_directory(tmp_path: Path):
 # v2 schema — bucket migration tests
 # ---------------------------------------------------------------------------
 
+
 def test_v1_pool_migrates_to_v2(temp_pool_file: Path):
     """v1 format (no 'buckets' key) → tasks get bucket_id='main', 'main' bucket synthesized,
     and the file is rewritten in v2 format immediately."""

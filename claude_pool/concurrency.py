@@ -48,12 +48,16 @@ class TaskSemaphore:
         self.active_tasks.add(task_id)
 
         try:
-            logger.debug(f"Task acquired semaphore slot (active: {len(self.active_tasks)}/{self.max_concurrent})")
+            logger.debug(
+                f"Task acquired semaphore slot (active: {len(self.active_tasks)}/{self.max_concurrent})"
+            )
             return await coro
         finally:
             self.active_tasks.discard(task_id)
             self.release()
-            logger.debug(f"Task released semaphore slot (active: {len(self.active_tasks)}/{self.max_concurrent})")
+            logger.debug(
+                f"Task released semaphore slot (active: {len(self.active_tasks)}/{self.max_concurrent})"
+            )
 
     @property
     def available_slots(self) -> int:

@@ -1,0 +1,19 @@
+{
+  "projects": [
+    {
+      "name": "claude-pool",
+      "github_url": "https://github.com/MrLouix/Claude_pool.git",
+      "directory": "/home/ai_agent/projects/claude_pool"
+    },
+    {
+      "name": "review-analyzer",
+      "github_url": "https://github.com/MrLouix/review-analyzer",
+      "directory": "/home/ai_agent/projects/review_analyzer"
+    },
+    {
+      "name": "emoji-overlay",
+      "github_url": "https://github.com/MrLouix/emoji-picker",
+      "directory": "/home/ai_agent/projects/emoji_overlay"
+    }
+  ]
+}

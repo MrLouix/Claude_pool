@@ -246,14 +246,18 @@ class TestRunPoolConcurrent:
 
         # Mock both methods to track which is called
         with patch.object(executor_seq, "run_pool_sequential", new_callable=AsyncMock) as mock_seq:
-            with patch.object(executor_seq, "run_pool_concurrent", new_callable=AsyncMock) as mock_conc:
+            with patch.object(
+                executor_seq, "run_pool_concurrent", new_callable=AsyncMock
+            ) as mock_conc:
                 executor_seq.should_stop = True
                 await executor_seq.run_pool()
                 mock_seq.assert_called_once()
                 mock_conc.assert_not_called()
 
         with patch.object(executor_conc, "run_pool_sequential", new_callable=AsyncMock) as mock_seq:
-            with patch.object(executor_conc, "run_pool_concurrent", new_callable=AsyncMock) as mock_conc:
+            with patch.object(
+                executor_conc, "run_pool_concurrent", new_callable=AsyncMock
+            ) as mock_conc:
                 executor_conc.should_stop = True
                 await executor_conc.run_pool()
                 mock_seq.assert_not_called()

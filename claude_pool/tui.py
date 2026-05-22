@@ -16,11 +16,12 @@ from .models import Task
 
 logger = logging.getLogger(__name__)
 
+
 def get_exit_code_meaning(exit_code: int | None) -> str:
     """Get human-readable meaning of exit code."""
     if exit_code is None:
         return ""
-    
+
     # Common exit codes
     if exit_code == 0:
         return "✓ Success"
@@ -41,7 +42,6 @@ def get_exit_code_meaning(exit_code: int | None) -> str:
         return f"⏹ Terminated by signal {signal_num}"
     else:
         return f"⚠ Error code {exit_code}"
-
 
 
 class AddTaskScreen(ModalScreen[dict | None]):
@@ -95,17 +95,21 @@ class AddTaskScreen(ModalScreen[dict | None]):
     def on_create(self) -> None:
         """Handle create button."""
         from textual.widgets._select import NoSelection
-        
+
         directory = self.query_one("#directory_input", Input).value.strip()
         prompt = self.query_one("#prompt_input", Input).value.strip()
-        
+
         # Handle Select widgets that may return NoSelection
         model_value = self.query_one("#model_select", Select).value
-        model = "" if isinstance(model_value, NoSelection) or model_value == "" else str(model_value)
-        
+        model = (
+            "" if isinstance(model_value, NoSelection) or model_value == "" else str(model_value)
+        )
+
         effort_value = self.query_one("#effort_select", Select).value
-        effort = "" if isinstance(effort_value, NoSelection) or effort_value == "" else str(effort_value)
-        
+        effort = (
+            "" if isinstance(effort_value, NoSelection) or effort_value == "" else str(effort_value)
+        )
+
         args = self.query_one("#args_input", Input).value.strip()
 
         # Validate required fields
@@ -115,9 +119,10 @@ class AddTaskScreen(ModalScreen[dict | None]):
         if not prompt:
             self.notify("Prompt is required", severity="error")
             return
-        
+
         # Validate directory path
         from pathlib import Path
+
         try:
             dir_path = Path(directory).expanduser().resolve()
             if not dir_path.exists():
@@ -140,11 +145,13 @@ class AddTaskScreen(ModalScreen[dict | None]):
             # Split by spaces, respecting quotes
             args_list.extend(args.split())
 
-        self.dismiss({
-            "directory": str(dir_path),
-            "prompt": prompt,
-            "args": args_list,
-        })
+        self.dismiss(
+            {
+                "directory": str(dir_path),
+                "prompt": prompt,
+                "args": args_list,
+            }
+        )
 
     @on(Button.Pressed, "#cancel")
     def on_cancel(self) -> None:
@@ -341,7 +348,7 @@ class TaskListWidget(Static):
             task_id = task.id
             prompt = task.prompt[:20] + ("..." if len(task.prompt) > 20 else "")
             directory = str(task.directory)
-            
+
             # Format status with emoji and color
             status_emoji = {
                 "pending": "⏸",
@@ -351,9 +358,9 @@ class TaskListWidget(Static):
                 "skipped": "⏭",
                 "rate_limit_retry": "⟳",
             }.get(task.status, "?")
-            
+
             status_text = f"{status_emoji} {task.status}"
-            
+
             # Apply color based on status
             if task.status == "success":
                 status_display = f"[green]{status_text}[/green]"
@@ -363,7 +370,7 @@ class TaskListWidget(Static):
                 status_display = f"[yellow]{status_text}[/yellow]"
             else:
                 status_display = f"[dim]{status_text}[/dim]"
-            
+
             # Add row and store task mapping by row index
             row_key = table.add_row(task_id, prompt, directory, status_display)
             # Store by both row_key value (int) and task_id (str) for flexibility
@@ -373,7 +380,7 @@ class TaskListWidget(Static):
 
 class JsonOutputWidget(Static):
     """Widget displaying JSON output of selected task."""
-    
+
     can_focus = True  # Allow widget to receive focus for scrolling
 
     def __init__(self) -> None:
@@ -412,7 +419,7 @@ class JsonOutputWidget(Static):
             content += "[dim]No output yet[/dim]"
         else:
             output = task.json_output
-            
+
             # Tokens
             if "tokens_used" in output:
                 content += f"[bold]Tokens used:[/bold] {output['tokens_used']:,}\n"
@@ -422,7 +429,7 @@ class JsonOutputWidget(Static):
                 usage = output["session_usage_percent"]
                 color = "red" if usage > 80 else "yellow" if usage > 50 else "green"
                 content += f"[bold]Session usage:[/bold] [{color}]{usage}%[/{color}]\n\n"
-            
+
             # Result
             result_value = output.get("result", "")
             if result_value:
@@ -440,17 +447,17 @@ class JsonOutputWidget(Static):
 
             # Files changed
             if "files_changed" in output and output["files_changed"]:
-                files = ', '.join(output['files_changed'][:5])
-                if len(output['files_changed']) > 5:
+                files = ", ".join(output["files_changed"][:5])
+                if len(output["files_changed"]) > 5:
                     files += f" ... ({len(output['files_changed'])} total)"
                 content += f"[bold]Files changed:[/bold] {files}\n\n"
-        
+
         self.update(content)
 
 
 class LogWidget(Static):
     """Widget displaying logs."""
-    
+
     can_focus = True  # Allow widget to receive focus for scrolling
 
     def __init__(self) -> None:
@@ -539,25 +546,23 @@ class PoolTUI(App):
     def compose(self) -> ComposeResult:
         """Compose the UI."""
         yield Header()
-        
-        task_list_widget = TaskListWidget(
-            self.executor or TaskExecutor(self.pool_file)
-        )
+
+        task_list_widget = TaskListWidget(self.executor or TaskExecutor(self.pool_file))
         task_list_widget.id = "task_list_widget"
         yield task_list_widget
-        
+
         # Wrap json output in scrollable container
         with ScrollableContainer(id="json_output_container"):
             json_widget = JsonOutputWidget()
             json_widget.id = "json_output"
             yield json_widget
-        
+
         # Wrap logs in scrollable container
         with ScrollableContainer(id="logs_container"):
             log_widget = LogWidget()
             log_widget.id = "logs"
             yield log_widget
-        
+
         yield Container(
             Button("Add Task", id="add_task_btn", variant="success"),
             Button("Pause", id="pause_btn", variant="warning"),
@@ -628,22 +633,23 @@ class PoolTUI(App):
         json_output = self.query_one("#json_output", JsonOutputWidget)
         task_list = self.query_one("#task_list_widget", TaskListWidget)
         table = self.query_one("#task_list_widget DataTable", DataTable)
-        
+
         # If clicking on header (cursor_row == -1 or row_key is None), deselect
         if event.row_key is None or table.cursor_row < 0:
             self.selected_task = None
             json_output.update_content(None)
             return
-        
+
         # Get the row index (cursor_row is 0-based)
         row_idx = table.cursor_row
-        
+
         if str(row_idx) in task_list.task_map:
             self.selected_task = task_list.task_map[str(row_idx)]
             json_output.update_content(self.selected_task)
         else:
             self.selected_task = None
             json_output.update_content(None)
+
     def action_show_detail(self) -> None:
         """Show detailed output for selected task."""
         if self.selected_task and self.selected_task.json_output:
@@ -669,9 +675,7 @@ class PoolTUI(App):
         """Skip current task."""
         if self.executor and self.executor.current_task:
             log_widget = self.query_one("#logs", LogWidget)
-            log_widget.add_log(
-                f"[yellow]Skipping task {self.executor.current_task.id}[/yellow]"
-            )
+            log_widget.add_log(f"[yellow]Skipping task {self.executor.current_task.id}[/yellow]")
             self.executor.skip_current()
 
     async def action_delete_task(self) -> None:
@@ -682,9 +686,7 @@ class PoolTUI(App):
             return
 
         # Show confirmation dialog
-        result = await self.push_screen_wait(
-            ConfirmDialog(f"Delete task {self.selected_task.id}?")
-        )
+        result = await self.push_screen_wait(ConfirmDialog(f"Delete task {self.selected_task.id}?"))
 
         if result and self.executor:
             task_id = self.selected_task.id
@@ -729,14 +731,13 @@ class PoolTUI(App):
         """Handle quit button press."""
         self.exit()
 
-
     def action_retry_task(self) -> None:
         """Retry selected task by resetting it to pending and incrementing retry count."""
         if not self.selected_task:
             log_widget = self.query_one("#logs", LogWidget)
             log_widget.add_log("[red]No task selected[/red]")
             return
-        
+
         task = self.selected_task
         if task.status in ("failed", "success"):
             # Reset task fields
@@ -746,16 +747,18 @@ class PoolTUI(App):
             task.json_output = None
             # Increment retry count
             task.retry_count += 1
-            
+
             if self.executor:
                 self.executor._save_state()
-            
+
             log_widget = self.query_one("#logs", LogWidget)
-            log_widget.add_log(f"[yellow]Task {task.id} reset to pending (retry #{task.retry_count})[/yellow]")
-            
+            log_widget.add_log(
+                f"[yellow]Task {task.id} reset to pending (retry #{task.retry_count})[/yellow]"
+            )
+
             task_list = self.query_one("#task_list_widget", TaskListWidget)
             task_list.update_tasks()
-            
+
             json_output = self.query_one("#json_output", JsonOutputWidget)
             json_output.update_content(task)
         else:
@@ -765,15 +768,16 @@ class PoolTUI(App):
     async def action_add_task(self) -> None:
         """Show add task dialog."""
         result = await self.push_screen_wait(AddTaskScreen())
-        
+
         if result and self.executor:
             import uuid
             from datetime import datetime
+
             from .storage import cleanup_old_tasks
-            
+
             # Generate unique ID
             task_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
-            
+
             # Create new task
             new_task = Task(
                 id=task_id,
@@ -782,23 +786,25 @@ class PoolTUI(App):
                 args=result["args"],
                 status="pending",
             )
-            
+
             # Add to executor's pool
             self.executor.pool.tasks.append(new_task)
-            
+
             # Automatic cleanup of old tasks (48+ hours)
             removed = cleanup_old_tasks(self.executor.pool, max_age_hours=48)
             if removed > 0:
                 logger.info(f"Automatically cleaned up {removed} old completed tasks")
-            
+
             self.executor._save_state()
-            
+
             # Update UI
             task_list = self.query_one("#task_list_widget", TaskListWidget)
             task_list.update_tasks()
-            
+
             log_widget = self.query_one("#logs", LogWidget)
-            log_widget.add_log(f"[green]Added new task {task_id}: {result['prompt'][:40]}...[/green]")
+            log_widget.add_log(
+                f"[green]Added new task {task_id}: {result['prompt'][:40]}...[/green]"
+            )
             if removed > 0:
                 log_widget.add_log(f"[dim]Cleaned up {removed} old completed task(s)[/dim]")
 

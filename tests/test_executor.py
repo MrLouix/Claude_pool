@@ -539,6 +539,7 @@ async def test_retry_count_reset_suspension_expired_with_pending(temp_pool_file:
 # delete_bucket tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_delete_bucket_main_raises(temp_pool_file: Path):
     """delete_bucket('main') must raise ValueError — the main bucket is immutable."""
@@ -580,15 +581,22 @@ async def test_delete_bucket_skips_running_task_and_leaves_consistent_queue(temp
     executor.pool.buckets["chat_x"] = Bucket(id="chat_x", type="chat", label="Test Chat")
 
     running_task = Task(
-        id="running_1", prompt="running", directory=Path("/tmp"),
-        bucket_id="chat_x", status="running",
+        id="running_1",
+        prompt="running",
+        directory=Path("/tmp"),
+        bucket_id="chat_x",
+        status="running",
     )
     pending_in_chat = Task(
-        id="pending_chat", prompt="pending in chat", directory=Path("/tmp"),
+        id="pending_chat",
+        prompt="pending in chat",
+        directory=Path("/tmp"),
         bucket_id="chat_x",
     )
     other_task = Task(
-        id="other_1", prompt="other bucket", directory=Path("/tmp"),
+        id="other_1",
+        prompt="other bucket",
+        directory=Path("/tmp"),
         bucket_id="main",
     )
     executor.pool.tasks = [running_task, pending_in_chat, other_task]

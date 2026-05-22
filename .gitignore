@@ -33,6 +33,22 @@ CLAUDE.md
 .claude/
 docs/
 
+# Antigravity settings
+.antigravitycli/
+
+# OpenCode settings
+opencode.json
+opencode.jsonc
+.opencode/
+
+# Antigravity settings
+.antigravitycli/
+
+# OpenCode settings
+opencode.json
+opencode.jsonc
+.opencode/
+
 # Type checking
 .mypy_cache/
 .dmypy.json

@@ -11,7 +11,7 @@ from .executor import TaskExecutor
 
 def setup_logging(verbose: bool = False, debug: bool = False, tui_mode: bool = False) -> None:
     """Setup logging configuration.
-    
+
     Args:
         verbose: Enable verbose logging (INFO level)
         debug: Enable debug logging (DEBUG level)
@@ -53,7 +53,7 @@ def setup_logging(verbose: bool = False, debug: bool = False, tui_mode: bool = F
             level = logging.INFO
         else:
             level = logging.WARNING
-            
+
         logging.basicConfig(
             level=level,
             format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -115,6 +115,7 @@ def run_api_server(pool_file: Path, host: str = "0.0.0.0", port: int = 8000) -> 
     """
     try:
         import uvicorn
+
         from .api import create_app
 
         app = create_app(pool_file)
@@ -184,7 +185,9 @@ def main() -> None:
     args = parser.parse_args()
 
     # Setup logging based on mode
-    setup_logging(verbose=args.verbose, debug=args.debug, tui_mode=not args.no_tui and not args.serve)
+    setup_logging(
+        verbose=args.verbose, debug=args.debug, tui_mode=not args.no_tui and not args.serve
+    )
 
     try:
         if args.serve:
@@ -195,7 +198,9 @@ def main() -> None:
             exit_code = asyncio.run(run_cli(args.pool, max_concurrent=args.parallel))
         else:
             if args.parallel > 1:
-                logging.warning("Parallel execution not supported in TUI mode, using sequential execution")
+                logging.warning(
+                    "Parallel execution not supported in TUI mode, using sequential execution"
+                )
             exit_code = asyncio.run(run_tui_mode(args.pool))
         sys.exit(exit_code)
     except KeyboardInterrupt:

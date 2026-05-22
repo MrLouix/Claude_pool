@@ -21,13 +21,22 @@ logger = logging.getLogger(__name__)
 class TaskExecutor:
     """Executes tasks from a pool sequentially with global rate-limit handling."""
 
-    def __init__(self, pool_file: Path, on_task_update: Callable[[Task], None] | None = None, max_concurrent: int = 1):
+    def __init__(
+        self,
+        pool_file: Path,
+        on_task_update: Callable[[Task], None] | None = None,
+        max_concurrent: int = 1,
+        install_signal_handlers: bool = True,
+    ):
         """Initialize the executor.
 
         Args:
             pool_file: Path to pool.json
             on_task_update: Optional callback called when a task is updated
             max_concurrent: Maximum number of tasks to run concurrently (default: 1)
+            install_signal_handlers: Whether to install SIGINT/SIGTERM handlers.
+                Set to False when running inside a server (e.g. uvicorn) that
+                manages its own signal handling.
         """
         self.pool_file = pool_file
         self.pool = PoolState(pool_file=pool_file)
@@ -44,9 +53,10 @@ class TaskExecutor:
         self.semaphore = TaskSemaphore(max_concurrent)
         self._save_lock = asyncio.Lock()  # Thread-safe state saving
 
-        # Setup signal handlers
-        signal.signal(signal.SIGINT, self._handle_signal)
-        signal.signal(signal.SIGTERM, self._handle_signal)
+        # Setup signal handlers (skip when embedded in a server like uvicorn)
+        if install_signal_handlers:
+            signal.signal(signal.SIGINT, self._handle_signal)
+            signal.signal(signal.SIGTERM, self._handle_signal)
 
     def _handle_signal(self, signum: int, frame: object) -> None:
         """Handle SIGINT/SIGTERM for graceful shutdown."""
@@ -84,7 +94,7 @@ class TaskExecutor:
             # Ensure pool_file is preserved after load
             self.pool.pool_file = self.pool_file
             logger.info(f"Loaded {len(self.pool.tasks)} tasks from {self.pool_file}")
-            
+
             # Automatic cleanup of old tasks (older than 48 hours)
             removed = cleanup_old_tasks(self.pool, max_age_hours=48)
             if removed > 0:
@@ -106,10 +116,9 @@ class TaskExecutor:
             session_id if found, None otherwise
         """
         matching_tasks = [
-            t for t in self.pool.tasks
-            if (t.status == "success" and
-                t.directory == directory and
-                t.session_id is not None)
+            t
+            for t in self.pool.tasks
+            if (t.status == "success" and t.directory == directory and t.session_id is not None)
         ]
 
         if not matching_tasks:
@@ -195,7 +204,9 @@ class TaskExecutor:
             # Dump raw output for inspection (overwritten each run)
             log_path = self.pool_file.parent / "last_claude_output.log"
             with open(log_path, "w", encoding="utf-8") as _f:
-                _f.write(f"=== task {task.id} | exit_code {task.exit_code} | {task.duration_ms} ms ===\n")
+                _f.write(
+                    f"=== task {task.id} | exit_code {task.exit_code} | {task.duration_ms} ms ===\n"
+                )
                 _f.write("--- stdout ---\n")
                 _f.write(stdout.decode("utf-8", errors="replace") if stdout else "(empty)\n")
                 _f.write("--- stderr ---\n")
@@ -233,11 +244,7 @@ class TaskExecutor:
                 # Check for rate limit in stderr AND stdout/json_output
                 stderr_text = stderr.decode("utf-8", errors="replace").lower()
                 stdout_text = stdout.decode("utf-8", errors="replace").lower() if stdout else ""
-                result_text = (
-                    task.json_output.get("result", "").lower()
-                    if task.json_output
-                    else ""
-                )
+                result_text = task.json_output.get("result", "").lower() if task.json_output else ""
 
                 rate_limit_patterns = [
                     "rate limit",
@@ -255,9 +262,7 @@ class TaskExecutor:
                     for text in [stderr_text, stdout_text, result_text]
                 )
 
-                is_high_usage = (
-                    task.json_output.get("session_usage_percent", 0) >= 80
-                )
+                is_high_usage = task.json_output.get("session_usage_percent", 0) >= 80
 
                 if is_rate_limit or is_high_usage:
                     self._on_rate_limit_detected(task)
@@ -466,7 +471,7 @@ class TaskExecutor:
             else:
                 # Execute pending tasks up to max_concurrent
                 pending_tasks.sort(key=lambda t: t.created_at)
-                tasks_to_execute = pending_tasks[:self.max_concurrent]
+                tasks_to_execute = pending_tasks[: self.max_concurrent]
 
             if not tasks_to_execute:
                 # No tasks to execute, wait and check again
@@ -504,26 +509,26 @@ class TaskExecutor:
 
     def check_pool_updates(self) -> bool:
         """Check if pool.json has been modified by an external source and reload if needed.
-        
+
         Ignores modifications made by our own _save_state() to prevent self-triggered reloads.
-        
+
         Returns:
             True if pool was reloaded, False otherwise
         """
         try:
             if not self.pool_file.exists():
                 return False
-            
+
             current_mtime = os.path.getmtime(str(self.pool_file))
-            
+
             # Ignore our own saves — only react to external modifications
             if current_mtime <= self._last_save_mtime:
                 return False
-            
+
             # Allow a small debounce window for our own saves (filesystem mtime granularity)
             if current_mtime - self._last_save_mtime < 0.1:
                 return False
-            
+
             self.last_pool_mtime = current_mtime
             logger.info("Pool file modified externally, reloading tasks...")
             try:
@@ -531,11 +536,11 @@ class TaskExecutor:
             except (json.JSONDecodeError, ValueError, KeyError) as e:
                 logger.error(f"Invalid pool.json format: {e}")
                 return False
-            
+
             # Merge: add new tasks and update modified ones
             existing_tasks = {t.id: t for t in self.pool.tasks}
             changes_detected = False
-            
+
             for new_task in new_pool.tasks:
                 if new_task.id not in existing_tasks:
                     # New task - add it
@@ -544,7 +549,7 @@ class TaskExecutor:
                     changes_detected = True
                     if self.on_task_update:
                         self.on_task_update(new_task)
-                    
+
                     # Automatic cleanup when new tasks are detected
                     removed = cleanup_old_tasks(self.pool, max_age_hours=48)
                     if removed > 0:
@@ -559,11 +564,13 @@ class TaskExecutor:
                         existing.duration_ms = new_task.duration_ms
                         existing.json_output = new_task.json_output
                         existing.retry_count = new_task.retry_count
-                        logger.info(f"Task {new_task.id} was reset to pending (retry #{existing.retry_count})")
+                        logger.info(
+                            f"Task {new_task.id} was reset to pending (retry #{existing.retry_count})"
+                        )
                         changes_detected = True
                         if self.on_task_update:
                             self.on_task_update(existing)
-            
+
             # Preserve pool metadata from the file, but keep in-memory
             # suspended_until if the pool is currently suspended (an external
             # edit must not erase a suspension computed by _on_rate_limit_detected)
@@ -573,10 +580,10 @@ class TaskExecutor:
                 # If it's expired, don't reload a stale date — keep it cleared.
                 if new_pool.suspended_until is not None and new_pool.is_suspended:
                     self.pool.suspended_until = new_pool.suspended_until
-            
+
             # Save back to file to persist auto-generated IDs and initialized fields
             self._save_state()
-            
+
             return True
         except Exception as e:
             logger.error(f"Error checking pool updates: {e}")
