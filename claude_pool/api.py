@@ -131,15 +131,18 @@ class MessageResponse(BaseModel):
 
 
 def _validate_directory(directory: str) -> Path:
-    """Resolve and validate that a directory is inside the allow-list.
+    """Resolve and validate that a directory exists.
 
-    Raises HTTPException(403) if outside /home or /mnt.
+    On Linux, restricts to /home and /mnt.
+    On Windows, allows any path.
     Raises HTTPException(404) if the path does not exist.
     """
+    import platform
     resolved = Path(directory).resolve()
     s = str(resolved)
-    if not s.startswith("/home") and not s.startswith("/mnt"):
-        raise HTTPException(status_code=403, detail="Access denied: directory outside allow-list")
+    if platform.system() != "Windows":
+        if not s.startswith("/home") and not s.startswith("/mnt"):
+            raise HTTPException(status_code=403, detail="Access denied: directory outside allow-list")
     if not resolved.is_dir():
         raise HTTPException(status_code=404, detail="Directory not found")
     return resolved
@@ -581,8 +584,12 @@ class ApiServer:
             try:
                 resolved = target.resolve()
                 s = str(resolved)
-                if not s.startswith("/home") and not s.startswith("/mnt"):
-                    raise HTTPException(status_code=403, detail="Access denied")
+                # On Windows, allow any path (drive letters like C:\)
+                # On Linux, restrict to /home and /mnt
+                import platform
+                if platform.system() != "Windows":
+                    if not s.startswith("/home") and not s.startswith("/mnt"):
+                        raise HTTPException(status_code=403, detail="Access denied")
             except HTTPException:
                 raise
             if not resolved.is_dir():
