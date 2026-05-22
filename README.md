@@ -39,12 +39,27 @@ Avant de commencer, vous avez besoin de :
 
 ## Installation (première fois)
 
+### Option A — Télécharger la release (recommandé)
+
+Pas besoin de Git. Téléchargez le wheel depuis la page GitHub :
+
+**[Télécharger claude_pool-1.1.0-py3-none-any.whl](https://github.com/MrLouix/Claude_pool/raw/feat/chat-tab/dist/claude_pool-1.1.0-py3-none-any.whl)**
+
+Puis installez-le :
+
 ```bash
-# 1. Cloner le dépôt
+pip install claude_pool-1.1.0-py3-none-any.whl
+```
+
+C'est tout — `claude-pool` est maintenant disponible comme commande dans votre terminal.
+
+> **Python requis :** 3.11 ou plus récent. Vérifiez avec `python3 --version`.
+
+### Option B — Cloner le dépôt (pour les contributeurs)
+
+```bash
 git clone https://github.com/MrLouix/Claude_pool.git
 cd Claude_pool
-
-# 2. Installer en une commande
 ./claude-pool.sh install
 ```
 
@@ -55,27 +70,29 @@ Le script `install` crée automatiquement un environnement Python isolé (`venv`
 ## Démarrer le serveur
 
 ```bash
-# Démarrer avec le tableau de bord web sur le port 8000
-./claude-pool.sh --pool data/pool.json --serve --port 8000 --no-tui
+# Créer un dossier de travail et démarrer le tableau de bord web
+mkdir -p ~/claude-pool-data
+claude-pool --pool ~/claude-pool-data/pool.json --serve --port 8000 --no-tui
 ```
 
 Puis ouvrez votre navigateur sur **http://localhost:8000**.
 
-> Si le dossier `data/` n'existe pas encore, créez-le : `mkdir -p data`  
 > Le fichier `pool.json` est créé automatiquement au premier démarrage.
 
 ### Autres modes de lancement
 
 ```bash
 # Avec l'interface TUI dans le terminal (pas de navigateur)
-./claude-pool.sh --pool data/pool.json
+claude-pool --pool ~/claude-pool-data/pool.json
 
 # Mode silencieux + serveur web
-./claude-pool.sh --pool data/pool.json --serve --no-tui
+claude-pool --pool ~/claude-pool-data/pool.json --serve --no-tui
 
 # Port personnalisé
-./claude-pool.sh --pool data/pool.json --serve --port 9000 --no-tui
+claude-pool --pool ~/claude-pool-data/pool.json --serve --port 9000 --no-tui
 ```
+
+> **Installation via clone :** si vous avez utilisé l'Option B, remplacez `claude-pool` par `./claude-pool.sh`.
 
 ---
 
