@@ -757,60 +757,31 @@
         .td-btn-save { border-color: #22c55e; color: #166534; background: #f0fdf4; }
         .td-btn-save:hover { background: #dcfce7; }
 
-        /* ---- Task Detail Modal ---- */
-        .task-detail-box { max-width: 640px; max-height: 85vh; overflow-y: auto; }
-        .task-detail-body { display: grid; gap: 12px; padding: 20px; }
-        .td-field { display: flex; flex-direction: column; gap: 4px; }
-        .td-field label { font-weight: 600; font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
-        .td-value { font-size: 14px; color: #333; word-break: break-word; }
-        .td-id { font-family: monospace; font-size: 13px; color: #555; }
-        .td-dir { font-family: monospace; font-size: 13px; color: #888; background: #f9f9f9; padding: 6px 8px; border-radius: 4px; }
-        .td-prompt-field { min-height: 80px; }
-        .td-prompt-textarea {
-            width: 100%; min-height: 80px; max-height: 250px; overflow-y: auto;
-            padding: 10px; border: 1px solid #ddd; border-radius: 6px;
-            font-family: inherit; font-size: 14px; resize: vertical;
-            background: #fafafa; color: #333; line-height: 1.5;
-            box-sizing: border-box;
+        /* ---- Task View (full-page hash-routed) ---- */
+        #task-view { display: flex; flex-direction: column; gap: 10px; }
+        .task-view-header {
+            background: white; padding: 14px 20px; display: flex; align-items: center;
+            gap: 14px; border-bottom: 1px solid #eee; border-radius: 10px;
+            flex-shrink: 0;
         }
-        .td-prompt-textarea:not([readonly]) { background: #fff; border-color: #6366f1; }
-        .td-args { font-family: monospace; font-size: 13px; color: #555; }
-        .td-result-field { min-height: 60px; }
-        .td-result-textarea {
-            width: 100%; min-height: 60px; max-height: 300px; overflow-y: auto;
+        .task-view-header-info { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; overflow: hidden; }
+        .task-view-title { font-size: 15px; font-weight: 700; color: #222; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .task-view-body {
+            flex: 1; overflow-y: auto; background: white; display: grid; gap: 14px;
+            padding: 20px; border-radius: 10px;
+        }
+        .task-view-footer {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 14px 20px; background: white; border-top: 1px solid #eee;
+            flex-wrap: wrap; gap: 10px; border-radius: 10px; flex-shrink: 0;
+        }
+        .tv-json {
+            width: 100%; max-height: 200px; overflow-y: auto;
             padding: 10px; border: 1px solid #ddd; border-radius: 6px;
-            font-family: monospace; font-size: 13px; white-space: pre-wrap;
-            word-break: break-word; background: #f5f5f5; color: #333; line-height: 1.4;
+            font-family: monospace; font-size: 12px; white-space: pre-wrap;
+            word-break: break-word; background: #f5f5f5; color: #555; line-height: 1.4;
             box-sizing: border-box; margin: 0;
         }
-        .td-edit-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 8px; border-top: 1px solid #eee; }
-        .td-edit-row select {
-            padding: 8px; border: 1px solid #ddd; border-radius: 5px;
-            font-family: inherit; font-size: 14px; background: #fff;
-        }
-        .task-detail-footer {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 14px 20px; border-top: 1px solid #eee; flex-wrap: wrap; gap: 10px;
-        }
-        .td-actions-left, .td-actions-right { display: flex; gap: 8px; flex-wrap: wrap; }
-        .td-btn {
-            padding: 7px 14px; border-radius: 5px; border: 1px solid #ddd;
-            font-size: 13px; cursor: pointer; background: #f8f8f8; color: #333;
-            font-family: inherit; transition: background 0.15s;
-        }
-        .td-btn:hover { background: #eee; }
-        .td-btn-skip { border-color: #f59e0b; color: #92400e; background: #fffbeb; }
-        .td-btn-skip:hover { background: #fef3c7; }
-        .td-btn-retry { border-color: #22c55e; color: #166534; background: #f0fdf4; }
-        .td-btn-retry:hover { background: #dcfce7; }
-        .td-btn-delete { border-color: #ef4444; color: #991b1b; background: #fef2f2; }
-        .td-btn-delete:hover { background: #fee2e2; }
-        .td-btn-duplicate { border-color: #3b82f6; color: #1e40af; background: #eff6ff; }
-        .td-btn-duplicate:hover { background: #dbeafe; }
-        .td-btn-edit { border-color: #8b5cf6; color: #5b21b6; background: #f5f3ff; }
-        .td-btn-edit:hover { background: #ede9fe; }
-        .td-btn-save { border-color: #22c55e; color: #166534; background: #f0fdf4; }
-        .td-btn-save:hover { background: #dcfce7; }
 
         /* ---- Chat list in dashboard ---- */
         .chat-list { display: grid; gap: 8px; }
@@ -1104,6 +1075,101 @@
         </div>
     </div>
 
+    <!-- TASK VIEW (hidden until hash = #task/<id>) -->
+    <div class="container" id="task-view" style="display:none;">
+        <div class="task-view-header">
+            <button class="btn-back" id="tv-btn-back">← Back</button>
+            <div class="task-view-header-info">
+                <span class="task-view-title" id="tv-header-id">Task</span>
+                <span class="task-status" id="tv-header-status"></span>
+            </div>
+        </div>
+        <div class="task-view-body">
+            <div class="td-field">
+                <label>ID</label>
+                <div class="td-value td-id" id="td-id"></div>
+            </div>
+            <div class="td-field">
+                <label>Status</label>
+                <div class="td-value"><span class="task-status" id="td-status"></span></div>
+            </div>
+            <div class="td-field">
+                <label>Directory</label>
+                <div class="td-value td-dir" id="td-directory"></div>
+            </div>
+            <div class="td-field">
+                <label>Bucket</label>
+                <div class="td-value" id="tv-bucket">—</div>
+            </div>
+            <div class="td-field">
+                <label>Created At</label>
+                <div class="td-value" id="tv-created-at">—</div>
+            </div>
+            <div class="td-field td-prompt-field">
+                <label>Prompt</label>
+                <textarea class="td-prompt-textarea" id="td-prompt" readonly></textarea>
+            </div>
+            <div class="td-edit-row" id="td-edit-row" style="display:none;">
+                <div class="td-field">
+                    <label>Model</label>
+                    <select id="td-edit-model">
+                        <option value="">default</option>
+                        <option value="haiku">haiku</option>
+                        <option value="sonnet">sonnet</option>
+                        <option value="opus">opus</option>
+                    </select>
+                </div>
+                <div class="td-field">
+                    <label>Effort</label>
+                    <select id="td-edit-effort">
+                        <option value="">default</option>
+                        <option value="low">low</option>
+                        <option value="medium">medium</option>
+                        <option value="high">high</option>
+                        <option value="max">max</option>
+                    </select>
+                </div>
+            </div>
+            <div class="td-field td-args-field">
+                <label>Args</label>
+                <div class="td-value td-args" id="td-args"></div>
+            </div>
+            <div class="td-field">
+                <label>Exit Code</label>
+                <div class="td-value" id="td-exit-code">—</div>
+            </div>
+            <div class="td-field">
+                <label>Duration</label>
+                <div class="td-value" id="td-duration">—</div>
+            </div>
+            <div class="td-field">
+                <label>Retry Count</label>
+                <div class="td-value" id="td-retry-count">0</div>
+            </div>
+            <div class="td-field td-result-field">
+                <label>Result</label>
+                <pre class="td-result-textarea" id="td-result">—</pre>
+            </div>
+            <div class="td-field">
+                <label>JSON Output (raw)</label>
+                <pre class="tv-json" id="tv-json-output">—</pre>
+            </div>
+        </div>
+        <div class="task-view-footer">
+            <div class="td-actions-left">
+                <button class="td-btn td-btn-skip" id="td-btn-skip" style="display:none;" onclick="tdSkipTask()">Skip</button>
+                <button class="td-btn td-btn-retry" id="td-btn-retry" style="display:none;" onclick="tdRetryTask()">Retry</button>
+                <button class="td-btn td-btn-delete" id="td-btn-delete" onclick="tdDeleteTask()">Delete</button>
+                <button class="td-btn td-btn-duplicate" id="td-btn-duplicate" onclick="tdDuplicateTask()">Duplicate</button>
+            </div>
+            <div class="td-actions-right">
+                <button class="td-btn td-btn-edit" id="td-btn-edit" style="display:none;" onclick="tdToggleEdit()">✏️ Edit</button>
+                <button class="td-btn td-btn-save" id="td-btn-save" style="display:none;" onclick="tdSaveTask()">Save</button>
+                <button class="td-btn td-btn-cancel-edit" id="td-btn-cancel-edit" style="display:none;" onclick="tdCancelEdit()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- CHAT VIEW (hidden until hash = #chat/<id>) -->
     <div class="container" id="chat-view" style="display:none;">
         <div class="chat-header">
@@ -1266,89 +1332,6 @@
         </div>
     </div>
 
-    <!-- Task Detail modal -->
-    <div class="modal-overlay" id="task-detail-modal">
-        <div class="modal-box task-detail-box">
-            <div class="modal-header">
-                <h3>Task Details</h3>
-                <button class="modal-close" id="task-detail-close">×</button>
-            </div>
-            <div class="modal-body task-detail-body">
-                <div class="td-field">
-                    <label>ID</label>
-                    <div class="td-value td-id" id="td-id"></div>
-                </div>
-                <div class="td-field">
-                    <label>Status</label>
-                    <div class="td-value"><span class="task-status" id="td-status"></span></div>
-                </div>
-                <div class="td-field">
-                    <label>Directory</label>
-                    <div class="td-value td-dir" id="td-directory"></div>
-                </div>
-                <div class="td-field td-prompt-field">
-                    <label>Prompt</label>
-                    <textarea class="td-prompt-textarea" id="td-prompt" readonly></textarea>
-                </div>
-                <div class="td-field td-args-field">
-                    <label>Args</label>
-                    <div class="td-value td-args" id="td-args"></div>
-                </div>
-                <div class="td-field">
-                    <label>Exit Code</label>
-                    <div class="td-value" id="td-exit-code">—</div>
-                </div>
-                <div class="td-field">
-                    <label>Duration</label>
-                    <div class="td-value" id="td-duration">—</div>
-                </div>
-                <div class="td-field">
-                    <label>Retry Count</label>
-                    <div class="td-value" id="td-retry-count">0</div>
-                </div>
-                <div class="td-field td-result-field">
-                    <label>Result</label>
-                    <pre class="td-result-textarea" id="td-result">—</pre>
-                </div>
-                <!-- Edit mode fields (hidden by default) -->
-                <div class="td-edit-row" id="td-edit-row" style="display:none;">
-                    <div class="td-field">
-                        <label>Model</label>
-                        <select id="td-edit-model">
-                            <option value="">default</option>
-                            <option value="haiku">haiku</option>
-                            <option value="sonnet">sonnet</option>
-                            <option value="opus">opus</option>
-                        </select>
-                    </div>
-                    <div class="td-field">
-                        <label>Effort</label>
-                        <select id="td-edit-effort">
-                            <option value="">default</option>
-                            <option value="low">low</option>
-                            <option value="medium">medium</option>
-                            <option value="high">high</option>
-                            <option value="max">max</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer task-detail-footer">
-                <div class="td-actions-left">
-                    <button class="td-btn td-btn-skip" id="td-btn-skip" style="display:none;" onclick="tdSkipTask()">Skip</button>
-                    <button class="td-btn td-btn-retry" id="td-btn-retry" style="display:none;" onclick="tdRetryTask()">Retry</button>
-                    <button class="td-btn td-btn-delete" id="td-btn-delete" onclick="tdDeleteTask()">Delete</button>
-                    <button class="td-btn td-btn-duplicate" id="td-btn-duplicate" onclick="tdDuplicateTask()">Duplicate</button>
-                </div>
-                <div class="td-actions-right">
-                    <button class="td-btn td-btn-edit" id="td-btn-edit" style="display:none;" onclick="tdToggleEdit()">✏️ Edit</button>
-                    <button class="td-btn td-btn-save" id="td-btn-save" style="display:none;" onclick="tdSaveTask()">Save</button>
-                    <button class="td-btn td-btn-cancel-edit" id="td-btn-cancel-edit" style="display:none;" onclick="tdCancelEdit()">Cancel</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script>
         let ws = null;
         const wsStatus = document.getElementById('ws-status');
@@ -1392,6 +1375,9 @@
             } else if (message.event === 'task_updated') {
                 updateTask(message.task);
                 logEvent(`Task ${message.task.id} updated: ${message.task.status}`, 'info');
+                if (currentTaskId && message.task.id === currentTaskId) {
+                    loadTaskView(currentTaskId);
+                }
                 if (currentChatId && message.task.bucket_id === currentChatId) {
                     const bubble = document.querySelector(`[data-msg-id="${message.task.id}"]`);
                     if (bubble) {
@@ -1553,7 +1539,7 @@
             }
 
             taskList.innerHTML = tasks.map(task => `
-                <div class="task-item" data-task-id="${task.id}" onclick="openTaskDetail('${task.id}')" style="cursor:pointer;">
+                <div class="task-item" data-task-id="${task.id}" onclick="navigate('task/${task.id}')" style="cursor:pointer;">
                     <div class="task-info">
                         <div class="task-id">${task.id}</div>
                         <div class="task-prompt">${escapeHtml(task.prompt.substring(0, 100))}${task.prompt.length > 100 ? '…' : ''}</div>
@@ -1812,8 +1798,10 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
            ====================================================== */
 
         let currentChatId = null;
+        let currentTaskId = null;
         const dashboardView = document.getElementById('dashboard-view');
         const chatView = document.getElementById('chat-view');
+        const taskView = document.getElementById('task-view');
 
         function escapeHtml(s) {
             return String(s)
@@ -1848,8 +1836,11 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
 
         function handleRoute() {
             const hash = window.location.hash.slice(1);
-            if (hash.startsWith('chat/')) {
-                showChatView(hash.slice(5));
+            const parts = hash.split('/').filter(Boolean);
+            if (parts[0] === 'chat') {
+                showChatView(parts[1]);
+            } else if (parts[0] === 'task') {
+                showTaskView(parts[1]);
             } else {
                 showDashboardView();
             }
@@ -1857,17 +1848,54 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
 
         function showDashboardView() {
             currentChatId = null;
+            currentTaskId = null;
             dashboardView.style.display = '';
             chatView.style.display = 'none';
+            taskView.style.display = 'none';
             fetchChats();
         }
 
         function showChatView(chatId) {
             currentChatId = chatId;
+            currentTaskId = null;
             dashboardView.style.display = 'none';
             chatView.style.display = '';
+            taskView.style.display = 'none';
             loadChatMeta(chatId);
             fetchMessages(chatId);
+        }
+
+        function showTaskView(taskId) {
+            currentTaskId = taskId;
+            currentChatId = null;
+            dashboardView.style.display = 'none';
+            chatView.style.display = 'none';
+            taskView.style.display = '';
+            loadTaskView(taskId);
+        }
+
+        async function loadTaskView(taskId) {
+            try {
+                const res = await fetch(`/api/tasks/${taskId}`);
+                if (!res.ok) { navigate(''); return; }
+                const task = await res.json();
+                // Header
+                document.getElementById('tv-header-id').textContent = task.id;
+                const hs = document.getElementById('tv-header-status');
+                hs.textContent = task.status;
+                hs.className = `task-status ${task.status}`;
+                // Extra fields
+                document.getElementById('tv-bucket').textContent = task.bucket_id || 'main';
+                document.getElementById('tv-created-at').textContent = task.created_at || '—';
+                document.getElementById('tv-json-output').textContent = task.json_output ? JSON.stringify(task.json_output, null, 2) : '—';
+                // Back button
+                document.getElementById('tv-btn-back').onclick = () => navigate('');
+                // Shared render (populates td-* fields + button visibility)
+                renderTaskDetail(task);
+            } catch (e) {
+                logEvent(`Error loading task: ${e}`, 'error');
+                navigate('');
+            }
         }
 
         window.addEventListener('hashchange', handleRoute);
@@ -2268,37 +2296,11 @@ Return a brief summary of the tasks you created (step titles and task IDs return
             }
         });
 
-        /* ---- Task Detail Modal ---- */
-        let tdCurrentTaskId = null;
+        /* ---- Task View ---- */
         let tdEditMode = false;
         let tdOriginalPrompt = '';
         let tdOriginalModel = '';
         let tdOriginalEffort = '';
-
-        function closeTaskDetail() {
-            document.getElementById('task-detail-modal').classList.remove('active');
-            tdCurrentTaskId = null;
-            tdEditMode = false;
-        }
-
-        document.getElementById('task-detail-close').addEventListener('click', closeTaskDetail);
-        document.getElementById('task-detail-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'task-detail-modal') closeTaskDetail();
-        });
-
-        async function openTaskDetail(taskId) {
-            tdCurrentTaskId = taskId;
-            tdEditMode = false;
-            try {
-                const res = await fetch(`/api/tasks/${taskId}`);
-                if (!res.ok) { logEvent(`Error loading task: ${res.status}`, 'error'); return; }
-                const task = await res.json();
-                renderTaskDetail(task);
-                document.getElementById('task-detail-modal').classList.add('active');
-            } catch (e) {
-                logEvent(`Error loading task detail: ${e}`, 'error');
-            }
-        }
 
         function renderTaskDetail(task) {
             document.getElementById('td-id').textContent = task.id;
@@ -2364,7 +2366,7 @@ Return a brief summary of the tasks you created (step titles and task IDs return
         }
 
         async function tdSaveTask() {
-            if (!tdCurrentTaskId) return;
+            if (!currentTaskId) return;
             const prompt = document.getElementById('td-prompt').value;
             const model = document.getElementById('td-edit-model').value || null;
             const effort = document.getElementById('td-edit-effort').value || null;
@@ -2374,17 +2376,16 @@ Return a brief summary of the tasks you created (step titles and task IDs return
                 if (model !== tdOriginalModel) body.model = model;
                 if (effort !== tdOriginalEffort) body.effort = effort;
                 if (Object.keys(body).length === 0) { tdCancelEdit(); return; }
-                const res = await fetch(`/api/tasks/${tdCurrentTaskId}`, {
+                const res = await fetch(`/api/tasks/${currentTaskId}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
                 });
                 if (res.ok) {
-                    logEvent(`Task ${tdCurrentTaskId} updated`, 'info');
+                    logEvent(`Task ${currentTaskId} updated`, 'info');
                     tdCancelEdit();
                     fetchTasks();
-                    const updated = await fetch(`/api/tasks/${tdCurrentTaskId}`).then(r => r.json());
-                    renderTaskDetail(updated);
+                    loadTaskView(currentTaskId);
                 } else {
                     const err = await res.json();
                     logEvent(`Error updating task: ${err.detail}`, 'error');
@@ -2395,12 +2396,12 @@ Return a brief summary of the tasks you created (step titles and task IDs return
         }
 
         async function tdSkipTask() {
-            if (!tdCurrentTaskId) return;
+            if (!currentTaskId) return;
             try {
-                const res = await fetch(`/api/tasks/${tdCurrentTaskId}/skip`, { method: 'POST' });
+                const res = await fetch(`/api/tasks/${currentTaskId}/skip`, { method: 'POST' });
                 if (res.ok) {
-                    logEvent(`Task ${tdCurrentTaskId} skipped`, 'info');
-                    closeTaskDetail();
+                    logEvent(`Task ${currentTaskId} skipped`, 'info');
+                    navigate('');
                     fetchTasks();
                 } else {
                     const err = await res.json();
@@ -2412,12 +2413,12 @@ Return a brief summary of the tasks you created (step titles and task IDs return
         }
 
         async function tdRetryTask() {
-            if (!tdCurrentTaskId) return;
+            if (!currentTaskId) return;
             try {
-                const res = await fetch(`/api/tasks/${tdCurrentTaskId}/retry`, { method: 'POST' });
+                const res = await fetch(`/api/tasks/${currentTaskId}/retry`, { method: 'POST' });
                 if (res.ok) {
-                    logEvent(`Task ${tdCurrentTaskId} queued for retry`, 'info');
-                    closeTaskDetail();
+                    logEvent(`Task ${currentTaskId} queued for retry`, 'info');
+                    navigate('');
                     fetchTasks();
                 } else {
                     const err = await res.json();
@@ -2429,12 +2430,12 @@ Return a brief summary of the tasks you created (step titles and task IDs return
         }
 
         async function tdDeleteTask() {
-            if (!tdCurrentTaskId || !confirm('Delete this task?')) return;
+            if (!currentTaskId || !confirm('Delete this task?')) return;
             try {
-                const res = await fetch(`/api/tasks/${tdCurrentTaskId}`, { method: 'DELETE' });
+                const res = await fetch(`/api/tasks/${currentTaskId}`, { method: 'DELETE' });
                 if (res.ok) {
-                    logEvent(`Task ${tdCurrentTaskId} deleted`, 'info');
-                    closeTaskDetail();
+                    logEvent(`Task ${currentTaskId} deleted`, 'info');
+                    navigate('');
                     fetchTasks();
                 } else {
                     const err = await res.json();
@@ -2446,13 +2447,13 @@ Return a brief summary of the tasks you created (step titles and task IDs return
         }
 
         async function tdDuplicateTask() {
-            if (!tdCurrentTaskId) return;
+            if (!currentTaskId) return;
             try {
-                const res = await fetch(`/api/tasks/${tdCurrentTaskId}/duplicate`, { method: 'POST' });
+                const res = await fetch(`/api/tasks/${currentTaskId}/duplicate`, { method: 'POST' });
                 if (res.ok) {
                     const task = await res.json();
                     logEvent(`Task duplicated: ${task.id}`, 'info');
-                    closeTaskDetail();
+                    navigate('');
                     fetchTasks();
                 } else {
                     const err = await res.json();
