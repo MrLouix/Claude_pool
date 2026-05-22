@@ -579,7 +579,8 @@ class TaskExecutor:
                 # Only reload suspended_until from file if it's still in the future.
                 # If it's expired, don't reload a stale date — keep it cleared.
                 if new_pool.suspended_until is not None and new_pool.is_suspended:
-                    self.pool.suspended_until = new_pool.suspended_until
+            self.pool.suspended_until = new_pool.suspended_until
+
 
             # Save back to file to persist auto-generated IDs and initialized fields
             self._save_state()
