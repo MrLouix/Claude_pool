@@ -489,6 +489,174 @@
             cursor: not-allowed;
         }
 
+        /* ---- Chat view ---- */
+        .chat-header {
+            background: white;
+            padding: 14px 20px;
+            border-radius: 10px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .chat-header-info { flex: 1; overflow: hidden; }
+
+        .chat-header-label {
+            font-size: 17px;
+            font-weight: 700;
+            color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chat-header-dir {
+            font-size: 12px;
+            color: #888;
+            font-family: monospace;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chat-header-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+        .btn-back {
+            background: #f3f4f6;
+            color: #333;
+            border: 1px solid #ddd;
+            font-size: 13px;
+            padding: 7px 12px;
+            flex-shrink: 0;
+        }
+
+        .btn-back:hover { background: #e5e7eb; transform: none; box-shadow: none; }
+
+        .btn-danger { background: #ef4444; color: white; font-size: 13px; padding: 7px 12px; }
+        .btn-danger:hover { background: #dc2626; }
+
+        .message-thread {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            min-height: 300px;
+            max-height: 60vh;
+            overflow-y: auto;
+            margin-bottom: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .message-bubble {
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 14px;
+            background: #fafafa;
+            border-left: 3px solid #ddd;
+        }
+
+        .message-bubble.pending       { border-left-color: #f59e0b; background: #fffbeb; }
+        .message-bubble.running       { border-left-color: #3b82f6; background: #eff6ff; }
+        .message-bubble.success       { border-left-color: #10b981; background: #f0fdf4; }
+        .message-bubble.failed        { border-left-color: #ef4444; background: #fef2f2; }
+        .message-bubble.skipped       { border-left-color: #a855f7; background: #faf5ff; }
+        .message-bubble.rate_limit_retry { border-left-color: #f59e0b; background: #fffbeb; }
+
+        .message-prompt { font-size: 14px; color: #333; font-weight: 500; margin-bottom: 4px; }
+        .message-meta { font-size: 11px; color: #999; margin-bottom: 8px; display: flex; gap: 10px; }
+
+        .message-result {
+            font-size: 13px;
+            color: #444;
+            line-height: 1.55;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .message-result pre {
+            background: #1f2937;
+            color: #e5e7eb;
+            padding: 10px 14px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 8px 0;
+            font-size: 12px;
+            white-space: pre;
+        }
+
+        .message-result code {
+            background: #f3f4f6;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        .message-result pre code { background: none; padding: 0; }
+
+        .message-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+        .chat-input-row {
+            background: white;
+            border-radius: 10px;
+            padding: 14px 16px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        #chat-input {
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            font-family: inherit;
+            font-size: 14px;
+            resize: none;
+            min-height: 58px;
+        }
+
+        /* ---- Chat list in dashboard ---- */
+        .chat-list { display: grid; gap: 8px; }
+
+        .chat-item {
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 12px 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chat-item:hover { background: #f0f0ff; }
+        .chat-item-info { flex: 1; overflow: hidden; }
+
+        .chat-item-label {
+            font-weight: 600;
+            font-size: 14px;
+            color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chat-item-dir {
+            font-size: 11px;
+            color: #999;
+            font-family: monospace;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chat-item-count { font-size: 12px; color: #aaa; flex-shrink: 0; }
+
         /* ---- Run Dev Plan ---- */
         .btn-run-plan {
             background: #764ba2;
@@ -621,7 +789,7 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container" id="dashboard-view">
         <div class="header">
             <h1>📦 Claude Pool Dashboard</h1>
             <div class="status-line">
@@ -712,11 +880,115 @@
         </div>
 
         <div class="section">
+            <div class="section-header">
+                <span>Chats</span>
+                <button type="button" class="btn-primary" id="btn-new-chat" style="font-size:13px;padding:7px 14px;">+ New Chat</button>
+            </div>
+            <div class="section-content">
+                <div class="chat-list" id="chat-list">
+                    <div class="empty-state">No chats yet.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
             <div class="section-header">Event Log</div>
             <div class="section-content">
                 <div class="log-container" id="event-log">
                     <div class="log-line"><span class="log-timestamp">[00:00:00]</span> Waiting for events...</div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHAT VIEW (hidden until hash = #chat/<id>) -->
+    <div class="container" id="chat-view" style="display:none;">
+        <div class="chat-header">
+            <button class="btn-back" id="btn-back">← Back</button>
+            <div class="chat-header-info">
+                <div class="chat-header-label" id="chat-header-label">Chat</div>
+                <div class="chat-header-dir" id="chat-header-dir"></div>
+            </div>
+            <div class="chat-header-actions">
+                <button class="btn-run-plan" id="btn-chat-run-plan">⚙ Run Dev Plan</button>
+                <button class="btn-danger" id="btn-delete-chat">Delete</button>
+            </div>
+        </div>
+        <div class="message-thread" id="message-thread">
+            <div class="empty-state">No messages yet.</div>
+        </div>
+        <div class="chat-input-row">
+            <textarea id="chat-input" rows="2" placeholder="Describe what you want Claude to do…"></textarea>
+            <button class="btn-primary" id="btn-send-message">Send</button>
+        </div>
+    </div>
+
+    <!-- New Chat modal -->
+    <div class="modal-overlay" id="new-chat-modal">
+        <div class="modal-box" style="max-width:500px;">
+            <div class="modal-header">
+                <h3>New Chat</h3>
+                <button class="modal-close" id="new-chat-close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="plan-section">
+                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Chat name</label>
+                    <input type="text" id="new-chat-label" placeholder="My Feature" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px;font-family:inherit;font-size:14px;box-sizing:border-box;">
+                </div>
+                <div class="plan-section">
+                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Working Directory</label>
+                    <div class="plan-dir-row">
+                        <input type="text" id="new-chat-directory" placeholder="/path/to/project">
+                        <button type="button" class="btn-browse" id="btn-new-chat-browse" title="Browse folders">⋯</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button style="background:#f3f4f6;padding:8px 16px;border-radius:5px;border:1px solid #ddd;font-size:14px;cursor:pointer;" id="new-chat-cancel">Cancel</button>
+                <button class="btn-modal-confirm" id="btn-new-chat-confirm">Create Chat</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat — Run Dev Plan modal (file path → orchestrator in this chat) -->
+    <div class="modal-overlay" id="chat-run-plan-modal">
+        <div class="modal-box" style="max-width:540px;">
+            <div class="modal-header">
+                <h3>⚙ Run Dev Plan</h3>
+                <button class="modal-close" id="chat-run-plan-close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="plan-section">
+                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Plan file path</label>
+                    <input type="text" id="chat-plan-file" placeholder="/home/user/project/docs/my_plan.md"
+                           style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px;font-family:inherit;font-size:14px;box-sizing:border-box;">
+                </div>
+                <div class="plan-section">
+                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Options</label>
+                    <div class="plan-option-row">
+                        <input type="checkbox" id="chat-plan-unit-tests">
+                        <label for="chat-plan-unit-tests">Unit tests at each step</label>
+                    </div>
+                </div>
+                <div class="plan-section">
+                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">GitHub push strategy</label>
+                    <div class="plan-option-row">
+                        <input type="radio" name="chat-plan-push" id="chat-plan-push-none" value="none" checked>
+                        <label for="chat-plan-push-none">None (no git push tasks)</label>
+                    </div>
+                    <div class="plan-option-row">
+                        <input type="radio" name="chat-plan-push" id="chat-plan-push-each" value="each_step">
+                        <label for="chat-plan-push-each">Push after each step (+ tests)</label>
+                    </div>
+                    <div class="plan-option-row">
+                        <input type="radio" name="chat-plan-push" id="chat-plan-push-end" value="end_only">
+                        <label for="chat-plan-push-end">Single push at the end</label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button style="background:#f3f4f6;padding:8px 16px;border-radius:5px;border:1px solid #ddd;font-size:14px;cursor:pointer;" id="chat-run-plan-cancel">Cancel</button>
+                <button class="btn-modal-confirm" id="btn-chat-run-plan-confirm" disabled>Run Plan →</button>
             </div>
         </div>
     </div>
@@ -831,12 +1103,26 @@
             } else if (message.event === 'task_updated') {
                 updateTask(message.task);
                 logEvent(`Task ${message.task.id} updated: ${message.task.status}`, 'info');
+                // If this task belongs to the currently open chat, refresh messages
+                if (currentChatId && message.task.bucket_id === currentChatId) {
+                    fetchMessages(currentChatId);
+                }
             } else if (message.event === 'task_created') {
                 logEvent(`Task ${message.task.id} created`, 'info');
                 fetchTasks();
             } else if (message.event === 'task_skipped') {
                 logEvent(`Task ${message.task.id} skipped`, 'info');
                 fetchTasks();
+            } else if (message.event === 'chat_created') {
+                logEvent(`Chat created: ${message.chat.label}`, 'info');
+                fetchChats();
+            } else if (message.event === 'chat_deleted') {
+                logEvent(`Chat deleted: ${message.chat_id}`, 'info');
+                fetchChats();
+            } else if (message.event === 'chat_message') {
+                if (currentChatId && message.chat_id === currentChatId) {
+                    fetchMessages(currentChatId);
+                }
             }
         }
 
@@ -960,10 +1246,12 @@
 
         // Initial fetch and connect
         fetchTasks();
+        fetchChats();
         connectWebSocket();
 
-        // Refresh task list every 5 seconds
+        // Refresh every 5 seconds
         setInterval(fetchTasks, 5000);
+        setInterval(() => { if (!currentChatId) fetchChats(); }, 5000);
 
         /* ---- Directory Browser Modal ---- */
         const dirModal = document.getElementById('dir-modal');
@@ -1069,8 +1357,9 @@
         btnDirModalClose.addEventListener('click', closeDirModal);
         btnDirModalCancel.addEventListener('click', closeDirModal);
         btnDirModalConfirm.addEventListener('click', () => {
-            const target = dirModalTarget === 'plan' ? 'plan-directory' : 'directory';
-            document.getElementById(target).value = selectedPath;
+            const targetMap = { 'plan': 'plan-directory', 'new-chat': 'new-chat-directory' };
+            const targetId = targetMap[dirModalTarget] || 'directory';
+            document.getElementById(targetId).value = selectedPath;
             closeDirModal();
         });
 
@@ -1140,6 +1429,317 @@ PROCESS:
 
 Do NOT implement any code yourself. Only plan and enqueue.`;
         }
+
+        /* ======================================================
+           CHAT — SPA Router + Chat Management
+           ====================================================== */
+
+        let currentChatId = null;
+        const dashboardView = document.getElementById('dashboard-view');
+        const chatView = document.getElementById('chat-view');
+
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function renderText(text) {
+            if (!text) return '';
+            let html = escapeHtml(text);
+            // fenced code blocks
+            html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
+                `<pre><code>${code}</code></pre>`);
+            // inline code
+            html = html.replace(/`([^`]+)`/g, (_, c) => `<code>${escapeHtml(c)}</code>`);
+            // bold
+            html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            // newlines (outside pre)
+            html = html.replace(/\n/g, '<br>');
+            return html;
+        }
+
+        /* ---- Router ---- */
+        function navigate(hash) { window.location.hash = hash || ''; }
+
+        function handleRoute() {
+            const hash = window.location.hash.slice(1);
+            if (hash.startsWith('chat/')) {
+                showChatView(hash.slice(5));
+            } else {
+                showDashboardView();
+            }
+        }
+
+        function showDashboardView() {
+            currentChatId = null;
+            dashboardView.style.display = '';
+            chatView.style.display = 'none';
+            fetchChats();
+        }
+
+        function showChatView(chatId) {
+            currentChatId = chatId;
+            dashboardView.style.display = 'none';
+            chatView.style.display = '';
+            loadChatMeta(chatId);
+            fetchMessages(chatId);
+        }
+
+        window.addEventListener('hashchange', handleRoute);
+        handleRoute();
+
+        /* ---- Chat list (dashboard) ---- */
+        async function fetchChats() {
+            try {
+                const res = await fetch('/api/chats');
+                renderChatList(await res.json());
+            } catch (e) { /* ignore */ }
+        }
+
+        function renderChatList(chats) {
+            const el = document.getElementById('chat-list');
+            if (!chats.length) {
+                el.innerHTML = '<div class="empty-state">No chats yet.</div>';
+                return;
+            }
+            el.innerHTML = chats.map(c => `
+                <div class="chat-item" onclick="navigate('chat/${c.id}')">
+                    <span style="font-size:20px;">💬</span>
+                    <div class="chat-item-info">
+                        <div class="chat-item-label">${escapeHtml(c.label)}</div>
+                        <div class="chat-item-dir">${escapeHtml(c.directory || '')}</div>
+                    </div>
+                    <span class="chat-item-count">${c.task_count} msg${c.task_count !== 1 ? 's' : ''}</span>
+                </div>
+            `).join('');
+        }
+
+        /* ---- New Chat modal ---- */
+        const newChatModal = document.getElementById('new-chat-modal');
+        function openNewChatModal() { newChatModal.classList.add('active'); }
+        function closeNewChatModal() { newChatModal.classList.remove('active'); }
+
+        document.getElementById('btn-new-chat').addEventListener('click', openNewChatModal);
+        document.getElementById('new-chat-close').addEventListener('click', closeNewChatModal);
+        document.getElementById('new-chat-cancel').addEventListener('click', closeNewChatModal);
+        newChatModal.addEventListener('click', e => { if (e.target === newChatModal) closeNewChatModal(); });
+
+        document.getElementById('btn-new-chat-browse').addEventListener('click', () => {
+            dirModalTarget = 'new-chat';
+            openDirModal(defaultBrowsePath || '/');
+        });
+
+        document.getElementById('btn-new-chat-confirm').addEventListener('click', async () => {
+            const label = document.getElementById('new-chat-label').value.trim();
+            const directory = document.getElementById('new-chat-directory').value.trim();
+            if (!label) { alert('Please enter a chat name.'); return; }
+            if (!directory) { alert('Please specify a working directory.'); return; }
+
+            try {
+                const res = await fetch('/api/chats', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ label, directory }),
+                });
+                if (res.ok) {
+                    const chat = await res.json();
+                    closeNewChatModal();
+                    document.getElementById('new-chat-label').value = '';
+                    document.getElementById('new-chat-directory').value = '';
+                    navigate(`chat/${chat.id}`);
+                } else {
+                    const err = await res.json();
+                    logEvent(`Error creating chat: ${err.detail}`, 'error');
+                }
+            } catch (e) {
+                logEvent(`Error creating chat: ${e}`, 'error');
+            }
+        });
+
+        /* ---- Chat view ---- */
+        async function loadChatMeta(chatId) {
+            try {
+                const res = await fetch('/api/chats');
+                const chats = await res.json();
+                const chat = chats.find(c => c.id === chatId);
+                if (chat) {
+                    document.getElementById('chat-header-label').textContent = chat.label;
+                    document.getElementById('chat-header-dir').textContent = chat.directory || '';
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        async function fetchMessages(chatId) {
+            try {
+                const res = await fetch(`/api/chats/${chatId}/messages`);
+                if (!res.ok) { navigate(''); return; }
+                renderMessages(await res.json());
+            } catch (e) { /* ignore */ }
+        }
+
+        function renderMessages(messages) {
+            const thread = document.getElementById('message-thread');
+            if (!messages.length) {
+                thread.innerHTML = '<div class="empty-state">No messages yet. Send one below.</div>';
+                return;
+            }
+            thread.innerHTML = messages.map(m => {
+                const durationStr = m.duration_ms != null
+                    ? `${(m.duration_ms / 1000).toFixed(1)}s` : '';
+                const resultHtml = m.result
+                    ? `<div class="message-result">${renderText(m.result)}</div>` : '';
+                const retryBtn = m.status === 'failed'
+                    ? `<button class="btn-success" style="font-size:12px;padding:5px 10px;" onclick="retryMessage('${m.id}')">Retry</button>` : '';
+                return `
+                    <div class="message-bubble ${m.status}" data-msg-id="${m.id}">
+                        <div class="message-prompt">${escapeHtml(m.prompt.substring(0, 200))}${m.prompt.length > 200 ? '…' : ''}</div>
+                        <div class="message-meta">
+                            <span class="task-status ${m.status}">${m.status}</span>
+                            ${durationStr ? `<span>${durationStr}</span>` : ''}
+                        </div>
+                        ${resultHtml}
+                        ${retryBtn ? `<div class="message-actions">${retryBtn}</div>` : ''}
+                    </div>`;
+            }).join('');
+            thread.scrollTop = thread.scrollHeight;
+        }
+
+        window.retryMessage = async function(taskId) {
+            try {
+                await fetch(`/api/tasks/${taskId}/retry`, { method: 'POST' });
+                fetchMessages(currentChatId);
+            } catch (e) { /* ignore */ }
+        };
+
+        document.getElementById('btn-back').addEventListener('click', () => navigate(''));
+
+        document.getElementById('btn-delete-chat').addEventListener('click', async () => {
+            if (!currentChatId) return;
+            if (!confirm('Delete this chat and all its messages?')) return;
+            try {
+                const res = await fetch(`/api/chats/${currentChatId}`, { method: 'DELETE' });
+                if (res.ok) { navigate(''); }
+                else { const e = await res.json(); logEvent(`Error: ${e.detail}`, 'error'); }
+            } catch (e) { logEvent(`Error deleting chat: ${e}`, 'error'); }
+        });
+
+        document.getElementById('btn-send-message').addEventListener('click', async () => {
+            const prompt = document.getElementById('chat-input').value.trim();
+            if (!prompt || !currentChatId) return;
+            document.getElementById('chat-input').value = '';
+            try {
+                const res = await fetch(`/api/chats/${currentChatId}/messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt }),
+                });
+                if (res.ok) fetchMessages(currentChatId);
+                else { const e = await res.json(); logEvent(`Error: ${e.detail}`, 'error'); }
+            } catch (e) { logEvent(`Error sending message: ${e}`, 'error'); }
+        });
+
+        document.getElementById('chat-input').addEventListener('keydown', e => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                document.getElementById('btn-send-message').click();
+            }
+        });
+
+        /* ---- Chat — Run Dev Plan ---- */
+        const chatRunPlanModal = document.getElementById('chat-run-plan-modal');
+        const chatPlanFileInput = document.getElementById('chat-plan-file');
+        const btnChatRunPlanConfirm = document.getElementById('btn-chat-run-plan-confirm');
+
+        function openChatRunPlanModal() { chatRunPlanModal.classList.add('active'); }
+        function closeChatRunPlanModal() { chatRunPlanModal.classList.remove('active'); }
+
+        document.getElementById('btn-chat-run-plan').addEventListener('click', openChatRunPlanModal);
+        document.getElementById('chat-run-plan-close').addEventListener('click', closeChatRunPlanModal);
+        document.getElementById('chat-run-plan-cancel').addEventListener('click', closeChatRunPlanModal);
+        chatRunPlanModal.addEventListener('click', e => { if (e.target === chatRunPlanModal) closeChatRunPlanModal(); });
+
+        chatPlanFileInput.addEventListener('input', () => {
+            btnChatRunPlanConfirm.disabled = !chatPlanFileInput.value.trim();
+        });
+
+        function buildChatOrchestratorPrompt(filePath, unitTests, pushStrategy) {
+            const apiOrigin = window.location.origin;
+            const bucketId = currentChatId;
+
+            const unitTestsBlock = unitTests ? `
+After the curl call for each implementation step, immediately create a follow-up unit-test task:
+
+  curl -s -X POST ${apiOrigin}/api/chats/${bucketId}/messages \\
+    -H "Content-Type: application/json" \\
+    -d '{"prompt": "Write and run unit tests for the step just implemented: \'<step title>\'. Ensure all tests pass before proceeding."}'
+` : '';
+
+            const pushBlock = pushStrategy === 'none' ? ''
+                : pushStrategy === 'each_step' ? `
+After each step's tasks (implementation + optional tests), add a push task:
+
+  curl -s -X POST ${apiOrigin}/api/chats/${bucketId}/messages \\
+    -H "Content-Type: application/json" \\
+    -d '{"prompt": "Commit all changes for \'<step title>\' and push to GitHub. Use a clear commit message."}'
+` : `
+After the very last step's tasks, add a single push task:
+
+  curl -s -X POST ${apiOrigin}/api/chats/${bucketId}/messages \\
+    -H "Content-Type: application/json" \\
+    -d '{"prompt": "All plan steps are complete. Commit all remaining changes and push to GitHub with a summary commit message."}'
+`;
+
+            return `You are orchestrating a multi-step development plan for Claude Pool.
+
+PLAN FILE: ${filePath}
+
+Read the plan file at the path above using your file-reading tools.
+Extract the numbered steps from the plan.
+
+For each step, create a task in THIS chat session by calling the Claude Pool API with curl:
+
+  curl -s -X POST ${apiOrigin}/api/chats/${bucketId}/messages \\
+    -H "Content-Type: application/json" \\
+    -d '{"prompt": "<step prompt>"}'
+
+Build the step prompt so it is self-contained: include the step title, its description from the plan, and the context that this is step N of M.
+${unitTestsBlock}${pushBlock}
+Create ALL tasks now, in order. The pool will execute them sequentially after this orchestrator task finishes. Do not wait for a step to complete before creating the next one — create the full sequence in one pass.
+
+Return a brief summary of the tasks you created (step titles and task IDs returned by the API).`;
+        }
+
+        btnChatRunPlanConfirm.addEventListener('click', async () => {
+            const filePath = chatPlanFileInput.value.trim();
+            const unitTests = document.getElementById('chat-plan-unit-tests').checked;
+            const pushStrategy = document.querySelector('input[name="chat-plan-push"]:checked')?.value || 'none';
+            if (!filePath || !currentChatId) return;
+
+            const prompt = buildChatOrchestratorPrompt(filePath, unitTests, pushStrategy);
+            btnChatRunPlanConfirm.disabled = true;
+            btnChatRunPlanConfirm.textContent = 'Enqueuing…';
+
+            try {
+                const res = await fetch(`/api/chats/${currentChatId}/messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt }),
+                });
+                if (res.ok) {
+                    closeChatRunPlanModal();
+                    chatPlanFileInput.value = '';
+                    fetchMessages(currentChatId);
+                } else {
+                    const e = await res.json();
+                    logEvent(`Error: ${e.detail}`, 'error');
+                }
+            } catch (e) {
+                logEvent(`Error: ${e}`, 'error');
+            } finally {
+                btnChatRunPlanConfirm.disabled = false;
+                btnChatRunPlanConfirm.textContent = 'Run Plan →';
+            }
+        });
 
         document.getElementById('btn-run-plan-confirm').addEventListener('click', async () => {
             const directory = document.getElementById('plan-directory').value.trim();

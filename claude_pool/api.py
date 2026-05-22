@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .executor import TaskExecutor
-from .models import Task
+from .models import Bucket, Task
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,38 @@ class PoolStatusResponse(BaseModel):
     skipped_tasks: int
     pool_suspended: bool
     suspension_remaining: float = 0.0
+    retry_count: int = 0
+
+
+class ChatInput(BaseModel):
+    """Input model for creating a chat bucket."""
+    label: str
+    directory: str
+
+
+class ChatResponse(BaseModel):
+    """Response model for a chat bucket."""
+    id: str
+    label: str
+    directory: Optional[str] = None
+    created_at: str
+    task_count: int = 0
+
+
+class ChatMessageInput(BaseModel):
+    """Input model for sending a chat message (creates a task)."""
+    prompt: str
+
+
+class ChatMessageResponse(BaseModel):
+    """Response model for a chat message (task rendered as message)."""
+    id: str
+    prompt: str
+    status: str
+    result: Optional[str] = None
+    created_at: str
+    duration_ms: Optional[int] = None
+    exit_code: Optional[int] = None
     retry_count: int = 0
 
 
@@ -331,6 +363,133 @@ class ApiServer:
                     detail="Task is not currently running"
                 )
 
+        def _task_to_message(task: Task) -> ChatMessageResponse:
+            result = task.json_output.get("result") if task.json_output else None
+            return ChatMessageResponse(
+                id=task.id,
+                prompt=task.prompt,
+                status=task.status,
+                result=result,
+                created_at=task.created_at,
+                duration_ms=task.duration_ms,
+                exit_code=task.exit_code,
+                retry_count=task.retry_count,
+            )
+
+        @self.app.post("/api/chats", status_code=201)
+        async def create_chat(chat_input: ChatInput) -> ChatResponse:
+            """Create a new chat bucket."""
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+
+            import uuid as _uuid
+            bucket_id = f"chat_{_uuid.uuid4().hex[:12]}"
+            bucket = Bucket(
+                id=bucket_id,
+                type="chat",
+                label=chat_input.label,
+                directory=chat_input.directory or None,
+                created_at=datetime.now().isoformat(),
+            )
+            self.executor.pool.buckets[bucket_id] = bucket
+            self.executor._save_state()
+
+            await self._broadcast_event({"event": "chat_created", "chat": bucket.to_dict()})
+
+            return ChatResponse(
+                id=bucket_id,
+                label=bucket.label,
+                directory=bucket.directory,
+                created_at=bucket.created_at,
+                task_count=0,
+            )
+
+        @self.app.get("/api/chats")
+        async def list_chats() -> list[ChatResponse]:
+            """List all chat buckets."""
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+
+            chats = []
+            for bid, bucket in self.executor.pool.buckets.items():
+                if bucket.type != "chat":
+                    continue
+                task_count = sum(1 for t in self.executor.pool.tasks if t.bucket_id == bid)
+                chats.append(ChatResponse(
+                    id=bid,
+                    label=bucket.label,
+                    directory=bucket.directory,
+                    created_at=bucket.created_at,
+                    task_count=task_count,
+                ))
+
+            chats.sort(key=lambda c: c.created_at, reverse=True)
+            return chats
+
+        @self.app.delete("/api/chats/{chat_id}")
+        async def delete_chat(chat_id: str) -> dict:
+            """Delete a chat bucket and all its tasks."""
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+
+            if chat_id not in self.executor.pool.buckets:
+                raise HTTPException(status_code=404, detail=f"Chat {chat_id} not found")
+
+            try:
+                removed = self.executor.delete_bucket(chat_id)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+
+            await self._broadcast_event({"event": "chat_deleted", "chat_id": chat_id})
+            return {"removed_tasks": removed}
+
+        @self.app.post("/api/chats/{chat_id}/messages", status_code=201)
+        async def create_message(chat_id: str, message_input: ChatMessageInput) -> ChatMessageResponse:
+            """Send a message to a chat (creates a task in that bucket)."""
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+
+            bucket = self.executor.pool.buckets.get(chat_id)
+            if not bucket:
+                raise HTTPException(status_code=404, detail=f"Chat {chat_id} not found")
+
+            task_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
+            directory = Path(bucket.directory) if bucket.directory else Path.cwd()
+
+            new_task = Task(
+                id=task_id,
+                prompt=message_input.prompt,
+                directory=directory,
+                bucket_id=chat_id,
+            )
+            self.executor.pool.tasks.append(new_task)
+            self.executor._save_state()
+
+            msg = _task_to_message(new_task)
+            await self._broadcast_event({
+                "event": "chat_message",
+                "chat_id": chat_id,
+                "message": msg.dict(),
+            })
+            return msg
+
+        @self.app.get("/api/chats/{chat_id}/messages")
+        async def get_messages(chat_id: str) -> list[ChatMessageResponse]:
+            """Get all messages for a chat, sorted by created_at."""
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+
+            if chat_id not in self.executor.pool.buckets:
+                raise HTTPException(status_code=404, detail=f"Chat {chat_id} not found")
+
+            msgs = [
+                _task_to_message(t)
+                for t in self.executor.pool.tasks
+                if t.bucket_id == chat_id
+            ]
+            msgs.sort(key=lambda m: m.created_at)
+            return msgs
+
         @self.app.websocket("/ws/events")
         async def websocket_endpoint(websocket: WebSocket):
             """WebSocket endpoint for real-time task updates."""
@@ -375,6 +534,8 @@ class ApiServer:
                 "exit_code": task.exit_code,
                 "duration_ms": task.duration_ms,
                 "retry_count": task.retry_count,
+                "bucket_id": task.bucket_id,
+                "result": task.json_output.get("result") if task.json_output else None,
             }
         }))
 

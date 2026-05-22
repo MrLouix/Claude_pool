@@ -6,6 +6,41 @@ from pathlib import Path
 from typing import Any, Literal
 
 TaskStatus = Literal["pending", "running", "success", "failed", "skipped", "rate_limit_retry"]
+BucketType = Literal["cli", "chat"]
+
+
+def _default_buckets() -> "dict[str, Bucket]":
+    return {"main": Bucket(id="main", type="cli", label="CLI / Dashboard")}
+
+
+@dataclass
+class Bucket:
+    """Represents a task bucket — the CLI dashboard queue or a chat session."""
+
+    id: str
+    type: BucketType
+    label: str
+    directory: str | None = None
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Bucket":
+        return cls(
+            id=str(data["id"]),
+            type=str(data.get("type", "cli")),  # type: ignore[arg-type]
+            label=str(data.get("label", data["id"])),
+            directory=str(data["directory"]) if data.get("directory") else None,
+            created_at=str(data.get("created_at", datetime.now().isoformat())),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "type": self.type,
+            "label": self.label,
+            "directory": self.directory,
+            "created_at": self.created_at,
+        }
 
 
 @dataclass
@@ -16,6 +51,7 @@ class PoolState:
     suspended_until: datetime | None = None
     tasks: list["Task"] = field(default_factory=list)
     pool_file: Path = Path("pool.json")
+    buckets: dict[str, Bucket] = field(default_factory=_default_buckets)
 
     @property
     def is_suspended(self) -> bool:
@@ -43,6 +79,7 @@ class Task:
     retry_count: int = 0
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     session_id: str | None = None
+    bucket_id: str = "main"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Task":
@@ -62,14 +99,14 @@ class Task:
         retry_count_raw = data.get("retry_count", 0)
         retry_count = int(retry_count_raw) if retry_count_raw is not None else 0
 
-        # Handle created_at (auto-generate if missing for backward compatibility)
         created_at = data.get("created_at")
         if not created_at:
             created_at = datetime.now().isoformat()
 
-        # Handle session_id (optional, backward compatible)
         session_id = data.get("session_id")
         session_id = str(session_id) if session_id is not None else None
+
+        bucket_id = str(data.get("bucket_id", "main"))
 
         return cls(
             id=str(data["id"]),
@@ -83,6 +120,7 @@ class Task:
             retry_count=retry_count,
             created_at=str(created_at),
             session_id=session_id,
+            bucket_id=bucket_id,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -99,4 +137,5 @@ class Task:
             "retry_count": self.retry_count,
             "created_at": self.created_at,
             "session_id": self.session_id,
+            "bucket_id": self.bucket_id,
         }

@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .models import PoolState, Task
+from .models import Bucket, PoolState, Task
 
 logger = logging.getLogger(__name__)
 
@@ -106,11 +106,24 @@ def load_pool(pool_file: Path) -> PoolState:
     else:
         suspended_until = None
 
+    # Load buckets (v2) or migrate from v1 (no buckets key → default main bucket)
+    raw_buckets = raw_data.get("buckets", {})
+    buckets: dict[str, Bucket] = {}
+    if raw_buckets and isinstance(raw_buckets, dict):
+        for bid, bdata in raw_buckets.items():
+            if isinstance(bdata, dict):
+                bdata = dict(bdata)
+                bdata.setdefault("id", bid)
+                buckets[bid] = Bucket.from_dict(bdata)
+    if "main" not in buckets:
+        buckets["main"] = Bucket(id="main", type="cli", label="CLI / Dashboard")
+
     return PoolState(
         retry_count=int(raw_data.get("pool_retry_count", 0)),
         suspended_until=suspended_until,
         tasks=tasks,
         pool_file=pool_file,
+        buckets=buckets,
     )
 
 
@@ -126,6 +139,7 @@ def save_pool(state: PoolState) -> None:
     data = {
         "pool_retry_count": state.retry_count,
         "pool_suspended_until": state.suspended_until.isoformat() if state.suspended_until else None,
+        "buckets": {bid: b.to_dict() for bid, b in state.buckets.items()},
         "tasks": [task.to_dict() for task in state.tasks],
     }
     content = json.dumps(data, indent=2, ensure_ascii=False)
