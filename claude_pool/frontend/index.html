@@ -1998,7 +1998,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 const content = m.content || '';
                 const durationStr = m.duration_ms != null
                     ? `${(m.duration_ms / 1000).toFixed(1)}s` : '';
-                const thinking = m.status === 'pending' || m.status === 'running' || m.status === 'rate_limit_retry'
+                const thinking = m.status === 'running'
                     ? '<div class="message-result" style="color:#999;">⏳ Claude is thinking…</div>' : '';
                 const responseHtml = m.assistant_response && !thinking
                     ? `<div class="message-result">${renderText(m.assistant_response)}</div>` : thinking;
@@ -2050,7 +2050,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
 
             el.querySelectorAll('.message-result, .message-actions').forEach(e => e.remove());
 
-            const thinking = status === 'pending' || status === 'running' || status === 'rate_limit_retry';
+            const thinking = status === 'running';
             if (thinking) {
                 const d = document.createElement('div');
                 d.className = 'message-result';
