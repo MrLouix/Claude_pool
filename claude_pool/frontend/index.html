@@ -748,6 +748,8 @@
         .td-btn-skip:hover { background: #fef3c7; }
         .td-btn-retry { border-color: #22c55e; color: #166534; background: #f0fdf4; }
         .td-btn-retry:hover { background: #dcfce7; }
+        .td-btn-resume { border-color: #6366f1; color: #3730a3; background: #eef2ff; }
+        .td-btn-resume:hover { background: #e0e7ff; }
         .td-btn-delete { border-color: #ef4444; color: #991b1b; background: #fef2f2; }
         .td-btn-delete:hover { background: #fee2e2; }
         .td-btn-duplicate { border-color: #3b82f6; color: #1e40af; background: #eff6ff; }
@@ -1179,6 +1181,7 @@
             <div class="td-actions-left">
                 <button class="td-btn td-btn-skip" id="td-btn-skip" style="display:none;" onclick="tdSkipTask()">Skip</button>
                 <button class="td-btn td-btn-retry" id="td-btn-retry" style="display:none;" onclick="tdRetryTask()">Retry</button>
+                <button class="td-btn td-btn-resume" id="td-btn-resume" style="display:none;" onclick="tdResumeTask()">▶ Resume</button>
                 <button class="td-btn td-btn-delete" id="td-btn-delete" onclick="tdDeleteTask()">Delete</button>
                 <button class="td-btn td-btn-duplicate" id="td-btn-duplicate" onclick="tdDuplicateTask()">Duplicate</button>
             </div>
@@ -2370,13 +2373,17 @@ Return a brief summary of the tasks you created (step titles and task IDs return
             // Button visibility
             const canSkip = task.status === 'pending' || task.status === 'rate_limit_retry';
             const canRetry = task.status === 'failed' || task.status === 'success';
+            const canResume = task.status === 'skipped';
             const canEdit = task.status === 'pending';
             const skipBtn = document.getElementById('td-btn-skip');
             const retryBtn = document.getElementById('td-btn-retry');
+            const resumeBtn = document.getElementById('td-btn-resume');
             skipBtn.style.display = canSkip ? 'inline-block' : 'none';
             skipBtn.dataset.canSkip = canSkip;
             retryBtn.style.display = canRetry ? 'inline-block' : 'none';
             retryBtn.dataset.canRetry = canRetry;
+            resumeBtn.style.display = canResume ? 'inline-block' : 'none';
+            resumeBtn.dataset.canResume = canResume;
             document.getElementById('td-btn-delete').style.display = 'inline-block';
             document.getElementById('td-btn-duplicate').style.display = 'inline-block';
             document.getElementById('td-btn-edit').style.display = canEdit ? 'inline-block' : 'none';
@@ -2396,6 +2403,7 @@ Return a brief summary of the tasks you created (step titles and task IDs return
             // Swap action buttons
             document.getElementById('td-btn-skip').style.display = 'none';
             document.getElementById('td-btn-retry').style.display = 'none';
+            document.getElementById('td-btn-resume').style.display = 'none';
             document.getElementById('td-btn-delete').style.display = 'none';
             document.getElementById('td-btn-duplicate').style.display = 'none';
             document.getElementById('td-btn-edit').style.display = 'none';
@@ -2416,11 +2424,13 @@ Return a brief summary of the tasks you created (step titles and task IDs return
             document.getElementById('td-btn-delete').style.display = 'inline-block';
             document.getElementById('td-btn-duplicate').style.display = 'inline-block';
             document.getElementById('td-btn-edit').style.display = 'inline-block';
-            // Skip/Retry keep their status-driven visibility from renderTaskDetail
+            // Skip/Retry/Resume keep their status-driven visibility from renderTaskDetail
             const skipBtn = document.getElementById('td-btn-skip');
             const retryBtn = document.getElementById('td-btn-retry');
+            const resumeBtn = document.getElementById('td-btn-resume');
             if (skipBtn.dataset.canSkip === 'true') skipBtn.style.display = 'inline-block';
             if (retryBtn.dataset.canRetry === 'true') retryBtn.style.display = 'inline-block';
+            if (resumeBtn.dataset.canResume === 'true') resumeBtn.style.display = 'inline-block';
         }
 
         async function tdSaveTask() {
@@ -2489,6 +2499,23 @@ Return a brief summary of the tasks you created (step titles and task IDs return
                 }
             } catch (e) {
                 logEvent(`Error retrying task: ${e}`, 'error');
+            }
+        }
+
+        async function tdResumeTask() {
+            if (!currentTaskId) return;
+            try {
+                const res = await fetch(`/api/tasks/${currentTaskId}/retry`, { method: 'POST' });
+                if (res.ok) {
+                    logEvent(`Task ${currentTaskId} resumed`, 'info');
+                    loadTaskView(currentTaskId);
+                    fetchTasks();
+                } else {
+                    const err = await res.json();
+                    logEvent(`Error resuming task: ${err.detail}`, 'error');
+                }
+            } catch (e) {
+                logEvent(`Error resuming task: ${e}`, 'error');
             }
         }
 

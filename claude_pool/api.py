@@ -391,15 +391,17 @@ class ApiServer:
             task = next((t for t in self.executor.pool.tasks if t.id == task_id), None)
             if not task:
                 raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-            if task.status not in ("failed", "success"):
+            if task.status not in ("failed", "success", "skipped"):
                 raise HTTPException(
                     status_code=400, detail=f"Cannot retry task in {task.status} status"
                 )
+            was_skipped = task.status == "skipped"
             task.status = "pending"
             task.exit_code = None
             task.duration_ms = None
             task.json_output = None
-            task.retry_count += 1
+            if not was_skipped:
+                task.retry_count += 1
             self.executor._save_state()
             await self._broadcast_event(
                 {
