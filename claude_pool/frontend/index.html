@@ -168,6 +168,9 @@
             font-size: 18px;
             font-weight: 600;
             color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
 
         .section-content {
@@ -486,6 +489,80 @@
             cursor: not-allowed;
         }
 
+        /* ---- Run Dev Plan ---- */
+        .btn-run-plan {
+            background: #764ba2;
+            color: white;
+            font-size: 13px;
+            padding: 7px 14px;
+        }
+
+        .btn-run-plan:hover {
+            background: #5e3a82;
+        }
+
+        .plan-section {
+            margin-bottom: 14px;
+        }
+
+        .plan-section > label {
+            display: block;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        #plan-spec {
+            width: 100%;
+            min-height: 140px;
+            resize: vertical;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .plan-dir-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        #plan-directory {
+            flex: 1;
+            min-width: 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        .plan-option-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 6px;
+            cursor: pointer;
+        }
+
+        .plan-option-row input {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .plan-option-row label {
+            font-weight: normal;
+            cursor: pointer;
+            margin: 0;
+        }
+
         @media (max-width: 768px) {
             body { padding: 10px; }
 
@@ -581,7 +658,10 @@
         </div>
 
         <div class="section">
-            <div class="section-header">Add New Task</div>
+            <div class="section-header">
+                <span>Add New Task</span>
+                <button type="button" class="btn-run-plan" id="btn-run-plan">⚙ Run Dev Plan</button>
+            </div>
             <div class="section-content">
                 <form class="task-form" id="add-task-form">
                     <div class="form-group">
@@ -637,6 +717,55 @@
                 <div class="log-container" id="event-log">
                     <div class="log-line"><span class="log-timestamp">[00:00:00]</span> Waiting for events...</div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Run Dev Plan modal -->
+    <div class="modal-overlay" id="run-plan-modal">
+        <div class="modal-box" style="max-width:600px;">
+            <div class="modal-header">
+                <h3>⚙ Run Dev Plan</h3>
+                <button class="modal-close" id="run-plan-close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="plan-section">
+                    <label>Working Directory</label>
+                    <div class="plan-dir-row">
+                        <input type="text" id="plan-directory" placeholder="/path/to/project">
+                        <button type="button" class="btn-browse" id="btn-run-plan-browse" title="Browse folders">⋯</button>
+                    </div>
+                </div>
+                <div class="plan-section">
+                    <label>Coding Specification</label>
+                    <textarea id="plan-spec" placeholder="Describe what you want to build. Claude will analyze this, define sequential implementation steps, and enqueue each as a separate Claude Pool task."></textarea>
+                </div>
+                <div class="plan-section">
+                    <label>Options</label>
+                    <div class="plan-option-row">
+                        <input type="checkbox" id="plan-unit-tests">
+                        <label for="plan-unit-tests">Write unit tests for each step</label>
+                    </div>
+                </div>
+                <div class="plan-section">
+                    <label>Push Strategy</label>
+                    <div class="plan-option-row">
+                        <input type="radio" name="plan-push" id="plan-push-none" value="none" checked>
+                        <label for="plan-push-none">No git push</label>
+                    </div>
+                    <div class="plan-option-row">
+                        <input type="radio" name="plan-push" id="plan-push-each" value="each">
+                        <label for="plan-push-each">Push after each step</label>
+                    </div>
+                    <div class="plan-option-row">
+                        <input type="radio" name="plan-push" id="plan-push-end" value="end">
+                        <label for="plan-push-end">Push at end only</label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button style="background:#f3f4f6;padding:8px 16px;border-radius:5px;border:1px solid #ddd;font-size:14px;cursor:pointer;" id="run-plan-cancel">Cancel</button>
+                <button class="btn-modal-confirm" id="btn-run-plan-confirm">Enqueue Dev Plan</button>
             </div>
         </div>
     </div>
@@ -926,18 +1055,127 @@
         // Make loadDir callable from inline HTML
         window.loadDir = loadDir;
 
-        btnBrowseDir.addEventListener('click', () => openDirModal('/home/ai_agent'));
+        // Fetch home dir from server so browse starts at the real home on any platform
+        let defaultBrowsePath = '';
+        fetch('/api/directories').then(r => r.json()).then(d => { defaultBrowsePath = d.current; }).catch(() => {});
+
+        // 'task' fills #directory; 'plan' fills #plan-directory
+        let dirModalTarget = 'task';
+
+        btnBrowseDir.addEventListener('click', () => {
+            dirModalTarget = 'task';
+            openDirModal(defaultBrowsePath || '/');
+        });
         btnDirModalClose.addEventListener('click', closeDirModal);
         btnDirModalCancel.addEventListener('click', closeDirModal);
         btnDirModalConfirm.addEventListener('click', () => {
-            const dirInput = document.getElementById('directory');
-            dirInput.value = selectedPath;
+            const target = dirModalTarget === 'plan' ? 'plan-directory' : 'directory';
+            document.getElementById(target).value = selectedPath;
             closeDirModal();
         });
 
-        // Close modal on overlay click
         dirModal.addEventListener('click', (e) => {
             if (e.target === dirModal) closeDirModal();
+        });
+
+        /* ---- Run Dev Plan ---- */
+        const runPlanModal = document.getElementById('run-plan-modal');
+
+        function openRunPlanModal() { runPlanModal.classList.add('active'); }
+        function closeRunPlanModal() { runPlanModal.classList.remove('active'); }
+
+        document.getElementById('btn-run-plan').addEventListener('click', openRunPlanModal);
+        document.getElementById('run-plan-close').addEventListener('click', closeRunPlanModal);
+        document.getElementById('run-plan-cancel').addEventListener('click', closeRunPlanModal);
+        runPlanModal.addEventListener('click', (e) => { if (e.target === runPlanModal) closeRunPlanModal(); });
+
+        document.getElementById('btn-run-plan-browse').addEventListener('click', () => {
+            dirModalTarget = 'plan';
+            openDirModal(defaultBrowsePath || '/');
+        });
+
+        function buildOrchestratorPrompt(directory, spec, unitTests, pushStrategy) {
+            const apiBase = window.location.origin;
+            const unitTestsNote = unitTests
+                ? '- Each step prompt MUST include: "Write unit tests for all new code introduced in this step."'
+                : '';
+            const pushNote = pushStrategy === 'each'
+                ? "- Each step prompt MUST end with: \"After completing the implementation, commit and push: git add -A && git commit -m 'feat: <step summary>' && git push\""
+                : pushStrategy === 'end'
+                ? "- The LAST step prompt MUST end with: \"After completing the implementation, commit and push: git add -A && git commit -m 'feat: complete implementation' && git push\""
+                : '';
+
+            return `You are a development planning orchestrator. Do NOT write any code yourself.
+
+Your task: analyze the specification below, break it into sequential implementation steps, and enqueue each step as a separate task via the Claude Pool API.
+
+API ENDPOINT: ${apiBase}/api/tasks
+WORKING DIRECTORY FOR ALL SUBTASKS: ${directory}
+
+CODING SPECIFICATION:
+---
+${spec}
+---
+
+REQUIREMENTS FOR EACH STEP PROMPT:
+- Be specific and self-contained (assume all previous steps are complete)
+- Include enough context so the implementer does not need to re-read the full spec
+${unitTestsNote}
+${pushNote}
+
+HOW TO ENQUEUE A TASK (use the bash tool):
+Run the following Python code for each step (Python is always available):
+
+import urllib.request, json
+step_prompt = """<YOUR STEP PROMPT HERE>"""
+data = json.dumps({"prompt": step_prompt, "directory": "${directory}"}).encode()
+req = urllib.request.Request("${apiBase}/api/tasks", data, {"Content-Type": "application/json"})
+urllib.request.urlopen(req)
+
+PROCESS:
+1. Analyze the specification carefully
+2. Define 3-8 sequential, concrete implementation steps
+3. Enqueue each step using the Python snippet above (run via bash tool)
+4. After all steps are enqueued, output a brief summary of the plan
+
+Do NOT implement any code yourself. Only plan and enqueue.`;
+        }
+
+        document.getElementById('btn-run-plan-confirm').addEventListener('click', async () => {
+            const directory = document.getElementById('plan-directory').value.trim();
+            const spec = document.getElementById('plan-spec').value.trim();
+            const unitTests = document.getElementById('plan-unit-tests').checked;
+            const pushStrategy = document.querySelector('input[name="plan-push"]:checked')?.value || 'none';
+
+            if (!directory) { alert('Please specify a working directory.'); return; }
+            if (!spec) { alert('Please enter a coding specification.'); return; }
+
+            const prompt = buildOrchestratorPrompt(directory, spec, unitTests, pushStrategy);
+            const btn = document.getElementById('btn-run-plan-confirm');
+            btn.disabled = true;
+            btn.textContent = 'Enqueueing...';
+
+            try {
+                const response = await fetch('/api/tasks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, directory })
+                });
+                if (response.ok) {
+                    const task = await response.json();
+                    logEvent(`Dev Plan orchestrator enqueued: ${task.id}`, 'info');
+                    closeRunPlanModal();
+                    fetchTasks();
+                } else {
+                    const error = await response.json();
+                    logEvent(`Error enqueueing Dev Plan: ${error.detail}`, 'error');
+                }
+            } catch (error) {
+                logEvent(`Error enqueueing Dev Plan: ${error}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Enqueue Dev Plan';
+            }
         });
     </script>
 </body>
