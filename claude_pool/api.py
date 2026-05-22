@@ -590,7 +590,7 @@ class ApiServer:
             target = Path(path) if path else Path.home()
             try:
                 resolved = target.resolve()
-                s = str(resolved)
+                s = str(resolved).replace("\\", "/")
                 # On Windows, allow any path (drive letters like C:\)
                 # On Linux, restrict to /home and /mnt
                 import platform
@@ -608,7 +608,9 @@ class ApiServer:
                         entries.append({"name": item.name, "type": "directory"})
             except PermissionError:
                 raise HTTPException(status_code=403, detail="Permission denied")
-            parent = str(resolved.parent) if resolved != Path(resolved.anchor) else None
+            parent_raw = str(resolved.parent)
+            parent = parent_raw.replace("\\", "/") if resolved != Path(resolved.anchor) else None
+            return {"current": s, "parent": parent, "entries": entries}
             return {"current": str(resolved), "parent": parent, "entries": entries}
 
         # ── Projects ──────────────────────────────────────────────
