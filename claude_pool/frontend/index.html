@@ -783,6 +783,15 @@
             box-sizing: border-box; margin: 0;
         }
 
+        /* ---- Task filter pills ---- */
+        .task-filter-pill {
+            padding: 3px 10px; border-radius: 12px; border: 1px solid #ddd;
+            font-size: 12px; font-family: inherit; cursor: pointer;
+            background: #f3f4f6; color: #555; transition: background 0.15s, color 0.15s;
+        }
+        .task-filter-pill:hover { background: #e5e7eb; }
+        .task-filter-pill.active { background: #6366f1; color: #fff; border-color: #6366f1; }
+
         /* ---- Chat list in dashboard ---- */
         .chat-list { display: grid; gap: 8px; }
 
@@ -1057,7 +1066,18 @@
         </div>
 
         <div class="section">
-            <div class="section-header">Recent Tasks</div>
+            <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                Recent Tasks
+                <div id="task-filter-pills" style="display:flex;flex-wrap:wrap;gap:6px;">
+                    <button class="task-filter-pill active" data-status="all" onclick="setTaskFilter('all')">All</button>
+                    <button class="task-filter-pill" data-status="pending" onclick="setTaskFilter('pending')">Pending</button>
+                    <button class="task-filter-pill" data-status="running" onclick="setTaskFilter('running')">Running</button>
+                    <button class="task-filter-pill" data-status="success" onclick="setTaskFilter('success')">Success</button>
+                    <button class="task-filter-pill" data-status="failed" onclick="setTaskFilter('failed')">Failed</button>
+                    <button class="task-filter-pill" data-status="skipped" onclick="setTaskFilter('skipped')">Skipped</button>
+                    <button class="task-filter-pill" data-status="rate_limit_retry" onclick="setTaskFilter('rate_limit_retry')">Rate limit retry</button>
+                </div>
+            </div>
             <div class="section-content">
                 <div class="task-list" id="task-list">
                     <div class="empty-state">No tasks yet</div>
@@ -1480,8 +1500,8 @@
         async function fetchTasks() {
             try {
                 const response = await fetch('/api/tasks');
-                const tasks = await response.json();
-                renderTasks(tasks);
+                lastTasks = await response.json();
+                renderTasks(lastTasks);
             } catch (error) {
                 logEvent(`Error fetching tasks: ${error}`, 'error');
             }
@@ -1532,11 +1552,26 @@
             return `<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:#ede9fe;color:#6d28d9;margin-left:6px;font-weight:600;cursor:pointer;" onclick="navigate('chat/${bucketId}')">Chat: ${escapeHtml(label)}</span>`;
         }
 
+        function setTaskFilter(status) {
+            taskStatusFilter = status;
+            document.querySelectorAll('.task-filter-pill').forEach(p => {
+                p.classList.toggle('active', p.dataset.status === status);
+            });
+            renderTasks(lastTasks);
+        }
+
         function renderTasks(tasks) {
-            if (!tasks.length) {
-                taskList.innerHTML = '<div class="empty-state">No tasks yet</div>';
+            const filtered = taskStatusFilter === 'all'
+                ? tasks
+                : tasks.filter(t => t.status === taskStatusFilter);
+            if (!filtered.length) {
+                taskList.innerHTML = taskStatusFilter === 'all'
+                    ? '<div class="empty-state">No tasks yet</div>'
+                    : '<div class="empty-state">No tasks match this filter.</div>';
                 return;
             }
+            // shadow tasks with filtered for the rest of the function
+            tasks = filtered;
 
             taskList.innerHTML = tasks.map(task => `
                 <div class="task-item" data-task-id="${task.id}" onclick="navigate('task/${task.id}')" style="cursor:pointer;">
@@ -1799,6 +1834,8 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
 
         let currentChatId = null;
         let currentTaskId = null;
+        let taskStatusFilter = 'all';
+        let lastTasks = [];
         const dashboardView = document.getElementById('dashboard-view');
         const chatView = document.getElementById('chat-view');
         const taskView = document.getElementById('task-view');
