@@ -53,6 +53,10 @@ class PoolState:
     pool_file: Path = Path("pool.json")
     buckets: dict[str, Bucket] = field(default_factory=_default_buckets)
 
+    def __post_init__(self) -> None:
+        if "main" not in self.buckets:
+            self.buckets["main"] = Bucket(id="main", type="cli", label="CLI / Dashboard")
+
     @property
     def is_suspended(self) -> bool:
         return self.suspended_until is not None and datetime.now() < self.suspended_until

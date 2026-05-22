@@ -10,6 +10,7 @@ Claude Pool vous permet de constituer une file d'attente de tâches de code et d
 
 - **File d'attente de tâches** : vous ajoutez des tâches (= des instructions pour Claude), elles s'exécutent séquentiellement
 - **Tableau de bord web** : suivez l'avancement depuis `http://localhost:8000`
+- **Chat en direct** : ouvrez un onglet de conversation et échangez avec Claude dans une interface façon messagerie, tout en partageant la même file d'exécution
 - **Run Dev Plan** : décrivez un projet en texte libre, Claude découpe lui-même en étapes et les enfile dans la queue
 - **Gestion des rate limits** : si Claude est temporairement indisponible, le pool attend automatiquement et réessaie
 - **TUI interactif** : interface en ligne de commande pour surveiller les tâches sans navigateur
@@ -104,6 +105,37 @@ Le bouton **⚙ Run Dev Plan** (en haut de la section *Add New Task*) vous perme
 5. Cliquez **Enqueue Dev Plan**
 
 Claude va analyser votre description, la découper en 3 à 8 étapes de code séquentielles, et les ajouter automatiquement à la file d'attente.
+
+---
+
+## Chatter avec Claude depuis le navigateur
+
+Claude Pool inclut un mode **Chat** qui vous permet de converser directement avec Claude dans une interface de messagerie, sans quitter votre navigateur.
+
+### Ouvrir un nouveau chat
+
+1. Ouvrez **http://localhost:8000**
+2. Dans la section **Chats**, cliquez **+ New Chat**
+3. Choisissez le dossier de votre projet (Claude y aura accès pendant la conversation)
+4. Optionnellement, donnez un nom au chat
+5. Cliquez **Create Chat**
+
+Vous arrivez dans l'interface de chat. Tapez votre message et appuyez sur **Entrée** pour envoyer.
+
+### Envoyer des messages
+
+- **Entrée** → envoyer le message
+- **Maj + Entrée** → aller à la ligne sans envoyer
+
+Vos messages apparaissent immédiatement en gris clair. La réponse de Claude s'affiche dès qu'elle est prête (les chats partagent la même file d'exécution que les tâches normales).
+
+### Gérer vos chats
+
+- Depuis le tableau de bord, chaque chat affiche le nombre de messages et la date du dernier échange
+- **Open** → ouvrir le chat
+- **Delete** → supprimer le chat et tous ses messages
+
+> **Astuce** : vous pouvez ouvrir plusieurs onglets navigateur en même temps — le tableau de bord et les chats se synchronisent en temps réel via WebSocket.
 
 ---
 
@@ -229,6 +261,11 @@ Quand le serveur est démarré avec `--serve`, vous pouvez aussi interagir via d
 | `POST` | `/api/tasks` | Ajouter une tâche |
 | `POST` | `/api/tasks/{id}/retry` | Réessayer une tâche |
 | `POST` | `/api/tasks/{id}/skip` | Ignorer une tâche |
+| `GET` | `/api/chats` | Liste des chats |
+| `POST` | `/api/chats` | Créer un chat |
+| `DELETE` | `/api/chats/{id}` | Supprimer un chat |
+| `GET` | `/api/chats/{id}/messages` | Messages d'un chat |
+| `POST` | `/api/chats/{id}/messages` | Envoyer un message |
 | `WS` | `/ws/events` | Flux WebSocket en temps réel |
 
 Exemple avec `curl` :
@@ -265,7 +302,7 @@ source venv/bin/activate
 pytest tests/ -v
 ```
 
-110 tests couvrent l'exécuteur, le TUI, les modèles, le parseur, le stockage et les scénarios bout-en-bout.
+146 tests couvrent l'exécuteur, le TUI, les modèles, le parseur, le stockage, l'API REST et les scénarios bout-en-bout.
 
 ---
 

@@ -871,15 +871,6 @@
         </div>
 
         <div class="section">
-            <div class="section-header">Recent Tasks</div>
-            <div class="section-content">
-                <div class="task-list" id="task-list">
-                    <div class="empty-state">No tasks yet</div>
-                </div>
-            </div>
-        </div>
-
-        <div class="section">
             <div class="section-header">
                 <span>Chats</span>
                 <button type="button" class="btn-primary" id="btn-new-chat" style="font-size:13px;padding:7px 14px;">+ New Chat</button>
@@ -887,6 +878,15 @@
             <div class="section-content">
                 <div class="chat-list" id="chat-list">
                     <div class="empty-state">No chats yet.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">Recent Tasks</div>
+            <div class="section-content">
+                <div class="task-list" id="task-list">
+                    <div class="empty-state">No tasks yet</div>
                 </div>
             </div>
         </div>
@@ -914,11 +914,14 @@
                 <button class="btn-danger" id="btn-delete-chat">Delete</button>
             </div>
         </div>
+        <div id="chat-suspended-banner" style="display:none;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 16px;margin-bottom:10px;color:#92400e;font-size:13px;">
+            ⏸ Pool is suspended — messages will be processed after it resumes.
+        </div>
         <div class="message-thread" id="message-thread">
             <div class="empty-state">No messages yet.</div>
         </div>
         <div class="chat-input-row">
-            <textarea id="chat-input" rows="2" placeholder="Describe what you want Claude to do…"></textarea>
+            <textarea id="chat-input" rows="2" placeholder="Type a message… (Enter to send, Shift+Enter for newline)"></textarea>
             <button class="btn-primary" id="btn-send-message">Send</button>
         </div>
     </div>
@@ -1103,9 +1106,14 @@
             } else if (message.event === 'task_updated') {
                 updateTask(message.task);
                 logEvent(`Task ${message.task.id} updated: ${message.task.status}`, 'info');
-                // If this task belongs to the currently open chat, refresh messages
                 if (currentChatId && message.task.bucket_id === currentChatId) {
-                    fetchMessages(currentChatId);
+                    const bubble = document.querySelector(`[data-msg-id="${message.task.id}"]`);
+                    if (bubble) {
+                        updateBubble(bubble, message.task);
+                    } else {
+                        // Message exists on server but not in DOM (created in another tab)
+                        fetchMessages(currentChatId);
+                    }
                 }
             } else if (message.event === 'task_created') {
                 logEvent(`Task ${message.task.id} created`, 'info');
@@ -1117,13 +1125,25 @@
                 logEvent(`Chat created: ${message.chat.label}`, 'info');
                 fetchChats();
             } else if (message.event === 'chat_deleted') {
-                logEvent(`Chat deleted: ${message.chat_id}`, 'info');
+                logEvent(`Chat deleted: ${message.id}`, 'info');
                 fetchChats();
+                // If we're currently viewing the deleted chat, go back to dashboard
+                if (currentChatId && currentChatId === message.id) { navigate(''); }
             } else if (message.event === 'chat_message') {
                 if (currentChatId && message.chat_id === currentChatId) {
-                    fetchMessages(currentChatId);
+                    // Skip if we already added this message optimistically (same id in DOM)
+                    if (!document.querySelector(`[data-msg-id="${message.message?.id}"]`)) {
+                        fetchMessages(currentChatId);
+                    }
                 }
             }
+        }
+
+        function updateChatSuspensionBanner(status) {
+            const banner = document.getElementById('chat-suspended-banner');
+            if (!banner) return;
+            const suspended = status.suspended_until && new Date(status.suspended_until) > new Date();
+            banner.style.display = suspended ? 'block' : 'none';
         }
 
         function updatePoolStatus(status) {
@@ -1133,6 +1153,7 @@
             document.getElementById('completed-tasks').textContent = status.completed_tasks;
             document.getElementById('failed-tasks').textContent = status.failed_tasks;
             document.getElementById('skipped-tasks').textContent = status.skipped_tasks;
+            updateChatSuspensionBanner(status);
         }
 
         function logEvent(message, level = 'info') {
@@ -1163,6 +1184,14 @@
             }
         }
 
+        function bucketBadge(bucketId) {
+            if (!bucketId || bucketId === 'main') {
+                return '<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:#e5e7eb;color:#555;margin-left:6px;font-weight:600;">CLI</span>';
+            }
+            const label = chatLabelMap[bucketId] || bucketId;
+            return `<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:#ede9fe;color:#6d28d9;margin-left:6px;font-weight:600;cursor:pointer;" onclick="navigate('chat/${bucketId}')">Chat: ${escapeHtml(label)}</span>`;
+        }
+
         function renderTasks(tasks) {
             if (!tasks.length) {
                 taskList.innerHTML = '<div class="empty-state">No tasks yet</div>';
@@ -1173,8 +1202,8 @@
                 <div class="task-item" data-task-id="${task.id}">
                     <div class="task-info">
                         <div class="task-id">${task.id}</div>
-                        <div class="task-prompt">${task.prompt.substring(0, 100)}...</div>
-                        <span class="task-status ${task.status}">${task.status}</span>
+                        <div class="task-prompt">${escapeHtml(task.prompt.substring(0, 100))}${task.prompt.length > 100 ? '…' : ''}</div>
+                        <span class="task-status ${task.status}">${task.status}</span>${bucketBadge(task.bucket_id)}
                     </div>
                     <div class="task-actions">
                         ${task.status === 'failed' ? `<button class="btn-success" onclick="retryTask('${task.id}')">Retry</button>` : ''}
@@ -1244,14 +1273,12 @@
             }
         });
 
-        // Initial fetch and connect
-        fetchTasks();
-        fetchChats();
+        // Fetch chats first so chatLabelMap is ready before tasks render
+        fetchChats().then(fetchTasks);
         connectWebSocket();
 
-        // Refresh every 5 seconds
-        setInterval(fetchTasks, 5000);
-        setInterval(() => { if (!currentChatId) fetchChats(); }, 5000);
+        // Refresh every 5 seconds (chats first so chatLabelMap stays fresh)
+        setInterval(() => { if (!currentChatId) fetchChats().then(fetchTasks); }, 5000);
 
         /* ---- Directory Browser Modal ---- */
         const dirModal = document.getElementById('dir-modal');
@@ -1446,17 +1473,24 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
 
         function renderText(text) {
             if (!text) return '';
-            let html = escapeHtml(text);
-            // fenced code blocks
-            html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
-                `<pre><code>${code}</code></pre>`);
-            // inline code
-            html = html.replace(/`([^`]+)`/g, (_, c) => `<code>${escapeHtml(c)}</code>`);
-            // bold
-            html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-            // newlines (outside pre)
-            html = html.replace(/\n/g, '<br>');
-            return html;
+            // Extract fenced code blocks FIRST so the \n→<br> pass never fires inside them
+            const blocks = [];
+            let s = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_m, _lang, code) => {
+                const idx = blocks.length;
+                blocks.push(`<pre><code>${escapeHtml(code)}</code></pre>`);
+                return `\x01${idx}\x01`;
+            });
+            // Escape HTML in the surrounding prose
+            s = escapeHtml(s);
+            // Inline code (the \x01 sentinel prevents false matches across placeholders)
+            s = s.replace(/`([^`\x01]+)`/g, (_m, c) => `<code>${escapeHtml(c)}</code>`);
+            // Bold
+            s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            // Newlines → <br> (prose only; code blocks are already extracted)
+            s = s.replace(/\n/g, '<br>');
+            // Re-insert code blocks
+            if (blocks.length) s = s.replace(/\x01(\d+)\x01/g, (_m, i) => blocks[+i]);
+            return s;
         }
 
         /* ---- Router ---- */
@@ -1490,10 +1524,15 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         handleRoute();
 
         /* ---- Chat list (dashboard) ---- */
+        let chatLabelMap = {};  // bucket_id → label, updated on every fetchChats()
+
         async function fetchChats() {
             try {
                 const res = await fetch('/api/chats');
-                renderChatList(await res.json());
+                const chats = await res.json();
+                chatLabelMap = {};
+                for (const c of chats) chatLabelMap[c.id] = c.label;
+                if (!currentChatId) renderChatList(chats);
             } catch (e) { /* ignore */ }
         }
 
@@ -1504,16 +1543,34 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 return;
             }
             el.innerHTML = chats.map(c => `
-                <div class="chat-item" onclick="navigate('chat/${c.id}')">
-                    <span style="font-size:20px;">💬</span>
-                    <div class="chat-item-info">
+                <div class="chat-item">
+                    <span style="font-size:20px;flex-shrink:0;">💬</span>
+                    <div class="chat-item-info" onclick="navigate('chat/${c.id}')" style="cursor:pointer;">
                         <div class="chat-item-label">${escapeHtml(c.label)}</div>
                         <div class="chat-item-dir">${escapeHtml(c.directory || '')}</div>
                     </div>
-                    <span class="chat-item-count">${c.task_count} msg${c.task_count !== 1 ? 's' : ''}</span>
+                    <span class="chat-item-count">${c.message_count} msg${c.message_count !== 1 ? 's' : ''}</span>
+                    <div class="task-actions">
+                        <button class="btn-primary" style="font-size:12px;padding:5px 10px;" onclick="navigate('chat/${c.id}')">Open</button>
+                        <button class="btn-danger" style="font-size:12px;padding:5px 10px;" onclick="deleteChat('${c.id}','${escapeHtml(c.label)}')">Delete</button>
+                    </div>
                 </div>
             `).join('');
         }
+
+        window.deleteChat = async function(chatId, label) {
+            if (!confirm(`Delete chat "${label}" and all its messages?`)) return;
+            try {
+                const res = await fetch(`/api/chats/${chatId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    logEvent(`Chat "${label}" deleted`, 'info');
+                    fetchChats();
+                } else {
+                    const e = await res.json();
+                    logEvent(`Error deleting chat: ${e.detail}`, 'error');
+                }
+            } catch (e) { logEvent(`Error deleting chat: ${e}`, 'error'); }
+        };
 
         /* ---- New Chat modal ---- */
         const newChatModal = document.getElementById('new-chat-modal');
@@ -1561,12 +1618,12 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         async function loadChatMeta(chatId) {
             try {
                 const res = await fetch('/api/chats');
+                if (!res.ok) { navigate(''); return; }
                 const chats = await res.json();
                 const chat = chats.find(c => c.id === chatId);
-                if (chat) {
-                    document.getElementById('chat-header-label').textContent = chat.label;
-                    document.getElementById('chat-header-dir').textContent = chat.directory || '';
-                }
+                if (!chat) { navigate(''); return; }  // deleted → back to dashboard
+                document.getElementById('chat-header-label').textContent = chat.label;
+                document.getElementById('chat-header-dir').textContent = chat.directory || '';
             } catch (e) { /* ignore */ }
         }
 
@@ -1584,25 +1641,88 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 thread.innerHTML = '<div class="empty-state">No messages yet. Send one below.</div>';
                 return;
             }
+            const atBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40;
             thread.innerHTML = messages.map(m => {
+                const content = m.content || '';
                 const durationStr = m.duration_ms != null
                     ? `${(m.duration_ms / 1000).toFixed(1)}s` : '';
-                const resultHtml = m.result
-                    ? `<div class="message-result">${renderText(m.result)}</div>` : '';
+                const thinking = m.status === 'pending' || m.status === 'running' || m.status === 'rate_limit_retry'
+                    ? '<div class="message-result" style="color:#999;">⏳ Claude is thinking…</div>' : '';
+                const responseHtml = m.assistant_response && !thinking
+                    ? `<div class="message-result">${renderText(m.assistant_response)}</div>` : thinking;
                 const retryBtn = m.status === 'failed'
                     ? `<button class="btn-success" style="font-size:12px;padding:5px 10px;" onclick="retryMessage('${m.id}')">Retry</button>` : '';
                 return `
                     <div class="message-bubble ${m.status}" data-msg-id="${m.id}">
-                        <div class="message-prompt">${escapeHtml(m.prompt.substring(0, 200))}${m.prompt.length > 200 ? '…' : ''}</div>
+                        <div class="message-prompt">${escapeHtml(content.substring(0, 200))}${content.length > 200 ? '…' : ''}</div>
                         <div class="message-meta">
                             <span class="task-status ${m.status}">${m.status}</span>
                             ${durationStr ? `<span>${durationStr}</span>` : ''}
                         </div>
-                        ${resultHtml}
+                        ${responseHtml}
                         ${retryBtn ? `<div class="message-actions">${retryBtn}</div>` : ''}
                     </div>`;
             }).join('');
-            thread.scrollTop = thread.scrollHeight;
+            if (atBottom) thread.scrollTop = thread.scrollHeight;
+        }
+
+        /* Add a temporary optimistic bubble while the POST is in-flight. */
+        function addTempBubble(tempId, content) {
+            const thread = document.getElementById('message-thread');
+            const atBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40;
+            const emptyState = thread.querySelector('.empty-state');
+            if (emptyState) emptyState.remove();
+            const div = document.createElement('div');
+            div.className = 'message-bubble pending';
+            div.dataset.msgId = tempId;
+            div.innerHTML = `
+                <div class="message-prompt">${escapeHtml(content.substring(0, 200))}${content.length > 200 ? '…' : ''}</div>
+                <div class="message-meta"><span class="task-status pending">pending</span></div>
+                <div class="message-result" style="color:#999;">⏳ Claude is thinking…</div>`;
+            thread.appendChild(div);
+            if (atBottom) thread.scrollTop = thread.scrollHeight;
+            return div;
+        }
+
+        /* Patch an existing bubble in-place from a WS task_updated payload. */
+        function updateBubble(el, task) {
+            const status = task.status;
+            el.className = `message-bubble ${status}`;
+            if (task.id) el.dataset.msgId = task.id;
+
+            const metaEl = el.querySelector('.message-meta');
+            const durationStr = task.duration_ms != null ? `${(task.duration_ms / 1000).toFixed(1)}s` : '';
+            if (metaEl) {
+                metaEl.innerHTML = `<span class="task-status ${status}">${status}</span>${durationStr ? `<span>${durationStr}</span>` : ''}`;
+            }
+
+            el.querySelectorAll('.message-result, .message-actions').forEach(e => e.remove());
+
+            const thinking = status === 'pending' || status === 'running' || status === 'rate_limit_retry';
+            if (thinking) {
+                const d = document.createElement('div');
+                d.className = 'message-result';
+                d.style.color = '#999';
+                d.textContent = '⏳ Claude is thinking…';
+                el.appendChild(d);
+            } else if (task.result) {
+                const d = document.createElement('div');
+                d.className = 'message-result';
+                d.innerHTML = renderText(task.result);
+                el.appendChild(d);
+            } else if (status === 'failed' || status === 'skipped') {
+                const d = document.createElement('div');
+                d.className = 'message-result';
+                d.style.color = '#991b1b';
+                d.textContent = `Error (exit code ${task.exit_code ?? '?'})`;
+                el.appendChild(d);
+            }
+            if (status === 'failed') {
+                const a = document.createElement('div');
+                a.className = 'message-actions';
+                a.innerHTML = `<button class="btn-success" style="font-size:12px;padding:5px 10px;" onclick="retryMessage('${task.id}')">Retry</button>`;
+                el.appendChild(a);
+            }
         }
 
         window.retryMessage = async function(taskId) {
@@ -1625,22 +1745,40 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         });
 
         document.getElementById('btn-send-message').addEventListener('click', async () => {
-            const prompt = document.getElementById('chat-input').value.trim();
+            const input = document.getElementById('chat-input');
+            const prompt = input.value.trim();
             if (!prompt || !currentChatId) return;
-            document.getElementById('chat-input').value = '';
+            input.value = '';
+
+            // Optimistic bubble — visible immediately while the request is in-flight
+            const tempId = `temp-${Date.now()}`;
+            const tempBubble = addTempBubble(tempId, prompt);
+
             try {
                 const res = await fetch(`/api/chats/${currentChatId}/messages`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ prompt }),
                 });
-                if (res.ok) fetchMessages(currentChatId);
-                else { const e = await res.json(); logEvent(`Error: ${e.detail}`, 'error'); }
-            } catch (e) { logEvent(`Error sending message: ${e}`, 'error'); }
+                if (res.ok) {
+                    const msg = await res.json();
+                    tempBubble.dataset.msgId = msg.id;  // swap temp → real id
+                } else {
+                    tempBubble.remove();
+                    input.value = prompt;  // restore on failure
+                    const e = await res.json();
+                    logEvent(`Error: ${e.detail}`, 'error');
+                }
+            } catch (e) {
+                tempBubble.remove();
+                input.value = prompt;
+                logEvent(`Error sending message: ${e}`, 'error');
+            }
         });
 
         document.getElementById('chat-input').addEventListener('keydown', e => {
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
                 document.getElementById('btn-send-message').click();
             }
         });

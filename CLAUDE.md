@@ -40,6 +40,7 @@ The app follows a sequential execution model with rate-limit awareness:
 ## Key Files
 
 - `docs/spec.md` — Complete specification (JSON schema, TUI layout, class designs, retry logic, integration points)
+- `docs/chat_spec.md` — Chat Tab feature specification (web dashboard chat interface, bucket-based routing, REST API, WebSocket events)
 - `pool.json` — Runtime task data (JSON array of task objects)
 
 ## Constraints

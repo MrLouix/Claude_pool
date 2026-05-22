@@ -46,13 +46,18 @@ def load_pool(pool_file: Path) -> PoolState:
     
     raw_data = json.loads(content)
 
-    # Backward compatibility: legacy bare task array
-    if isinstance(raw_data, list):
+    # v0 → v1: legacy bare task array
+    needs_migration = isinstance(raw_data, list)
+    if needs_migration:
         raw_data = {
             "pool_retry_count": 0,
             "pool_suspended_until": None,
             "tasks": raw_data,
         }
+
+    # v1 → v2: dict without 'buckets' key
+    if not needs_migration and "buckets" not in raw_data:
+        needs_migration = True
 
     if not isinstance(raw_data, dict):
         raise ValueError("Pool file must contain a JSON object or array")
@@ -118,13 +123,19 @@ def load_pool(pool_file: Path) -> PoolState:
     if "main" not in buckets:
         buckets["main"] = Bucket(id="main", type="cli", label="CLI / Dashboard")
 
-    return PoolState(
+    state = PoolState(
         retry_count=int(raw_data.get("pool_retry_count", 0)),
         suspended_until=suspended_until,
         tasks=tasks,
         pool_file=pool_file,
         buckets=buckets,
     )
+
+    if needs_migration:
+        logger.info(f"Migrating pool file to v2 format: {pool_file}")
+        save_pool(state)
+
+    return state
 
 
 def save_pool(state: PoolState) -> None:
