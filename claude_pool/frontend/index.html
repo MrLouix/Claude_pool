@@ -1262,24 +1262,28 @@
         </div>
     </div>
 
-    <!-- Chat — Run Dev Plan modal (file path → orchestrator in this chat) -->
+    <!-- Chat — Run Dev Plan modal -->
     <div class="modal-overlay" id="chat-run-plan-modal">
-        <div class="modal-box" style="max-width:540px;">
+        <div class="modal-box" style="max-width:600px;">
             <div class="modal-header">
-                <h3>⚙ Run Dev Plan</h3>
+                <h3>⚙ Run Dev Plan in this chat</h3>
                 <button class="modal-close" id="chat-run-plan-close">×</button>
             </div>
             <div class="modal-body">
                 <div class="plan-section">
-                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Plan file path</label>
-                    <input type="text" id="chat-plan-file" placeholder="/home/user/project/docs/my_plan.md"
-                           style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px;font-family:inherit;font-size:14px;box-sizing:border-box;">
+                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Working Directory</label>
+                    <div id="chat-plan-dir-display" style="padding:8px 10px;border:1px solid #eee;border-radius:5px;font-family:monospace;font-size:13px;color:#666;background:#f9f9f9;"></div>
+                </div>
+                <div class="plan-section">
+                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Coding Specification</label>
+                    <textarea id="chat-plan-spec" rows="7" placeholder="Describe the feature or task in as much detail as possible…"
+                        style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px;font-family:inherit;font-size:14px;resize:vertical;box-sizing:border-box;"></textarea>
                 </div>
                 <div class="plan-section">
                     <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Options</label>
                     <div class="plan-option-row">
                         <input type="checkbox" id="chat-plan-unit-tests">
-                        <label for="chat-plan-unit-tests">Unit tests at each step</label>
+                        <label for="chat-plan-unit-tests">Write unit tests for each step</label>
                     </div>
                 </div>
                 <div class="plan-section">
@@ -1300,7 +1304,7 @@
             </div>
             <div class="modal-footer">
                 <button style="background:#f3f4f6;padding:8px 16px;border-radius:5px;border:1px solid #ddd;font-size:14px;cursor:pointer;" id="chat-run-plan-cancel">Cancel</button>
-                <button class="btn-modal-confirm" id="btn-chat-run-plan-confirm" disabled>Run Plan →</button>
+                <button class="btn-modal-confirm" id="btn-chat-run-plan-confirm" disabled>Enqueue Dev Plan</button>
             </div>
         </div>
     </div>
@@ -1863,6 +1867,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
            ====================================================== */
 
         let currentChatId = null;
+        let currentChatDirectory = '';
         let currentTaskId = null;
         let taskStatusFilters = new Set(['all']);
         let lastTasks = [];
@@ -2071,6 +2076,8 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 if (!chat) { navigate(''); return; }  // deleted → back to dashboard
                 document.getElementById('chat-header-label').textContent = chat.label;
                 document.getElementById('chat-header-dir').textContent = chat.directory || '';
+                currentChatDirectory = chat.directory || '';
+                document.getElementById('chat-plan-dir-display').textContent = currentChatDirectory || '(no directory)';
             } catch (e) { /* ignore */ }
         }
 
@@ -2232,75 +2239,80 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
 
         /* ---- Chat — Run Dev Plan ---- */
         const chatRunPlanModal = document.getElementById('chat-run-plan-modal');
-        const chatPlanFileInput = document.getElementById('chat-plan-file');
+        const chatPlanSpecInput = document.getElementById('chat-plan-spec');
         const btnChatRunPlanConfirm = document.getElementById('btn-chat-run-plan-confirm');
 
         function openChatRunPlanModal() { chatRunPlanModal.classList.add('active'); }
-        function closeChatRunPlanModal() { chatRunPlanModal.classList.remove('active'); }
+        function closeChatRunPlanModal() {
+            chatRunPlanModal.classList.remove('active');
+            chatPlanSpecInput.value = '';
+            btnChatRunPlanConfirm.disabled = true;
+        }
 
         document.getElementById('btn-chat-run-plan').addEventListener('click', openChatRunPlanModal);
         document.getElementById('chat-run-plan-close').addEventListener('click', closeChatRunPlanModal);
         document.getElementById('chat-run-plan-cancel').addEventListener('click', closeChatRunPlanModal);
         chatRunPlanModal.addEventListener('click', e => { if (e.target === chatRunPlanModal) closeChatRunPlanModal(); });
 
-        chatPlanFileInput.addEventListener('input', () => {
-            btnChatRunPlanConfirm.disabled = !chatPlanFileInput.value.trim();
+        chatPlanSpecInput.addEventListener('input', () => {
+            btnChatRunPlanConfirm.disabled = !chatPlanSpecInput.value.trim();
         });
 
-        function buildChatOrchestratorPrompt(filePath, unitTests, pushStrategy) {
+        function buildChatOrchestratorPrompt(directory, spec, unitTests, pushStrategy) {
             const apiOrigin = window.location.origin;
             const bucketId = currentChatId;
+            const unitTestsNote = unitTests
+                ? '- Each step prompt MUST include: "Write unit tests for all new code introduced in this step."'
+                : '';
+            const pushNote = pushStrategy === 'each_step'
+                ? "- Each step prompt MUST end with: \"After completing the implementation, commit and push: git add -A && git commit -m 'feat: <step summary>' && git push\""
+                : pushStrategy === 'end_only'
+                ? "- The LAST step prompt MUST end with: \"After completing the implementation, commit and push: git add -A && git commit -m 'feat: complete implementation' && git push\""
+                : '';
 
-            const unitTestsBlock = unitTests ? `
-After the curl call for each implementation step, immediately create a follow-up unit-test task:
+            return `You are a development planning orchestrator. Do NOT write any code yourself.
 
-  curl -s -X POST ${apiOrigin}/api/chats/${bucketId}/messages \\
-    -H "Content-Type: application/json" \\
-    -d '{"prompt": "Write and run unit tests for the step just implemented: \'<step title>\'. Ensure all tests pass before proceeding."}'
-` : '';
+Your task: analyze the specification below, break it into sequential implementation steps, and enqueue each step as a separate task in this chat via the Claude Pool API.
 
-            const pushBlock = pushStrategy === 'none' ? ''
-                : pushStrategy === 'each_step' ? `
-After each step's tasks (implementation + optional tests), add a push task:
+API ENDPOINT: ${apiOrigin}/api/chats/${bucketId}/messages
+WORKING DIRECTORY FOR ALL SUBTASKS: ${directory}
 
-  curl -s -X POST ${apiOrigin}/api/chats/${bucketId}/messages \\
-    -H "Content-Type: application/json" \\
-    -d '{"prompt": "Commit all changes for \'<step title>\' and push to GitHub. Use a clear commit message."}'
-` : `
-After the very last step's tasks, add a single push task:
+CODING SPECIFICATION:
+---
+${spec}
+---
 
-  curl -s -X POST ${apiOrigin}/api/chats/${bucketId}/messages \\
-    -H "Content-Type: application/json" \\
-    -d '{"prompt": "All plan steps are complete. Commit all remaining changes and push to GitHub with a summary commit message."}'
-`;
+REQUIREMENTS FOR EACH STEP PROMPT:
+- Be specific and self-contained (assume all previous steps are complete)
+- Include enough context so the implementer does not need to re-read the full spec
+${unitTestsNote}
+${pushNote}
 
-            return `You are orchestrating a multi-step development plan for Claude Pool.
+HOW TO ENQUEUE A TASK (use the bash tool):
+Run the following Python code for each step (Python is always available):
 
-PLAN FILE: ${filePath}
+import urllib.request, json
+step_prompt = """<YOUR STEP PROMPT HERE>"""
+data = json.dumps({"prompt": step_prompt}).encode()
+req = urllib.request.Request("${apiOrigin}/api/chats/${bucketId}/messages", data, {"Content-Type": "application/json"})
+urllib.request.urlopen(req)
 
-Read the plan file at the path above using your file-reading tools.
-Extract the numbered steps from the plan.
+PROCESS:
+1. Analyze the specification carefully
+2. Define 3-8 sequential, concrete implementation steps
+3. Enqueue each step using the Python snippet above (run via bash tool)
+4. After all steps are enqueued, output a brief summary of the plan
 
-For each step, create a task in THIS chat session by calling the Claude Pool API with curl:
-
-  curl -s -X POST ${apiOrigin}/api/chats/${bucketId}/messages \\
-    -H "Content-Type: application/json" \\
-    -d '{"prompt": "<step prompt>"}'
-
-Build the step prompt so it is self-contained: include the step title, its description from the plan, and the context that this is step N of M.
-${unitTestsBlock}${pushBlock}
-Create ALL tasks now, in order. The pool will execute them sequentially after this orchestrator task finishes. Do not wait for a step to complete before creating the next one — create the full sequence in one pass.
-
-Return a brief summary of the tasks you created (step titles and task IDs returned by the API).`;
+Do NOT implement any code yourself. Only plan and enqueue.`;
         }
 
         btnChatRunPlanConfirm.addEventListener('click', async () => {
-            const filePath = chatPlanFileInput.value.trim();
+            const spec = chatPlanSpecInput.value.trim();
             const unitTests = document.getElementById('chat-plan-unit-tests').checked;
             const pushStrategy = document.querySelector('input[name="chat-plan-push"]:checked')?.value || 'none';
-            if (!filePath || !currentChatId) return;
+            if (!spec || !currentChatId) return;
 
-            const prompt = buildChatOrchestratorPrompt(filePath, unitTests, pushStrategy);
+            const prompt = buildChatOrchestratorPrompt(currentChatDirectory, spec, unitTests, pushStrategy);
             btnChatRunPlanConfirm.disabled = true;
             btnChatRunPlanConfirm.textContent = 'Enqueuing…';
 
@@ -2312,7 +2324,6 @@ Return a brief summary of the tasks you created (step titles and task IDs return
                 });
                 if (res.ok) {
                     closeChatRunPlanModal();
-                    chatPlanFileInput.value = '';
                     fetchMessages(currentChatId);
                 } else {
                     const e = await res.json();
@@ -2322,7 +2333,7 @@ Return a brief summary of the tasks you created (step titles and task IDs return
                 logEvent(`Error: ${e}`, 'error');
             } finally {
                 btnChatRunPlanConfirm.disabled = false;
-                btnChatRunPlanConfirm.textContent = 'Run Plan →';
+                btnChatRunPlanConfirm.textContent = 'Enqueue Dev Plan';
             }
         });
 
