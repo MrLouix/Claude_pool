@@ -9,7 +9,6 @@ venv/
 ENV/
 build/
 develop-eggs/
-dist/
 downloads/
 eggs/
 .eggs/
@@ -33,6 +32,22 @@ htmlcov/
 CLAUDE.md
 .claude/
 docs/
+
+# OpenCode settings
+opencode.json
+opencode.jsonc
+.opencode/
+
+# Antigravity settings
+.antigravitycli/
+
+# rtk settings
+.rtk/
+
+# OpenCode settings
+opencode.json
+opencode.jsonc
+.opencode/
 
 # Type checking
 .mypy_cache/

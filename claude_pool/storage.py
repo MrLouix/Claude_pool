@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .models import PoolState, Task
+from .models import Bucket, PoolState, Task
 
 logger = logging.getLogger(__name__)
 
@@ -36,23 +36,28 @@ def load_pool(pool_file: Path) -> PoolState:
         return state
 
     content = pool_file.read_text(encoding="utf-8").strip()
-    
+
     # Initialize empty pool if file is empty
     if not content:
         logger.info(f"Pool file is empty, initializing: {pool_file}")
         state = PoolState(pool_file=pool_file)
         save_pool(state)
         return state
-    
+
     raw_data = json.loads(content)
 
-    # Backward compatibility: legacy bare task array
-    if isinstance(raw_data, list):
+    # v0 → v1: legacy bare task array
+    needs_migration = isinstance(raw_data, list)
+    if needs_migration:
         raw_data = {
             "pool_retry_count": 0,
             "pool_suspended_until": None,
             "tasks": raw_data,
         }
+
+    # v1 → v2: dict without 'buckets' key
+    if not needs_migration and "buckets" not in raw_data:
+        needs_migration = True
 
     if not isinstance(raw_data, dict):
         raise ValueError("Pool file must contain a JSON object or array")
@@ -61,7 +66,7 @@ def load_pool(pool_file: Path) -> PoolState:
 
     tasks = []
     existing_ids = set()
-    
+
     for item in tasks_raw:
         if not isinstance(item, dict):
             raise ValueError(f"Invalid task data: {item}")
@@ -72,18 +77,18 @@ def load_pool(pool_file: Path) -> PoolState:
             raise KeyError(f"Missing required field 'prompt' in task: {item}")
         if "directory" not in item:
             raise KeyError(f"Missing required field 'directory' in task: {item}")
-        
+
         # Auto-generate unique ID if missing
         if "id" not in item or not item["id"]:
             # Generate unique ID based on timestamp and UUID
             new_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
             item["id"] = new_id
-        
+
         # Ensure ID is unique
         while item["id"] in existing_ids:
             item["id"] = f"{item['id']}_{uuid.uuid4().hex[:4]}"
         existing_ids.add(item["id"])
-        
+
         # Auto-initialize optional fields with defaults if missing
         if "args" not in item:
             item["args"] = []
@@ -106,12 +111,31 @@ def load_pool(pool_file: Path) -> PoolState:
     else:
         suspended_until = None
 
-    return PoolState(
+    # Load buckets (v2) or migrate from v1 (no buckets key → default main bucket)
+    raw_buckets = raw_data.get("buckets", {})
+    buckets: dict[str, Bucket] = {}
+    if raw_buckets and isinstance(raw_buckets, dict):
+        for bid, bdata in raw_buckets.items():
+            if isinstance(bdata, dict):
+                bdata = dict(bdata)
+                bdata.setdefault("id", bid)
+                buckets[bid] = Bucket.from_dict(bdata)
+    if "main" not in buckets:
+        buckets["main"] = Bucket(id="main", type="cli", label="CLI / Dashboard")
+
+    state = PoolState(
         retry_count=int(raw_data.get("pool_retry_count", 0)),
         suspended_until=suspended_until,
         tasks=tasks,
         pool_file=pool_file,
+        buckets=buckets,
     )
+
+    if needs_migration:
+        logger.info(f"Migrating pool file to v2 format: {pool_file}")
+        save_pool(state)
+
+    return state
 
 
 def save_pool(state: PoolState) -> None:
@@ -125,7 +149,10 @@ def save_pool(state: PoolState) -> None:
 
     data = {
         "pool_retry_count": state.retry_count,
-        "pool_suspended_until": state.suspended_until.isoformat() if state.suspended_until else None,
+        "pool_suspended_until": (
+            state.suspended_until.isoformat() if state.suspended_until else None
+        ),
+        "buckets": {bid: b.to_dict() for bid, b in state.buckets.items()},
         "tasks": [task.to_dict() for task in state.tasks],
     }
     content = json.dumps(data, indent=2, ensure_ascii=False)
@@ -134,33 +161,34 @@ def save_pool(state: PoolState) -> None:
 
 def cleanup_old_tasks(state: PoolState, max_age_hours: int = 48) -> int:
     """Remove completed/failed tasks older than max_age_hours.
-    
+
     Only removes tasks with status: success, failed, or skipped.
     Pending and running tasks are never removed.
-    
+
     Args:
         state: PoolState object to clean
         max_age_hours: Maximum age in hours (default: 48)
-    
+
     Returns:
         Number of tasks removed
     """
     cutoff_time = datetime.now() - timedelta(hours=max_age_hours)
     initial_count = len(state.tasks)
-    
+
     # Keep tasks that are:
     # - pending or running (regardless of age)
     # - OR created within the max_age window
     state.tasks = [
-        task for task in state.tasks
+        task
+        for task in state.tasks
         if task.status in ("pending", "running", "rate_limit_retry")
         or datetime.fromisoformat(task.created_at) > cutoff_time
     ]
-    
+
     removed_count = initial_count - len(state.tasks)
-    
+
     if removed_count > 0:
         logger.info(f"Cleaned up {removed_count} old tasks (older than {max_age_hours}h)")
         save_pool(state)
-    
+
     return removed_count

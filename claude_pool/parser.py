@@ -59,11 +59,13 @@ def parse_claude_output(stdout: bytes) -> dict[str, Any]:
             code_blocks = []
             code_matches = re.findall(r"```(\w+)?\n(.*?)```", result_text, re.DOTALL)
             for i, (lang, content) in enumerate(code_matches):
-                code_blocks.append({
-                    "language": lang or "text",
-                    "filename": f"code_{i}.txt",
-                    "content": content.strip(),
-                })
+                code_blocks.append(
+                    {
+                        "language": lang or "text",
+                        "filename": f"code_{i}.txt",
+                        "content": content.strip(),
+                    }
+                )
 
             # Extract token usage from usage field
             usage = data.get("usage", {})
@@ -76,7 +78,9 @@ def parse_claude_output(stdout: bytes) -> dict[str, Any]:
                 total_tokens += usage.get("cache_creation_input_tokens", 0)
 
             # Calculate session usage (estimate based on 200k context window)
-            session_usage_percent = min(100.0, (total_tokens / 200000) * 100) if total_tokens > 0 else 0.0
+            session_usage_percent = (
+                min(100.0, (total_tokens / 200000) * 100) if total_tokens > 0 else 0.0
+            )
 
             # Extract session_id if present
             session_id = data.get("session_id") or data.get("sessionKey")

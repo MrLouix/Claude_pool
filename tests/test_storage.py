@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from claude_pool.models import PoolState, Task
+from claude_pool.models import Bucket, PoolState, Task
 from claude_pool.storage import load_pool, save_pool
 
 
@@ -255,3 +255,112 @@ def test_save_pool_creates_parent_directory(tmp_path: Path):
 
     assert nested_file.exists()
     assert nested_file.parent.exists()
+
+
+# ---------------------------------------------------------------------------
+# v2 schema — bucket migration tests
+# ---------------------------------------------------------------------------
+
+
+def test_v1_pool_migrates_to_v2(temp_pool_file: Path):
+    """v1 format (no 'buckets' key) → tasks get bucket_id='main', 'main' bucket synthesized,
+    and the file is rewritten in v2 format immediately."""
+    v1_data = {
+        "pool_retry_count": 0,
+        "pool_suspended_until": None,
+        "tasks": [
+            {
+                "id": "task_001",
+                "prompt": "Fix bug",
+                "directory": "/tmp",
+                "status": "pending",
+            },
+        ],
+    }
+    temp_pool_file.write_text(json.dumps(v1_data))
+
+    state = load_pool(temp_pool_file)
+
+    # In-memory: bucket "main" exists and task carries bucket_id="main"
+    assert "main" in state.buckets
+    assert state.buckets["main"].type == "cli"
+    assert state.tasks[0].bucket_id == "main"
+
+    # On disk: file must have been rewritten as v2
+    on_disk = json.loads(temp_pool_file.read_text())
+    assert "buckets" in on_disk
+    assert "main" in on_disk["buckets"]
+    assert on_disk["tasks"][0].get("bucket_id") == "main"
+
+
+def test_v2_roundtrip_preserves_buckets(temp_pool_file: Path):
+    """v2 format with a custom chat bucket round-trips without mutation."""
+    original_state = PoolState(
+        tasks=[
+            Task(id="task_001", prompt="hello", directory=Path("/tmp"), bucket_id="chat_abc"),
+        ],
+        pool_file=temp_pool_file,
+        buckets={
+            "main": Bucket(id="main", type="cli", label="CLI / Dashboard"),
+            "chat_abc": Bucket(
+                id="chat_abc", type="chat", label="My Feature Chat", directory="/tmp"
+            ),
+        },
+    )
+    save_pool(original_state)
+
+    loaded = load_pool(temp_pool_file)
+
+    assert "main" in loaded.buckets
+    assert "chat_abc" in loaded.buckets
+    assert loaded.buckets["chat_abc"].type == "chat"
+    assert loaded.buckets["chat_abc"].label == "My Feature Chat"
+    assert loaded.buckets["chat_abc"].directory == "/tmp"
+    assert loaded.tasks[0].bucket_id == "chat_abc"
+
+    # v2 file must not be treated as needing migration → file is not re-written
+    # (i.e. second load round-trips cleanly without error)
+    loaded2 = load_pool(temp_pool_file)
+    assert "chat_abc" in loaded2.buckets
+    assert loaded2.tasks[0].bucket_id == "chat_abc"
+
+
+def test_v0_bare_array_migrates_to_v2(temp_pool_file: Path):
+    """v0 bare-array → both tasks and buckets are correctly migrated to v2 in one pass."""
+    v0_data = [
+        {"id": "t1", "prompt": "task 1", "directory": "/tmp"},
+        {"id": "t2", "prompt": "task 2", "directory": "/tmp"},
+    ]
+    temp_pool_file.write_text(json.dumps(v0_data))
+
+    state = load_pool(temp_pool_file)
+
+    # In-memory assertions
+    assert len(state.tasks) == 2
+    assert all(t.bucket_id == "main" for t in state.tasks)
+    assert "main" in state.buckets
+
+    # On-disk: written as v2 dict (not a bare array)
+    on_disk = json.loads(temp_pool_file.read_text())
+    assert isinstance(on_disk, dict)
+    assert "buckets" in on_disk
+    assert "main" in on_disk["buckets"]
+    assert all(t.get("bucket_id") == "main" for t in on_disk["tasks"])
+
+
+def test_pool_state_post_init_ensures_main_bucket():
+    """PoolState.__post_init__ injects 'main' bucket even when buckets={} is passed."""
+    state = PoolState(buckets={})
+    assert "main" in state.buckets
+    assert state.buckets["main"].type == "cli"
+
+
+def test_save_pool_emits_buckets_key(temp_pool_file: Path):
+    """save_pool always writes a 'buckets' key in the v2 layout."""
+    state = PoolState(tasks=[], pool_file=temp_pool_file)
+    save_pool(state)
+
+    on_disk = json.loads(temp_pool_file.read_text())
+    assert "buckets" in on_disk
+    assert "main" in on_disk["buckets"]
+    assert on_disk["buckets"]["main"]["type"] == "cli"

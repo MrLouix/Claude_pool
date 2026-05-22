@@ -50,6 +50,85 @@
             font-weight: 600;
         }
 
+        /* Claude status banner styles */
+        .claude-status-container {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            flex-wrap: wrap;
+            max-width: 400px;
+        }
+        
+        .claude-status-container.waiting {
+            background: #eff6ff;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
+        }
+        
+        .claude-status-container.running {
+            background: #ecfdf5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+        
+        .claude-status-container.rate_limit {
+            background: #fffbeb;
+            color: #92400e;
+            border: 1px solid #fde68a;
+        }
+        
+        .claude-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+            display: inline-block;
+        }
+        
+        .waiting .claude-status-dot {
+            background: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+        
+        .running .claude-status-dot {
+            background: #10b981;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+            animation: pulse-dot 1.5s infinite;
+        }
+        
+        .rate_limit .claude-status-dot {
+            background: #f59e0b;
+            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+        }
+        
+        @keyframes pulse-dot {
+            0% { transform: scale(0.95); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.5; }
+        }
+        
+        .btn-instant-retry {
+            background: #f59e0b;
+            color: white;
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-weight: 700;
+            transition: background 0.2s ease;
+        }
+        
+        .btn-instant-retry:hover {
+            background: #d97706;
+            transform: translateY(-1px);
+        }
+
         .status-badge.connected {
             background: #10b981;
             color: white;
@@ -168,6 +247,11 @@
             font-size: 18px;
             font-weight: 600;
             color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         .section-content {
@@ -222,7 +306,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            hover: background #f9f9f9;
+        
         }
 
         .task-info {
@@ -486,6 +570,348 @@
             cursor: not-allowed;
         }
 
+        /* ---- Chat view ---- */
+        .chat-header {
+            background: white;
+            padding: 14px 20px;
+            border-radius: 10px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .chat-header-info { flex: 1; overflow: hidden; }
+
+        .chat-header-label {
+            font-size: 17px;
+            font-weight: 700;
+            color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chat-header-dir {
+            font-size: 12px;
+            color: #888;
+            font-family: monospace;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chat-header-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+        .btn-back {
+            background: #f3f4f6;
+            color: #333;
+            border: 1px solid #ddd;
+            font-size: 13px;
+            padding: 7px 12px;
+            flex-shrink: 0;
+        }
+
+        .btn-back:hover { background: #e5e7eb; transform: none; box-shadow: none; }
+
+        .btn-danger { background: #ef4444; color: white; font-size: 13px; padding: 7px 12px; }
+        .btn-danger:hover { background: #dc2626; }
+
+        .message-thread {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            min-height: 300px;
+            max-height: 60vh;
+            overflow-y: auto;
+            margin-bottom: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .message-bubble {
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 14px;
+            background: #fafafa;
+            border-left: 3px solid #ddd;
+        }
+
+        .message-bubble.pending       { border-left-color: #f59e0b; background: #fffbeb; }
+        .message-bubble.running       { border-left-color: #3b82f6; background: #eff6ff; }
+        .message-bubble.success       { border-left-color: #10b981; background: #f0fdf4; }
+        .message-bubble.failed        { border-left-color: #ef4444; background: #fef2f2; }
+        .message-bubble.skipped       { border-left-color: #a855f7; background: #faf5ff; }
+        .message-bubble.rate_limit_retry { border-left-color: #f59e0b; background: #fffbeb; }
+
+        .message-prompt { font-size: 14px; color: #333; font-weight: 500; margin-bottom: 4px; }
+        .message-meta { font-size: 11px; color: #999; margin-bottom: 8px; display: flex; gap: 10px; }
+
+        .message-result {
+            font-size: 13px;
+            color: #444;
+            line-height: 1.55;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .message-result pre {
+            background: #1f2937;
+            color: #e5e7eb;
+            padding: 10px 14px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 8px 0;
+            font-size: 12px;
+            white-space: pre;
+        }
+
+        .message-result code {
+            background: #f3f4f6;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        .message-result pre code { background: none; padding: 0; }
+
+        .message-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+        .chat-input-row {
+            background: white;
+            border-radius: 10px;
+            padding: 14px 16px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        #chat-input {
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            font-family: inherit;
+            font-size: 14px;
+            resize: none;
+            min-height: 58px;
+        }
+
+        /* ---- Task Detail Modal ---- */
+        .task-detail-box { max-width: 640px; max-height: 85vh; overflow-y: auto; }
+        .task-detail-body { display: grid; gap: 12px; padding: 20px; }
+        .td-field { display: flex; flex-direction: column; gap: 4px; }
+        .td-field label { font-weight: 600; font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+        .td-value { font-size: 14px; color: #333; word-break: break-word; }
+        .td-id { font-family: monospace; font-size: 13px; color: #555; }
+        .td-dir { font-family: monospace; font-size: 13px; color: #888; background: #f9f9f9; padding: 6px 8px; border-radius: 4px; }
+        .td-prompt-field { min-height: 80px; }
+        .td-prompt-textarea {
+            width: 100%; min-height: 80px; max-height: 250px; overflow-y: auto;
+            padding: 10px; border: 1px solid #ddd; border-radius: 6px;
+            font-family: inherit; font-size: 14px; resize: vertical;
+            background: #fafafa; color: #333; line-height: 1.5;
+            box-sizing: border-box;
+        }
+        .td-prompt-textarea:not([readonly]) { background: #fff; border-color: #6366f1; }
+        .td-args { font-family: monospace; font-size: 13px; color: #555; }
+        .td-result-field { min-height: 60px; }
+        .td-result-textarea {
+            width: 100%; min-height: 60px; max-height: 300px; overflow-y: auto;
+            padding: 10px; border: 1px solid #ddd; border-radius: 6px;
+            font-family: monospace; font-size: 13px; white-space: pre-wrap;
+            word-break: break-word; background: #f5f5f5; color: #333; line-height: 1.4;
+            box-sizing: border-box; margin: 0;
+        }
+        .td-result-md {
+            font-family: inherit; font-size: 14px; white-space: normal; line-height: 1.6;
+        }
+        .td-result-md pre { background: #1e1e1e; color: #d4d4d4; padding: 10px 12px; border-radius: 5px; overflow-x: auto; margin: 6px 0; }
+        .td-result-md code { background: #f0f0f0; color: #c7254e; padding: 1px 4px; border-radius: 3px; font-size: 13px; }
+        .td-result-md pre code { background: none; color: inherit; padding: 0; }
+        .td-result-md strong { font-weight: 700; }
+        .td-edit-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 8px; border-top: 1px solid #eee; }
+        .td-edit-row select {
+            padding: 8px; border: 1px solid #ddd; border-radius: 5px;
+            font-family: inherit; font-size: 14px; background: #fff;
+        }
+        .task-detail-footer {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 14px 20px; border-top: 1px solid #eee; flex-wrap: wrap; gap: 10px;
+        }
+        .td-actions-left, .td-actions-right { display: flex; gap: 8px; flex-wrap: wrap; }
+        .td-btn {
+            padding: 7px 14px; border-radius: 5px; border: 1px solid #ddd;
+            font-size: 13px; cursor: pointer; background: #f8f8f8; color: #333;
+            font-family: inherit; transition: background 0.15s;
+        }
+        .td-btn:hover { background: #eee; }
+        .td-btn-skip { border-color: #f59e0b; color: #92400e; background: #fffbeb; }
+        .td-btn-skip:hover { background: #fef3c7; }
+        .td-btn-retry { border-color: #22c55e; color: #166534; background: #f0fdf4; }
+        .td-btn-retry:hover { background: #dcfce7; }
+        .td-btn-resume { border-color: #6366f1; color: #3730a3; background: #eef2ff; }
+        .td-btn-resume:hover { background: #e0e7ff; }
+        .td-btn-delete { border-color: #ef4444; color: #991b1b; background: #fef2f2; }
+        .td-btn-delete:hover { background: #fee2e2; }
+        .td-btn-duplicate { border-color: #3b82f6; color: #1e40af; background: #eff6ff; }
+        .td-btn-duplicate:hover { background: #dbeafe; }
+        .td-btn-edit { border-color: #8b5cf6; color: #5b21b6; background: #f5f3ff; }
+        .td-btn-edit:hover { background: #ede9fe; }
+        .td-btn-save { border-color: #22c55e; color: #166534; background: #f0fdf4; }
+        .td-btn-save:hover { background: #dcfce7; }
+
+        /* ---- Task View (full-page hash-routed) ---- */
+        #task-view { display: flex; flex-direction: column; gap: 10px; }
+        .task-view-header {
+            background: white; padding: 14px 20px; display: flex; align-items: center;
+            gap: 14px; border-bottom: 1px solid #eee; border-radius: 10px;
+            flex-shrink: 0;
+        }
+        .task-view-header-info { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; overflow: hidden; }
+        .task-view-title { font-size: 15px; font-weight: 700; color: #222; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .task-view-body {
+            flex: 1; overflow-y: auto; background: white; display: grid; gap: 14px;
+            padding: 20px; border-radius: 10px;
+        }
+        .task-view-footer {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 14px 20px; background: white; border-top: 1px solid #eee;
+            flex-wrap: wrap; gap: 10px; border-radius: 10px; flex-shrink: 0;
+        }
+        .tv-json {
+            width: 100%; max-height: 200px; overflow-y: auto;
+            padding: 10px; border: 1px solid #ddd; border-radius: 6px;
+            font-family: monospace; font-size: 12px; white-space: pre-wrap;
+            word-break: break-word; background: #f5f5f5; color: #555; line-height: 1.4;
+            box-sizing: border-box; margin: 0;
+        }
+
+        /* ---- Task filter pills ---- */
+        .task-filter-pill {
+            padding: 3px 10px; border-radius: 12px; border: 1px solid #ddd;
+            font-size: 12px; font-family: inherit; cursor: pointer;
+            background: #f3f4f6; color: #555; transition: background 0.15s, color 0.15s;
+        }
+        .task-filter-pill:hover { background: #e5e7eb; }
+        .task-filter-pill.active { background: #6366f1; color: #fff; border-color: #6366f1; }
+
+        /* ---- Chat list in dashboard ---- */
+        .chat-list { display: grid; gap: 8px; }
+
+        .chat-item {
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 12px 14px;
+            cursor: default;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .chat-item:hover { background: #f0f0ff; }
+        .chat-item-info { flex: 1; overflow: hidden; }
+
+        .chat-item-label {
+            font-weight: 600;
+            font-size: 14px;
+            color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chat-item-dir {
+            font-size: 11px;
+            color: #999;
+            font-family: monospace;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chat-item-count { font-size: 12px; color: #aaa; flex-shrink: 0; }
+
+        /* ---- Run Dev Plan ---- */
+        .btn-run-plan {
+            background: #764ba2;
+            color: white;
+            font-size: 13px;
+            padding: 7px 14px;
+        }
+
+        .btn-run-plan:hover {
+            background: #5e3a82;
+        }
+
+        .plan-section {
+            margin-bottom: 14px;
+        }
+
+        .plan-section > label {
+            display: block;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        #plan-spec {
+            width: 100%;
+            min-height: 140px;
+            resize: vertical;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .plan-dir-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        #plan-directory {
+            flex: 1;
+            min-width: 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        .plan-option-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 6px;
+            cursor: pointer;
+        }
+
+        .plan-option-row input {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .plan-option-row label {
+            font-weight: normal;
+            cursor: pointer;
+            margin: 0;
+        }
+
         @media (max-width: 768px) {
             body { padding: 10px; }
 
@@ -541,15 +967,33 @@
                 flex: 1;
             }
         }
+
+        @media (max-width: 600px) {
+            .chat-item .task-actions {
+                width: 100%;
+            }
+            .chat-item .task-actions button {
+                flex: 1;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>📦 Claude Pool Dashboard</h1>
-            <div class="status-line">
-                WebSocket Status:
-                <span class="status-badge disconnected" id="ws-status">Disconnected</span>
+    <div class="container" id="dashboard-view">
+        <div class="header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+            <div>
+                <h1>📦 Claude Pool Dashboard</h1>
+                <div class="status-line">
+                    WebSocket Status:
+                    <span class="status-badge disconnected" id="ws-status">Disconnected</span>
+                </div>
+            </div>
+            <!-- Claude -p Status Banner -->
+            <div id="claude-status-banner" class="claude-status-container waiting">
+                <span class="claude-status-dot"></span>
+                <span id="claude-status-text">Waiting for requests</span>
+                <div id="claude-rate-limit-detail" style="display: none; margin-top: 5px; font-size: 12px; opacity: 0.9; width: 100%;"></div>
+                <button id="btn-instant-retry" class="btn-instant-retry" onclick="instantRetry()" style="display: none; margin-top: 8px;">Instant Retry</button>
             </div>
         </div>
 
@@ -580,8 +1024,26 @@
             </div>
         </div>
 
+        <div style="margin-bottom:20px;">
+            <button type="button" class="btn-run-plan" id="btn-run-plan" style="width:100%;padding:14px 20px;font-size:15px;">⚙ Run Dev Plan</button>
+        </div>
+
         <div class="section">
-            <div class="section-header">Add New Task</div>
+            <div class="section-header">
+                <span>Chats</span>
+                <button type="button" class="btn-primary" id="btn-new-chat" style="font-size:13px;padding:7px 14px;">+ New Chat</button>
+            </div>
+            <div class="section-content">
+                <div class="chat-list" id="chat-list">
+                    <div class="empty-state">No chats yet.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <span>Add New Task</span>
+            </div>
             <div class="section-content">
                 <form class="task-form" id="add-task-form">
                     <div class="form-group">
@@ -623,7 +1085,18 @@
         </div>
 
         <div class="section">
-            <div class="section-header">Recent Tasks</div>
+            <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                Recent Tasks
+                <div id="task-filter-pills" style="display:flex;flex-wrap:wrap;gap:6px;">
+                    <button class="task-filter-pill active" data-status="all" onclick="setTaskFilter('all')">All</button>
+                    <button class="task-filter-pill" data-status="pending" onclick="setTaskFilter('pending')">Pending</button>
+                    <button class="task-filter-pill" data-status="running" onclick="setTaskFilter('running')">Running</button>
+                    <button class="task-filter-pill" data-status="success" onclick="setTaskFilter('success')">Success</button>
+                    <button class="task-filter-pill" data-status="failed" onclick="setTaskFilter('failed')">Failed</button>
+                    <button class="task-filter-pill" data-status="skipped" onclick="setTaskFilter('skipped')">Skipped</button>
+                    <button class="task-filter-pill" data-status="rate_limit_retry" onclick="setTaskFilter('rate_limit_retry')">Rate limit retry</button>
+                </div>
+            </div>
             <div class="section-content">
                 <div class="task-list" id="task-list">
                     <div class="empty-state">No tasks yet</div>
@@ -637,6 +1110,250 @@
                 <div class="log-container" id="event-log">
                     <div class="log-line"><span class="log-timestamp">[00:00:00]</span> Waiting for events...</div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TASK VIEW (hidden until hash = #task/<id>) -->
+    <div class="container" id="task-view" style="display:none;">
+        <div class="task-view-header">
+            <button class="btn-back" id="tv-btn-back">← Back</button>
+            <div class="task-view-header-info">
+                <span class="task-view-title" id="tv-header-id">Task</span>
+                <span class="task-status" id="tv-header-status"></span>
+            </div>
+        </div>
+        <div class="task-view-body">
+            <div class="td-field">
+                <label>ID</label>
+                <div class="td-value td-id" id="td-id"></div>
+            </div>
+            <div class="td-field">
+                <label>Status</label>
+                <div class="td-value"><span class="task-status" id="td-status"></span></div>
+            </div>
+            <div class="td-field">
+                <label>Directory</label>
+                <div class="td-value td-dir" id="td-directory"></div>
+            </div>
+            <div class="td-field">
+                <label>Bucket</label>
+                <div class="td-value" id="tv-bucket">—</div>
+            </div>
+            <div class="td-field">
+                <label>Created At</label>
+                <div class="td-value" id="tv-created-at">—</div>
+            </div>
+            <div class="td-field td-prompt-field">
+                <label>Prompt</label>
+                <textarea class="td-prompt-textarea" id="td-prompt" readonly></textarea>
+            </div>
+            <div class="td-edit-row" id="td-edit-row" style="display:none;">
+                <div class="td-field">
+                    <label>Model</label>
+                    <select id="td-edit-model">
+                        <option value="">default</option>
+                        <option value="haiku">haiku</option>
+                        <option value="sonnet">sonnet</option>
+                        <option value="opus">opus</option>
+                    </select>
+                </div>
+                <div class="td-field">
+                    <label>Effort</label>
+                    <select id="td-edit-effort">
+                        <option value="">default</option>
+                        <option value="low">low</option>
+                        <option value="medium">medium</option>
+                        <option value="high">high</option>
+                        <option value="max">max</option>
+                    </select>
+                </div>
+            </div>
+            <div class="td-field td-args-field">
+                <label>Args</label>
+                <div class="td-value td-args" id="td-args"></div>
+            </div>
+            <div class="td-field">
+                <label>Exit Code</label>
+                <div class="td-value" id="td-exit-code">—</div>
+            </div>
+            <div class="td-field">
+                <label>Duration</label>
+                <div class="td-value" id="td-duration">—</div>
+            </div>
+            <div class="td-field">
+                <label>Retry Count</label>
+                <div class="td-value" id="td-retry-count">0</div>
+            </div>
+            <div class="td-field td-result-field">
+                <label>Result</label>
+                <div class="td-result-textarea td-result-md" id="td-result">—</div>
+            </div>
+            <div class="td-field">
+                <label>JSON Output (raw)</label>
+                <pre class="tv-json" id="tv-json-output">—</pre>
+            </div>
+        </div>
+        <div class="task-view-footer">
+            <div class="td-actions-left">
+                <button class="td-btn td-btn-skip" id="td-btn-skip" style="display:none;" onclick="tdSkipTask()">Skip</button>
+                <button class="td-btn td-btn-retry" id="td-btn-retry" style="display:none;" onclick="tdRetryTask()">Retry</button>
+                <button class="td-btn td-btn-resume" id="td-btn-resume" style="display:none;" onclick="tdResumeTask()">▶ Resume</button>
+                <button class="td-btn td-btn-delete" id="td-btn-delete" onclick="tdDeleteTask()">Delete</button>
+                <button class="td-btn td-btn-duplicate" id="td-btn-duplicate" onclick="tdDuplicateTask()">Duplicate</button>
+            </div>
+            <div class="td-actions-right">
+                <button class="td-btn td-btn-edit" id="td-btn-edit" style="display:none;" onclick="tdToggleEdit()">✏️ Edit</button>
+                <button class="td-btn td-btn-save" id="td-btn-save" style="display:none;" onclick="tdSaveTask()">Save</button>
+                <button class="td-btn td-btn-cancel-edit" id="td-btn-cancel-edit" style="display:none;" onclick="tdCancelEdit()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHAT VIEW (hidden until hash = #chat/<id>) -->
+    <div class="container" id="chat-view" style="display:none;">
+        <div class="chat-header">
+            <button class="btn-back" id="btn-back">← Back</button>
+            <div class="chat-header-info">
+                <div class="chat-header-label" id="chat-header-label">Chat</div>
+                <div class="chat-header-dir" id="chat-header-dir"></div>
+            </div>
+            <div class="chat-header-actions">
+                <button class="btn-run-plan" id="btn-chat-run-plan">⚙ Run Dev Plan</button>
+                <button class="btn-danger" id="btn-delete-chat">Delete</button>
+            </div>
+        </div>
+        <div id="chat-suspended-banner" style="display:none;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 16px;margin-bottom:10px;color:#92400e;font-size:13px;">
+            ⏸ Pool is suspended — messages will be processed after it resumes.
+        </div>
+        <div class="message-thread" id="message-thread">
+            <div class="empty-state">No messages yet.</div>
+        </div>
+        <div class="chat-input-row">
+            <textarea id="chat-input" rows="2" placeholder="Type a message… (Enter to send, Shift+Enter for newline)"></textarea>
+            <button class="btn-primary" id="btn-send-message">Send</button>
+        </div>
+    </div>
+
+    <!-- New Chat modal -->
+    <div class="modal-overlay" id="new-chat-modal">
+        <div class="modal-box" style="max-width:500px;">
+            <div class="modal-header">
+                <h3>New Chat</h3>
+                <button class="modal-close" id="new-chat-close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="plan-section">
+                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Chat name</label>
+                    <input type="text" id="new-chat-label" placeholder="My Feature" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px;font-family:inherit;font-size:14px;box-sizing:border-box;">
+                </div>
+                <div class="plan-section">
+                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Working Directory</label>
+                    <div class="plan-dir-row">
+                        <input type="text" id="new-chat-directory" placeholder="/path/to/project">
+                        <button type="button" class="btn-browse" id="btn-new-chat-browse" title="Browse folders">⋯</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button style="background:#f3f4f6;padding:8px 16px;border-radius:5px;border:1px solid #ddd;font-size:14px;cursor:pointer;" id="new-chat-cancel">Cancel</button>
+                <button class="btn-modal-confirm" id="btn-new-chat-confirm">Create Chat</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat — Run Dev Plan modal -->
+    <div class="modal-overlay" id="chat-run-plan-modal">
+        <div class="modal-box" style="max-width:600px;">
+            <div class="modal-header">
+                <h3>⚙ Run Dev Plan in this chat</h3>
+                <button class="modal-close" id="chat-run-plan-close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="plan-section">
+                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Working Directory</label>
+                    <div id="chat-plan-dir-display" style="padding:8px 10px;border:1px solid #eee;border-radius:5px;font-family:monospace;font-size:13px;color:#666;background:#f9f9f9;"></div>
+                </div>
+                <div class="plan-section">
+                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Coding Specification</label>
+                    <textarea id="chat-plan-spec" rows="7" placeholder="Describe the feature or task in as much detail as possible…"
+                        style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px;font-family:inherit;font-size:14px;resize:vertical;box-sizing:border-box;"></textarea>
+                </div>
+                <div class="plan-section">
+                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Options</label>
+                    <div class="plan-option-row">
+                        <input type="checkbox" id="chat-plan-unit-tests">
+                        <label for="chat-plan-unit-tests">Write unit tests for each step</label>
+                    </div>
+                </div>
+                <div class="plan-section">
+                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">GitHub push strategy</label>
+                    <div class="plan-option-row">
+                        <input type="radio" name="chat-plan-push" id="chat-plan-push-none" value="none" checked>
+                        <label for="chat-plan-push-none">None (no git push tasks)</label>
+                    </div>
+                    <div class="plan-option-row">
+                        <input type="radio" name="chat-plan-push" id="chat-plan-push-each" value="each_step">
+                        <label for="chat-plan-push-each">Push after each step (+ tests)</label>
+                    </div>
+                    <div class="plan-option-row">
+                        <input type="radio" name="chat-plan-push" id="chat-plan-push-end" value="end_only">
+                        <label for="chat-plan-push-end">Single push at the end</label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button style="background:#f3f4f6;padding:8px 16px;border-radius:5px;border:1px solid #ddd;font-size:14px;cursor:pointer;" id="chat-run-plan-cancel">Cancel</button>
+                <button class="btn-modal-confirm" id="btn-chat-run-plan-confirm" disabled>Enqueue Dev Plan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Run Dev Plan modal -->
+    <div class="modal-overlay" id="run-plan-modal">
+        <div class="modal-box" style="max-width:600px;">
+            <div class="modal-header">
+                <h3>⚙ Run Dev Plan</h3>
+                <button class="modal-close" id="run-plan-close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="plan-section">
+                    <label>Working Directory</label>
+                    <div class="plan-dir-row">
+                        <input type="text" id="plan-directory" placeholder="/path/to/project">
+                        <button type="button" class="btn-browse" id="btn-run-plan-browse" title="Browse folders">⋯</button>
+                    </div>
+                </div>
+                <div class="plan-section">
+                    <label>Coding Specification</label>
+                    <textarea id="plan-spec" placeholder="Describe what you want to build. Claude will analyze this, define sequential implementation steps, and enqueue each as a separate Claude Pool task."></textarea>
+                </div>
+                <div class="plan-section">
+                    <label>Options</label>
+                    <div class="plan-option-row">
+                        <input type="checkbox" id="plan-unit-tests">
+                        <label for="plan-unit-tests">Write unit tests for each step</label>
+                    </div>
+                </div>
+                <div class="plan-section">
+                    <label>Push Strategy</label>
+                    <div class="plan-option-row">
+                        <input type="radio" name="plan-push" id="plan-push-none" value="none" checked>
+                        <label for="plan-push-none">No git push</label>
+                    </div>
+                    <div class="plan-option-row">
+                        <input type="radio" name="plan-push" id="plan-push-each" value="each">
+                        <label for="plan-push-each">Push after each step</label>
+                    </div>
+                    <div class="plan-option-row">
+                        <input type="radio" name="plan-push" id="plan-push-end" value="end">
+                        <label for="plan-push-end">Push at end only</label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button style="background:#f3f4f6;padding:8px 16px;border-radius:5px;border:1px solid #ddd;font-size:14px;cursor:pointer;" id="run-plan-cancel">Cancel</button>
+                <button class="btn-modal-confirm" id="btn-run-plan-confirm">Enqueue Dev Plan</button>
             </div>
         </div>
     </div>
@@ -702,13 +1419,48 @@
             } else if (message.event === 'task_updated') {
                 updateTask(message.task);
                 logEvent(`Task ${message.task.id} updated: ${message.task.status}`, 'info');
+                if (currentTaskId && message.task.id === currentTaskId) {
+                    loadTaskView(currentTaskId);
+                }
+                if (currentChatId && message.task.bucket_id === currentChatId) {
+                    const bubble = document.querySelector(`[data-msg-id="${message.task.id}"]`);
+                    if (bubble) {
+                        updateBubble(bubble, message.task);
+                    } else {
+                        // Message exists on server but not in DOM (created in another tab)
+                        fetchMessages(currentChatId);
+                    }
+                }
             } else if (message.event === 'task_created') {
                 logEvent(`Task ${message.task.id} created`, 'info');
                 fetchTasks();
             } else if (message.event === 'task_skipped') {
                 logEvent(`Task ${message.task.id} skipped`, 'info');
                 fetchTasks();
+            } else if (message.event === 'chat_created') {
+                logEvent(`Chat created: ${message.chat.label}`, 'info');
+                fetchChats();
+            } else if (message.event === 'chat_deleted') {
+                logEvent(`Chat deleted: ${message.id} (${message.deleted_tasks} tasks removed)`, 'info');
+                fetchChats();
+                fetchTasks();
+                // If we're currently viewing the deleted chat, go back to dashboard
+                if (currentChatId && currentChatId === message.id) { navigate(''); }
+            } else if (message.event === 'chat_message') {
+                if (currentChatId && message.chat_id === currentChatId) {
+                    // Skip if we already added this message optimistically (same id in DOM)
+                    if (!document.querySelector(`[data-msg-id="${message.message?.id}"]`)) {
+                        fetchMessages(currentChatId);
+                    }
+                }
             }
+        }
+
+        function updateChatSuspensionBanner(status) {
+            const banner = document.getElementById('chat-suspended-banner');
+            if (!banner) return;
+            const suspended = status.suspended_until && new Date(status.suspended_until) > new Date();
+            banner.style.display = suspended ? 'block' : 'none';
         }
 
         function updatePoolStatus(status) {
@@ -718,6 +1470,37 @@
             document.getElementById('completed-tasks').textContent = status.completed_tasks;
             document.getElementById('failed-tasks').textContent = status.failed_tasks;
             document.getElementById('skipped-tasks').textContent = status.skipped_tasks;
+            updateChatSuspensionBanner(status);
+
+            const banner = document.getElementById('claude-status-banner');
+            const statusText = document.getElementById('claude-status-text');
+            const rateLimitDetail = document.getElementById('claude-rate-limit-detail');
+            const btnRetry = document.getElementById('btn-instant-retry');
+
+            if (banner && statusText) {
+                banner.className = 'claude-status-container';
+                if (status.claude_status === 'rate_limit') {
+                    banner.classList.add('rate_limit');
+                    statusText.textContent = 'Rate Limit';
+                    if (rateLimitDetail) {
+                        rateLimitDetail.style.display = 'block';
+                        rateLimitDetail.textContent = status.rate_limit_result || 'Rate limit active';
+                    }
+                    if (btnRetry) {
+                        btnRetry.style.display = 'inline-block';
+                    }
+                } else if (status.claude_status === 'running') {
+                    banner.classList.add('running');
+                    statusText.textContent = 'Running';
+                    if (rateLimitDetail) rateLimitDetail.style.display = 'none';
+                    if (btnRetry) btnRetry.style.display = 'none';
+                } else {
+                    banner.classList.add('waiting');
+                    statusText.textContent = 'Waiting for requests';
+                    if (rateLimitDetail) rateLimitDetail.style.display = 'none';
+                    if (btnRetry) btnRetry.style.display = 'none';
+                }
+            }
         }
 
         function logEvent(message, level = 'info') {
@@ -741,29 +1524,95 @@
         async function fetchTasks() {
             try {
                 const response = await fetch('/api/tasks');
-                const tasks = await response.json();
-                renderTasks(tasks);
+                lastTasks = await response.json();
+                renderTasks(lastTasks);
             } catch (error) {
                 logEvent(`Error fetching tasks: ${error}`, 'error');
             }
         }
 
+        async function fetchPoolStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const status = await response.json();
+                updatePoolStatus(status);
+            } catch (error) {
+                logEvent(`Error fetching pool status: ${error}`, 'error');
+            }
+        }
+
+        async function instantRetry() {
+            try {
+                const btn = document.getElementById('btn-instant-retry');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = 'Retrying...';
+                }
+                const response = await fetch('/api/pool/instant-retry', { method: 'POST' });
+                if (response.ok) {
+                    logEvent('Instant retry triggered: pool suspension cleared', 'info');
+                    await fetchPoolStatus();
+                    await fetchTasks();
+                } else {
+                    const error = await response.json();
+                    logEvent(`Error triggering instant retry: ${error.detail}`, 'error');
+                }
+            } catch (error) {
+                logEvent(`Error triggering instant retry: ${error}`, 'error');
+            } finally {
+                const btn = document.getElementById('btn-instant-retry');
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Instant Retry';
+                }
+            }
+        }
+
+        function bucketBadge(bucketId) {
+            if (!bucketId || bucketId === 'main') {
+                return '<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:#e5e7eb;color:#555;margin-left:6px;font-weight:600;">CLI</span>';
+            }
+            const label = chatLabelMap[bucketId] || bucketId;
+            return `<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:#ede9fe;color:#6d28d9;margin-left:6px;font-weight:600;cursor:pointer;" onclick="navigate('chat/${bucketId}')">Chat: ${escapeHtml(label)}</span>`;
+        }
+
+        function setTaskFilter(status) {
+            if (status === 'all') {
+                taskStatusFilters = new Set(['all']);
+            } else {
+                taskStatusFilters.delete('all');
+                if (taskStatusFilters.has(status)) {
+                    taskStatusFilters.delete(status);
+                } else {
+                    taskStatusFilters.add(status);
+                }
+                if (taskStatusFilters.size === 0) taskStatusFilters = new Set(['all']);
+            }
+            document.querySelectorAll('.task-filter-pill').forEach(p => {
+                p.classList.toggle('active', taskStatusFilters.has(p.dataset.status));
+            });
+            renderTasks(lastTasks);
+        }
+
         function renderTasks(tasks) {
-            if (!tasks.length) {
-                taskList.innerHTML = '<div class="empty-state">No tasks yet</div>';
+            const filtered = taskStatusFilters.has('all')
+                ? tasks
+                : tasks.filter(t => taskStatusFilters.has(t.status));
+            if (!filtered.length) {
+                taskList.innerHTML = taskStatusFilters.has('all')
+                    ? '<div class="empty-state">No tasks yet</div>'
+                    : '<div class="empty-state">No tasks match this filter.</div>';
                 return;
             }
+            // shadow tasks with filtered for the rest of the function
+            tasks = filtered;
 
             taskList.innerHTML = tasks.map(task => `
-                <div class="task-item" data-task-id="${task.id}">
+                <div class="task-item" data-task-id="${task.id}" onclick="navigate('task/${task.id}')" style="cursor:pointer;">
                     <div class="task-info">
                         <div class="task-id">${task.id}</div>
-                        <div class="task-prompt">${task.prompt.substring(0, 100)}...</div>
-                        <span class="task-status ${task.status}">${task.status}</span>
-                    </div>
-                    <div class="task-actions">
-                        ${task.status === 'failed' ? `<button class="btn-success" onclick="retryTask('${task.id}')">Retry</button>` : ''}
-                        ${task.status === 'running' ? `<button class="btn-success" onclick="skipTask('${task.id}')">Skip</button>` : ''}
+                        <div class="task-prompt">${escapeHtml(task.prompt.substring(0, 100))}${task.prompt.length > 100 ? '…' : ''}</div>
+                        <span class="task-status ${task.status}">${task.status}</span>${bucketBadge(task.bucket_id)}
                     </div>
                 </div>
             `).join('');
@@ -829,12 +1678,12 @@
             }
         });
 
-        // Initial fetch and connect
-        fetchTasks();
+        // Fetch chats first so chatLabelMap is ready before tasks render
+        fetchChats().then(fetchTasks).then(fetchPoolStatus);
         connectWebSocket();
 
-        // Refresh task list every 5 seconds
-        setInterval(fetchTasks, 5000);
+        // Refresh every 5 seconds (chats first so chatLabelMap stays fresh)
+        setInterval(() => { if (!currentChatId) { fetchChats().then(fetchTasks); fetchPoolStatus(); } }, 5000);
 
         /* ---- Directory Browser Modal ---- */
         const dirModal = document.getElementById('dir-modal');
@@ -926,19 +1775,822 @@
         // Make loadDir callable from inline HTML
         window.loadDir = loadDir;
 
-        btnBrowseDir.addEventListener('click', () => openDirModal('/home/ai_agent'));
+        // Fetch home dir from server so browse starts at the real home on any platform
+        let defaultBrowsePath = '';
+        fetch('/api/directories').then(r => r.json()).then(d => { defaultBrowsePath = d.current; }).catch(() => {});
+
+        // 'task' fills #directory; 'plan' fills #plan-directory
+        let dirModalTarget = 'task';
+
+        btnBrowseDir.addEventListener('click', () => {
+            dirModalTarget = 'task';
+            openDirModal(defaultBrowsePath || '/');
+        });
         btnDirModalClose.addEventListener('click', closeDirModal);
         btnDirModalCancel.addEventListener('click', closeDirModal);
         btnDirModalConfirm.addEventListener('click', () => {
-            const dirInput = document.getElementById('directory');
-            dirInput.value = selectedPath;
+            const targetMap = { 'plan': 'plan-directory', 'new-chat': 'new-chat-directory' };
+            const targetId = targetMap[dirModalTarget] || 'directory';
+            document.getElementById(targetId).value = selectedPath;
             closeDirModal();
         });
 
-        // Close modal on overlay click
         dirModal.addEventListener('click', (e) => {
             if (e.target === dirModal) closeDirModal();
         });
+
+        /* ---- Run Dev Plan ---- */
+        const runPlanModal = document.getElementById('run-plan-modal');
+
+        function openRunPlanModal() { runPlanModal.classList.add('active'); }
+        function closeRunPlanModal() { runPlanModal.classList.remove('active'); }
+
+        document.getElementById('btn-run-plan').addEventListener('click', openRunPlanModal);
+        document.getElementById('run-plan-close').addEventListener('click', closeRunPlanModal);
+        document.getElementById('run-plan-cancel').addEventListener('click', closeRunPlanModal);
+        runPlanModal.addEventListener('click', (e) => { if (e.target === runPlanModal) closeRunPlanModal(); });
+
+        document.getElementById('btn-run-plan-browse').addEventListener('click', () => {
+            dirModalTarget = 'plan';
+            openDirModal(defaultBrowsePath || '/');
+        });
+
+        function buildOrchestratorPrompt(directory, spec, unitTests, pushStrategy) {
+            const apiBase = window.location.origin;
+            const unitTestsNote = unitTests
+                ? '- Each step prompt MUST include: "Write unit tests for all new code introduced in this step."'
+                : '';
+            const pushNote = pushStrategy === 'each'
+                ? "- Each step prompt MUST end with: \"After completing the implementation, commit and push: git add -A && git commit -m 'feat: <step summary>' && git push\""
+                : pushStrategy === 'end'
+                ? "- The LAST step prompt MUST end with: \"After completing the implementation, commit and push: git add -A && git commit -m 'feat: complete implementation' && git push\""
+                : '';
+
+            return `You are a development planning orchestrator. Do NOT write any code yourself.
+
+Your task: analyze the specification below, break it into sequential implementation steps, and enqueue each step as a separate task via the Claude Pool API.
+
+API ENDPOINT: ${apiBase}/api/tasks
+WORKING DIRECTORY FOR ALL SUBTASKS: ${directory}
+
+CODING SPECIFICATION:
+---
+${spec}
+---
+
+REQUIREMENTS FOR EACH STEP PROMPT:
+- Be specific and self-contained (assume all previous steps are complete)
+- Include enough context so the implementer does not need to re-read the full spec
+${unitTestsNote}
+${pushNote}
+
+HOW TO ENQUEUE A TASK (use the bash tool):
+Run the following Python code for each step (Python is always available):
+
+import urllib.request, json
+step_prompt = """<YOUR STEP PROMPT HERE>"""
+data = json.dumps({"prompt": step_prompt, "directory": "${directory}"}).encode()
+req = urllib.request.Request("${apiBase}/api/tasks", data, {"Content-Type": "application/json"})
+urllib.request.urlopen(req)
+
+PROCESS:
+1. Analyze the specification carefully
+2. Define 3-8 sequential, concrete implementation steps
+3. Enqueue each step using the Python snippet above (run via bash tool)
+4. After all steps are enqueued, output a brief summary of the plan
+
+Do NOT implement any code yourself. Only plan and enqueue.`;
+        }
+
+        /* ======================================================
+           CHAT — SPA Router + Chat Management
+           ====================================================== */
+
+        let currentChatId = null;
+        let currentChatDirectory = '';
+        let currentTaskId = null;
+        let taskStatusFilters = new Set(['all']);
+        let lastTasks = [];
+        const dashboardView = document.getElementById('dashboard-view');
+        const chatView = document.getElementById('chat-view');
+        const taskView = document.getElementById('task-view');
+
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function renderText(text) {
+            if (!text) return '';
+            // Extract fenced code blocks FIRST so the \n→<br> pass never fires inside them
+            const blocks = [];
+            let s = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_m, _lang, code) => {
+                const idx = blocks.length;
+                blocks.push(`<pre><code>${escapeHtml(code)}</code></pre>`);
+                return `\x01${idx}\x01`;
+            });
+            // Escape HTML in the surrounding prose
+            s = escapeHtml(s);
+            // Inline code (the \x01 sentinel prevents false matches across placeholders)
+            s = s.replace(/`([^`\x01]+)`/g, (_m, c) => `<code>${escapeHtml(c)}</code>`);
+            // Bold
+            s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            // Newlines → <br> (prose only; code blocks are already extracted)
+            s = s.replace(/\n/g, '<br>');
+            // Re-insert code blocks
+            if (blocks.length) s = s.replace(/\x01(\d+)\x01/g, (_m, i) => blocks[+i]);
+            return s;
+        }
+
+        /* ---- Router ---- */
+        function navigate(hash) { window.location.hash = hash || ''; }
+
+        function handleRoute() {
+            const hash = window.location.hash.slice(1);
+            const parts = hash.split('/').filter(Boolean);
+            if (parts[0] === 'chat') {
+                showChatView(parts[1]);
+            } else if (parts[0] === 'task') {
+                showTaskView(parts[1]);
+            } else {
+                showDashboardView();
+            }
+        }
+
+        function showDashboardView() {
+            currentChatId = null;
+            currentTaskId = null;
+            dashboardView.style.display = '';
+            chatView.style.display = 'none';
+            taskView.style.display = 'none';
+            fetchChats();
+        }
+
+        function showChatView(chatId) {
+            currentChatId = chatId;
+            currentTaskId = null;
+            dashboardView.style.display = 'none';
+            chatView.style.display = '';
+            taskView.style.display = 'none';
+            loadChatMeta(chatId);
+            fetchMessages(chatId);
+        }
+
+        function showTaskView(taskId) {
+            currentTaskId = taskId;
+            currentChatId = null;
+            dashboardView.style.display = 'none';
+            chatView.style.display = 'none';
+            taskView.style.display = '';
+            loadTaskView(taskId);
+        }
+
+        async function loadTaskView(taskId) {
+            try {
+                const res = await fetch(`/api/tasks/${taskId}`);
+                if (!res.ok) { navigate(''); return; }
+                const task = await res.json();
+                // Header
+                document.getElementById('tv-header-id').textContent = task.id;
+                const hs = document.getElementById('tv-header-status');
+                hs.textContent = task.status;
+                hs.className = `task-status ${task.status}`;
+                // Extra fields
+                document.getElementById('tv-bucket').textContent = task.bucket_id || 'main';
+                document.getElementById('tv-created-at').textContent = task.created_at || '—';
+                document.getElementById('tv-json-output').textContent = task.json_output ? JSON.stringify(task.json_output, null, 2) : '—';
+                // Back button
+                document.getElementById('tv-btn-back').onclick = () => navigate('');
+                // Shared render (populates td-* fields + button visibility)
+                renderTaskDetail(task);
+            } catch (e) {
+                logEvent(`Error loading task: ${e}`, 'error');
+                navigate('');
+            }
+        }
+
+        window.addEventListener('hashchange', handleRoute);
+        handleRoute();
+
+        /* ---- Chat list (dashboard) ---- */
+        let chatLabelMap = {};  // bucket_id → label, updated on every fetchChats()
+
+        async function fetchChats() {
+            try {
+                const res = await fetch('/api/chats');
+                const chats = await res.json();
+                chatLabelMap = {};
+                for (const c of chats) chatLabelMap[c.id] = c.label;
+                if (!currentChatId) renderChatList(chats);
+            } catch (e) { /* ignore */ }
+        }
+
+        function renderChatList(chats) {
+            const el = document.getElementById('chat-list');
+            if (!chats.length) {
+                el.innerHTML = '<div class="empty-state">No chats yet.</div>';
+                return;
+            }
+            el.innerHTML = chats.map(c => `
+                <div class="chat-item">
+                    <span style="font-size:20px;flex-shrink:0;">💬</span>
+                    <div class="chat-item-info" onclick="navigate('chat/${c.id}')" style="cursor:pointer;">
+                        <div class="chat-item-label">${escapeHtml(c.label)}</div>
+                        <div class="chat-item-dir">${escapeHtml(c.directory || '')}</div>
+                    </div>
+                    <span class="chat-item-count">${c.message_count} msg${c.message_count !== 1 ? 's' : ''}</span>
+                    <div class="task-actions">
+                        <button class="btn-primary" style="font-size:12px;padding:5px 10px;" onclick="navigate('chat/${c.id}')">Open</button>
+                        <button class="btn-danger" style="font-size:12px;padding:5px 10px;" onclick="deleteChat('${c.id}','${escapeHtml(c.label)}')">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        window.deleteChat = async function(chatId, label) {
+            if (!confirm(`Delete chat "${label}" and all its messages?`)) return;
+            try {
+                const res = await fetch(`/api/chats/${chatId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    const data = await res.json();
+                    logEvent(`Chat "${label}" deleted (${data.deleted_tasks} tasks removed)`, 'info');
+                    fetchChats();
+                    fetchTasks();
+                } else {
+                    const e = await res.json();
+                    logEvent(`Error deleting chat: ${e.detail}`, 'error');
+                }
+            } catch (e) { logEvent(`Error deleting chat: ${e}`, 'error'); }
+        };
+
+        /* ---- New Chat modal ---- */
+        const newChatModal = document.getElementById('new-chat-modal');
+        function openNewChatModal() { newChatModal.classList.add('active'); }
+        function closeNewChatModal() { newChatModal.classList.remove('active'); }
+
+        document.getElementById('btn-new-chat').addEventListener('click', openNewChatModal);
+        document.getElementById('new-chat-close').addEventListener('click', closeNewChatModal);
+        document.getElementById('new-chat-cancel').addEventListener('click', closeNewChatModal);
+        newChatModal.addEventListener('click', e => { if (e.target === newChatModal) closeNewChatModal(); });
+
+        document.getElementById('btn-new-chat-browse').addEventListener('click', () => {
+            dirModalTarget = 'new-chat';
+            openDirModal(defaultBrowsePath || '/');
+        });
+
+        document.getElementById('btn-new-chat-confirm').addEventListener('click', async () => {
+            const label = document.getElementById('new-chat-label').value.trim();
+            const directory = document.getElementById('new-chat-directory').value.trim();
+            if (!label) { alert('Please enter a chat name.'); return; }
+            if (!directory) { alert('Please specify a working directory.'); return; }
+
+            try {
+                const res = await fetch('/api/chats', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ label, directory }),
+                });
+                if (res.ok) {
+                    const chat = await res.json();
+                    closeNewChatModal();
+                    document.getElementById('new-chat-label').value = '';
+                    document.getElementById('new-chat-directory').value = '';
+                    navigate(`chat/${chat.id}`);
+                } else {
+                    const err = await res.json();
+                    logEvent(`Error creating chat: ${err.detail}`, 'error');
+                }
+            } catch (e) {
+                logEvent(`Error creating chat: ${e}`, 'error');
+            }
+        });
+
+        /* ---- Chat view ---- */
+        async function loadChatMeta(chatId) {
+            try {
+                const res = await fetch('/api/chats');
+                if (!res.ok) { navigate(''); return; }
+                const chats = await res.json();
+                const chat = chats.find(c => c.id === chatId);
+                if (!chat) { navigate(''); return; }  // deleted → back to dashboard
+                document.getElementById('chat-header-label').textContent = chat.label;
+                document.getElementById('chat-header-dir').textContent = chat.directory || '';
+                currentChatDirectory = chat.directory || '';
+                document.getElementById('chat-plan-dir-display').textContent = currentChatDirectory || '(no directory)';
+            } catch (e) { /* ignore */ }
+        }
+
+        async function fetchMessages(chatId) {
+            try {
+                const res = await fetch(`/api/chats/${chatId}/messages`);
+                if (!res.ok) { navigate(''); return; }
+                renderMessages(await res.json());
+            } catch (e) { /* ignore */ }
+        }
+
+        function renderMessages(messages) {
+            const thread = document.getElementById('message-thread');
+            if (!messages.length) {
+                thread.innerHTML = '<div class="empty-state">No messages yet. Send one below.</div>';
+                return;
+            }
+            const atBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40;
+            thread.innerHTML = messages.map(m => {
+                const content = m.content || '';
+                const durationStr = m.duration_ms != null
+                    ? `${(m.duration_ms / 1000).toFixed(1)}s` : '';
+                const thinking = m.status === 'running'
+                    ? '<div class="message-result" style="color:#999;">⏳ Claude is thinking…</div>' : '';
+                const responseHtml = m.assistant_response && !thinking
+                    ? `<div class="message-result">${renderText(m.assistant_response)}</div>` : thinking;
+                const retryBtn = m.status === 'failed'
+                    ? `<button class="btn-success" style="font-size:12px;padding:5px 10px;" onclick="event.stopPropagation();retryMessage('${m.id}')">Retry</button>` : '';
+                return `
+                    <div class="message-bubble ${m.status}" data-msg-id="${m.id}" style="cursor:pointer;" onclick="navigate('task/${m.id}')">
+                        <div class="message-prompt">${escapeHtml(content.substring(0, 200))}${content.length > 200 ? '…' : ''}</div>
+                        <div class="message-meta">
+                            <span class="task-status ${m.status}">${m.status}</span>
+                            ${durationStr ? `<span>${durationStr}</span>` : ''}
+                        </div>
+                        ${responseHtml}
+                        ${retryBtn ? `<div class="message-actions">${retryBtn}</div>` : ''}
+                    </div>`;
+            }).join('');
+            if (atBottom) thread.scrollTop = thread.scrollHeight;
+        }
+
+        /* Add a temporary optimistic bubble while the POST is in-flight. */
+        function addTempBubble(tempId, content) {
+            const thread = document.getElementById('message-thread');
+            const atBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40;
+            const emptyState = thread.querySelector('.empty-state');
+            if (emptyState) emptyState.remove();
+            const div = document.createElement('div');
+            div.className = 'message-bubble pending';
+            div.dataset.msgId = tempId;
+            div.innerHTML = `
+                <div class="message-prompt">${escapeHtml(content.substring(0, 200))}${content.length > 200 ? '…' : ''}</div>
+                <div class="message-meta"><span class="task-status pending">pending</span></div>
+                <div class="message-result" style="color:#999;">⏳ Claude is thinking…</div>`;
+            thread.appendChild(div);
+            if (atBottom) thread.scrollTop = thread.scrollHeight;
+            return div;
+        }
+
+        /* Patch an existing bubble in-place from a WS task_updated payload. */
+        function updateBubble(el, task) {
+            const status = task.status;
+            el.className = `message-bubble ${status}`;
+            if (task.id) el.dataset.msgId = task.id;
+
+            const metaEl = el.querySelector('.message-meta');
+            const durationStr = task.duration_ms != null ? `${(task.duration_ms / 1000).toFixed(1)}s` : '';
+            if (metaEl) {
+                metaEl.innerHTML = `<span class="task-status ${status}">${status}</span>${durationStr ? `<span>${durationStr}</span>` : ''}`;
+            }
+
+            el.querySelectorAll('.message-result, .message-actions').forEach(e => e.remove());
+
+            const thinking = status === 'running';
+            if (thinking) {
+                const d = document.createElement('div');
+                d.className = 'message-result';
+                d.style.color = '#999';
+                d.textContent = '⏳ Claude is thinking…';
+                el.appendChild(d);
+            } else if (task.result) {
+                const d = document.createElement('div');
+                d.className = 'message-result';
+                d.innerHTML = renderText(task.result);
+                el.appendChild(d);
+            } else if (status === 'failed' || status === 'skipped') {
+                const d = document.createElement('div');
+                d.className = 'message-result';
+                d.style.color = '#991b1b';
+                d.textContent = `Error (exit code ${task.exit_code ?? '?'})`;
+                el.appendChild(d);
+            }
+            if (status === 'failed') {
+                const a = document.createElement('div');
+                a.className = 'message-actions';
+                a.innerHTML = `<button class="btn-success" style="font-size:12px;padding:5px 10px;" onclick="retryMessage('${task.id}')">Retry</button>`;
+                el.appendChild(a);
+            }
+        }
+
+        window.retryMessage = async function(taskId) {
+            try {
+                await fetch(`/api/tasks/${taskId}/retry`, { method: 'POST' });
+                fetchMessages(currentChatId);
+            } catch (e) { /* ignore */ }
+        };
+
+        document.getElementById('btn-back').addEventListener('click', () => navigate(''));
+
+        document.getElementById('btn-delete-chat').addEventListener('click', async () => {
+            if (!currentChatId) return;
+            if (!confirm('Delete this chat and all its messages?')) return;
+            try {
+                const res = await fetch(`/api/chats/${currentChatId}`, { method: 'DELETE' });
+                if (res.ok) { navigate(''); }
+                else { const e = await res.json(); logEvent(`Error: ${e.detail}`, 'error'); }
+            } catch (e) { logEvent(`Error deleting chat: ${e}`, 'error'); }
+        });
+
+        document.getElementById('btn-send-message').addEventListener('click', async () => {
+            const input = document.getElementById('chat-input');
+            const prompt = input.value.trim();
+            if (!prompt || !currentChatId) return;
+            input.value = '';
+
+            // Optimistic bubble — visible immediately while the request is in-flight
+            const tempId = `temp-${Date.now()}`;
+            const tempBubble = addTempBubble(tempId, prompt);
+
+            try {
+                const res = await fetch(`/api/chats/${currentChatId}/messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt }),
+                });
+                if (res.ok) {
+                    const msg = await res.json();
+                    tempBubble.dataset.msgId = msg.id;  // swap temp → real id
+                } else {
+                    tempBubble.remove();
+                    input.value = prompt;  // restore on failure
+                    const e = await res.json();
+                    logEvent(`Error: ${e.detail}`, 'error');
+                }
+            } catch (e) {
+                tempBubble.remove();
+                input.value = prompt;
+                logEvent(`Error sending message: ${e}`, 'error');
+            }
+        });
+
+        document.getElementById('chat-input').addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById('btn-send-message').click();
+            }
+        });
+
+        /* ---- Chat — Run Dev Plan ---- */
+        const chatRunPlanModal = document.getElementById('chat-run-plan-modal');
+        const chatPlanSpecInput = document.getElementById('chat-plan-spec');
+        const btnChatRunPlanConfirm = document.getElementById('btn-chat-run-plan-confirm');
+
+        function openChatRunPlanModal() { chatRunPlanModal.classList.add('active'); }
+        function closeChatRunPlanModal() {
+            chatRunPlanModal.classList.remove('active');
+            chatPlanSpecInput.value = '';
+            btnChatRunPlanConfirm.disabled = true;
+        }
+
+        document.getElementById('btn-chat-run-plan').addEventListener('click', openChatRunPlanModal);
+        document.getElementById('chat-run-plan-close').addEventListener('click', closeChatRunPlanModal);
+        document.getElementById('chat-run-plan-cancel').addEventListener('click', closeChatRunPlanModal);
+        chatRunPlanModal.addEventListener('click', e => { if (e.target === chatRunPlanModal) closeChatRunPlanModal(); });
+
+        chatPlanSpecInput.addEventListener('input', () => {
+            btnChatRunPlanConfirm.disabled = !chatPlanSpecInput.value.trim();
+        });
+
+        function buildChatOrchestratorPrompt(directory, spec, unitTests, pushStrategy) {
+            const apiOrigin = window.location.origin;
+            const bucketId = currentChatId;
+            const unitTestsNote = unitTests
+                ? '- Each step prompt MUST include: "Write unit tests for all new code introduced in this step."'
+                : '';
+            const pushNote = pushStrategy === 'each_step'
+                ? "- Each step prompt MUST end with: \"After completing the implementation, commit and push: git add -A && git commit -m 'feat: <step summary>' && git push\""
+                : pushStrategy === 'end_only'
+                ? "- The LAST step prompt MUST end with: \"After completing the implementation, commit and push: git add -A && git commit -m 'feat: complete implementation' && git push\""
+                : '';
+
+            return `You are a development planning orchestrator. Do NOT write any code yourself.
+
+Your task: analyze the specification below, break it into sequential implementation steps, and enqueue each step as a separate task in this chat via the Claude Pool API.
+
+API ENDPOINT: ${apiOrigin}/api/chats/${bucketId}/messages
+WORKING DIRECTORY FOR ALL SUBTASKS: ${directory}
+
+CODING SPECIFICATION:
+---
+${spec}
+---
+
+REQUIREMENTS FOR EACH STEP PROMPT:
+- Be specific and self-contained (assume all previous steps are complete)
+- Include enough context so the implementer does not need to re-read the full spec
+${unitTestsNote}
+${pushNote}
+
+HOW TO ENQUEUE A TASK (use the bash tool):
+Run the following Python code for each step (Python is always available):
+
+import urllib.request, json
+step_prompt = """<YOUR STEP PROMPT HERE>"""
+data = json.dumps({"prompt": step_prompt}).encode()
+req = urllib.request.Request("${apiOrigin}/api/chats/${bucketId}/messages", data, {"Content-Type": "application/json"})
+urllib.request.urlopen(req)
+
+PROCESS:
+1. Analyze the specification carefully
+2. Define 3-8 sequential, concrete implementation steps
+3. Enqueue each step using the Python snippet above (run via bash tool)
+4. After all steps are enqueued, output a brief summary of the plan
+
+Do NOT implement any code yourself. Only plan and enqueue.`;
+        }
+
+        btnChatRunPlanConfirm.addEventListener('click', async () => {
+            const spec = chatPlanSpecInput.value.trim();
+            const unitTests = document.getElementById('chat-plan-unit-tests').checked;
+            const pushStrategy = document.querySelector('input[name="chat-plan-push"]:checked')?.value || 'none';
+            if (!spec || !currentChatId) return;
+
+            const prompt = buildChatOrchestratorPrompt(currentChatDirectory, spec, unitTests, pushStrategy);
+            btnChatRunPlanConfirm.disabled = true;
+            btnChatRunPlanConfirm.textContent = 'Enqueuing…';
+
+            try {
+                const res = await fetch(`/api/chats/${currentChatId}/messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt }),
+                });
+                if (res.ok) {
+                    closeChatRunPlanModal();
+                    fetchMessages(currentChatId);
+                } else {
+                    const e = await res.json();
+                    logEvent(`Error: ${e.detail}`, 'error');
+                }
+            } catch (e) {
+                logEvent(`Error: ${e}`, 'error');
+            } finally {
+                btnChatRunPlanConfirm.disabled = false;
+                btnChatRunPlanConfirm.textContent = 'Enqueue Dev Plan';
+            }
+        });
+
+        document.getElementById('btn-run-plan-confirm').addEventListener('click', async () => {
+            const directory = document.getElementById('plan-directory').value.trim();
+            const spec = document.getElementById('plan-spec').value.trim();
+            const unitTests = document.getElementById('plan-unit-tests').checked;
+            const pushStrategy = document.querySelector('input[name="plan-push"]:checked')?.value || 'none';
+
+            if (!directory) { alert('Please specify a working directory.'); return; }
+            if (!spec) { alert('Please enter a coding specification.'); return; }
+
+            const prompt = buildOrchestratorPrompt(directory, spec, unitTests, pushStrategy);
+            const btn = document.getElementById('btn-run-plan-confirm');
+            btn.disabled = true;
+            btn.textContent = 'Enqueueing...';
+
+            try {
+                const response = await fetch('/api/tasks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, directory })
+                });
+                if (response.ok) {
+                    const task = await response.json();
+                    logEvent(`Dev Plan orchestrator enqueued: ${task.id}`, 'info');
+                    closeRunPlanModal();
+                    fetchTasks();
+                } else {
+                    const error = await response.json();
+                    logEvent(`Error enqueueing Dev Plan: ${error.detail}`, 'error');
+                }
+            } catch (error) {
+                logEvent(`Error enqueueing Dev Plan: ${error}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Enqueue Dev Plan';
+            }
+        });
+
+        /* ---- Task View ---- */
+        let tdEditMode = false;
+        let tdOriginalPrompt = '';
+        let tdOriginalModel = '';
+        let tdOriginalEffort = '';
+
+        function renderTaskDetail(task) {
+            document.getElementById('td-id').textContent = task.id;
+            const statusEl = document.getElementById('td-status');
+            statusEl.textContent = task.status;
+            statusEl.className = `task-status ${task.status}`;
+            document.getElementById('td-directory').textContent = task.directory;
+            const promptEl = document.getElementById('td-prompt');
+            promptEl.value = task.prompt;
+            promptEl.readOnly = true;
+            document.getElementById('td-args').textContent = task.args && task.args.length ? task.args.join(' ') : '—';
+            document.getElementById('td-exit-code').textContent = task.exit_code !== null && task.exit_code !== undefined ? task.exit_code : '—';
+            document.getElementById('td-duration').textContent = task.duration_ms !== null && task.duration_ms !== undefined ? `${(task.duration_ms / 1000).toFixed(1)}s` : '—';
+            document.getElementById('td-retry-count').textContent = task.retry_count || 0;
+            const resultEl = document.getElementById('td-result');
+            if (task.json_output && task.json_output.result) {
+                resultEl.innerHTML = renderText(task.json_output.result);
+            } else {
+                resultEl.textContent = '—';
+            }
+            tdOriginalPrompt = task.prompt;
+            tdOriginalModel = '';
+            tdOriginalEffort = '';
+            if (task.args) {
+                const mi = task.args.indexOf('--model');
+                if (mi >= 0 && mi + 1 < task.args.length) tdOriginalModel = task.args[mi + 1];
+                const ei = task.args.indexOf('--effort');
+                if (ei >= 0 && ei + 1 < task.args.length) tdOriginalEffort = task.args[ei + 1];
+            }
+            // Button visibility
+            const canSkip = task.status === 'pending' || task.status === 'rate_limit_retry';
+            const canRetry = task.status === 'failed' || task.status === 'success';
+            const canResume = task.status === 'skipped';
+            const canEdit = task.status === 'pending';
+            const skipBtn = document.getElementById('td-btn-skip');
+            const retryBtn = document.getElementById('td-btn-retry');
+            const resumeBtn = document.getElementById('td-btn-resume');
+            skipBtn.style.display = canSkip ? 'inline-block' : 'none';
+            skipBtn.dataset.canSkip = canSkip;
+            retryBtn.style.display = canRetry ? 'inline-block' : 'none';
+            retryBtn.dataset.canRetry = canRetry;
+            resumeBtn.style.display = canResume ? 'inline-block' : 'none';
+            resumeBtn.dataset.canResume = canResume;
+            document.getElementById('td-btn-delete').style.display = 'inline-block';
+            document.getElementById('td-btn-duplicate').style.display = 'inline-block';
+            document.getElementById('td-btn-edit').style.display = canEdit ? 'inline-block' : 'none';
+            document.getElementById('td-btn-save').style.display = 'none';
+            document.getElementById('td-btn-cancel-edit').style.display = 'none';
+            document.getElementById('td-edit-row').style.display = 'none';
+            // Reset edit selects
+            document.getElementById('td-edit-model').value = tdOriginalModel;
+            document.getElementById('td-edit-effort').value = tdOriginalEffort;
+        }
+
+        function tdToggleEdit() {
+            tdEditMode = true;
+            document.getElementById('td-prompt').readOnly = false;
+            document.getElementById('td-prompt').focus();
+            document.getElementById('td-edit-row').style.display = 'grid';
+            // Swap action buttons
+            document.getElementById('td-btn-skip').style.display = 'none';
+            document.getElementById('td-btn-retry').style.display = 'none';
+            document.getElementById('td-btn-resume').style.display = 'none';
+            document.getElementById('td-btn-delete').style.display = 'none';
+            document.getElementById('td-btn-duplicate').style.display = 'none';
+            document.getElementById('td-btn-edit').style.display = 'none';
+            document.getElementById('td-btn-save').style.display = 'inline-block';
+            document.getElementById('td-btn-cancel-edit').style.display = 'inline-block';
+        }
+
+        function tdCancelEdit() {
+            tdEditMode = false;
+            document.getElementById('td-prompt').readOnly = true;
+            document.getElementById('td-prompt').value = tdOriginalPrompt;
+            document.getElementById('td-edit-model').value = tdOriginalModel;
+            document.getElementById('td-edit-effort').value = tdOriginalEffort;
+            document.getElementById('td-edit-row').style.display = 'none';
+            document.getElementById('td-btn-save').style.display = 'none';
+            document.getElementById('td-btn-cancel-edit').style.display = 'none';
+            // Restore buttons to their pre-edit visibility (renderTaskDetail already set them)
+            document.getElementById('td-btn-delete').style.display = 'inline-block';
+            document.getElementById('td-btn-duplicate').style.display = 'inline-block';
+            document.getElementById('td-btn-edit').style.display = 'inline-block';
+            // Skip/Retry/Resume keep their status-driven visibility from renderTaskDetail
+            const skipBtn = document.getElementById('td-btn-skip');
+            const retryBtn = document.getElementById('td-btn-retry');
+            const resumeBtn = document.getElementById('td-btn-resume');
+            if (skipBtn.dataset.canSkip === 'true') skipBtn.style.display = 'inline-block';
+            if (retryBtn.dataset.canRetry === 'true') retryBtn.style.display = 'inline-block';
+            if (resumeBtn.dataset.canResume === 'true') resumeBtn.style.display = 'inline-block';
+        }
+
+        async function tdSaveTask() {
+            if (!currentTaskId) return;
+            const prompt = document.getElementById('td-prompt').value.trim();
+            if (!prompt) { alert('Prompt cannot be empty.'); return; }
+            const model = document.getElementById('td-edit-model').value;   // "" = default
+            const effort = document.getElementById('td-edit-effort').value; // "" = default
+            try {
+                const body = { prompt };
+                // Only send model/effort when they changed; send null to clear a previously set value
+                if (model !== tdOriginalModel) body.model = model || null;
+                if (effort !== tdOriginalEffort) body.effort = effort || null;
+                const res = await fetch(`/api/tasks/${currentTaskId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (res.ok) {
+                    logEvent(`Task ${currentTaskId} updated`, 'info');
+                    fetchTasks();
+                    loadTaskView(currentTaskId); // exits edit mode via full re-render
+                } else {
+                    const err = await res.json();
+                    alert(`Error: ${err.detail}`);
+                    logEvent(`Error updating task: ${err.detail}`, 'error');
+                }
+            } catch (e) {
+                alert(`Error saving task: ${e}`);
+                logEvent(`Error updating task: ${e}`, 'error');
+            }
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && tdEditMode) tdCancelEdit();
+        });
+
+        async function tdSkipTask() {
+            if (!currentTaskId) return;
+            try {
+                const res = await fetch(`/api/tasks/${currentTaskId}/skip`, { method: 'POST' });
+                if (res.ok) {
+                    logEvent(`Task ${currentTaskId} skipped`, 'info');
+                    navigate('');
+                    fetchTasks();
+                } else {
+                    const err = await res.json();
+                    logEvent(`Error skipping task: ${err.detail}`, 'error');
+                }
+            } catch (e) {
+                logEvent(`Error skipping task: ${e}`, 'error');
+            }
+        }
+
+        async function tdRetryTask() {
+            if (!currentTaskId) return;
+            try {
+                const res = await fetch(`/api/tasks/${currentTaskId}/retry`, { method: 'POST' });
+                if (res.ok) {
+                    logEvent(`Task ${currentTaskId} queued for retry`, 'info');
+                    navigate('');
+                    fetchTasks();
+                } else {
+                    const err = await res.json();
+                    logEvent(`Error retrying task: ${err.detail}`, 'error');
+                }
+            } catch (e) {
+                logEvent(`Error retrying task: ${e}`, 'error');
+            }
+        }
+
+        async function tdResumeTask() {
+            if (!currentTaskId) return;
+            try {
+                const res = await fetch(`/api/tasks/${currentTaskId}/retry`, { method: 'POST' });
+                if (res.ok) {
+                    logEvent(`Task ${currentTaskId} resumed`, 'info');
+                    loadTaskView(currentTaskId);
+                    fetchTasks();
+                } else {
+                    const err = await res.json();
+                    logEvent(`Error resuming task: ${err.detail}`, 'error');
+                }
+            } catch (e) {
+                logEvent(`Error resuming task: ${e}`, 'error');
+            }
+        }
+
+        async function tdDeleteTask() {
+            if (!currentTaskId || !confirm('Delete this task?')) return;
+            try {
+                const res = await fetch(`/api/tasks/${currentTaskId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    logEvent(`Task ${currentTaskId} deleted`, 'info');
+                    navigate('');
+                    fetchTasks();
+                } else {
+                    const err = await res.json();
+                    logEvent(`Error deleting task: ${err.detail}`, 'error');
+                }
+            } catch (e) {
+                logEvent(`Error deleting task: ${e}`, 'error');
+            }
+        }
+
+        async function tdDuplicateTask() {
+            if (!currentTaskId) return;
+            try {
+                const res = await fetch(`/api/tasks/${currentTaskId}/duplicate`, { method: 'POST' });
+                if (res.ok) {
+                    const task = await res.json();
+                    logEvent(`Task duplicated: ${task.id}`, 'info');
+                    navigate('');
+                    fetchTasks();
+                } else {
+                    const err = await res.json();
+                    logEvent(`Error duplicating task: ${err.detail}`, 'error');
+                }
+            } catch (e) {
+                logEvent(`Error duplicating task: ${e}`, 'error');
+            }
+        }
     </script>
 </body>
 </html>

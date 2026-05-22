@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from claude_pool.executor import TaskExecutor
-from claude_pool.models import PoolState, Task
+from claude_pool.models import Bucket, PoolState, Task
 
 
 @pytest.fixture
@@ -533,3 +533,86 @@ async def test_retry_count_reset_suspension_expired_with_pending(temp_pool_file:
     assert executor.pool.retry_count == 0
     assert captured_task is not None
     assert captured_task.id == "task_new"
+
+
+# ---------------------------------------------------------------------------
+# delete_bucket tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_delete_bucket_main_raises(temp_pool_file: Path):
+    """delete_bucket('main') must raise ValueError — the main bucket is immutable."""
+    executor = TaskExecutor(temp_pool_file)
+    with pytest.raises(ValueError, match="main"):
+        executor.delete_bucket("main")
+
+
+@pytest.mark.asyncio
+async def test_delete_bucket_removes_bucket_and_tasks(temp_pool_file: Path):
+    """delete_bucket removes the bucket entry and all its tasks, leaves other buckets intact."""
+    executor = TaskExecutor(temp_pool_file)
+    executor.pool.buckets["chat_x"] = Bucket(id="chat_x", type="chat", label="Test Chat")
+
+    task_main = Task(id="main_task", prompt="main task", directory=Path("/tmp"), bucket_id="main")
+    task_chat1 = Task(id="chat_task_1", prompt="chat 1", directory=Path("/tmp"), bucket_id="chat_x")
+    task_chat2 = Task(id="chat_task_2", prompt="chat 2", directory=Path("/tmp"), bucket_id="chat_x")
+    executor.pool.tasks = [task_main, task_chat1, task_chat2]
+
+    removed = executor.delete_bucket("chat_x")
+
+    assert removed == 2
+    assert "chat_x" not in executor.pool.buckets
+    # Only the main-bucket task survives
+    assert len(executor.pool.tasks) == 1
+    assert executor.pool.tasks[0].id == "main_task"
+    # main bucket must still be present
+    assert "main" in executor.pool.buckets
+
+
+@pytest.mark.asyncio
+async def test_delete_bucket_skips_running_task_and_leaves_consistent_queue(temp_pool_file: Path):
+    """When the currently-running task belongs to the deleted bucket:
+    - skip_requested is set so the executor loop abandons it
+    - ALL bucket tasks (including the running one) are removed from pool.tasks
+    - Tasks from other buckets are untouched → queue is consistent
+    """
+    executor = TaskExecutor(temp_pool_file)
+    executor.pool.buckets["chat_x"] = Bucket(id="chat_x", type="chat", label="Test Chat")
+
+    running_task = Task(
+        id="running_1",
+        prompt="running",
+        directory=Path("/tmp"),
+        bucket_id="chat_x",
+        status="running",
+    )
+    pending_in_chat = Task(
+        id="pending_chat",
+        prompt="pending in chat",
+        directory=Path("/tmp"),
+        bucket_id="chat_x",
+    )
+    other_task = Task(
+        id="other_1",
+        prompt="other bucket",
+        directory=Path("/tmp"),
+        bucket_id="main",
+    )
+    executor.pool.tasks = [running_task, pending_in_chat, other_task]
+    executor.current_task = running_task  # simulate a running task
+
+    assert executor.skip_requested is False
+
+    removed = executor.delete_bucket("chat_x")
+
+    # skip was requested for the running task
+    assert executor.skip_requested is True
+    # both chat_x tasks (running + pending) were removed
+    assert removed == 2
+    # bucket entry gone
+    assert "chat_x" not in executor.pool.buckets
+    # queue only contains the unrelated task — no dangling chat_x references
+    assert len(executor.pool.tasks) == 1
+    assert executor.pool.tasks[0].id == "other_1"
+    assert all(t.bucket_id != "chat_x" for t in executor.pool.tasks)

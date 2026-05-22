@@ -1,13 +1,14 @@
 """Tests for the TUI components."""
 
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
-from textual.widgets import DataTable, Button, Input, Label
-from textual.containers import Container
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from claude_pool.tui import PoolTUI, AddTaskScreen, ConfirmDialog, JsonOutputWidget, LogWidget
-from claude_pool.models import Task, PoolState
+import pytest
+from textual.containers import Container
+from textual.widgets import Button, DataTable, Input, Label
+
+from claude_pool.models import PoolState, Task
+from claude_pool.tui import AddTaskScreen, ConfirmDialog, JsonOutputWidget, LogWidget, PoolTUI
 
 
 class TestAppStartup:
@@ -369,9 +370,7 @@ class TestLogsPanel:
         assert "Message 4" in output
 
     @pytest.mark.asyncio
-    async def test_logs_panel_respects_max_lines(
-        self, pool_file_with_tasks: Path, mock_executor
-    ):
+    async def test_logs_panel_respects_max_lines(self, pool_file_with_tasks: Path, mock_executor):
         """Test logs panel respects max_lines limit."""
         with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
@@ -739,7 +738,7 @@ class TestDeleteTaskWithConfirmation:
     async def test_delete_task_logic(self, mock_executor):
         """Test delete task logic without async context."""
         # Verify delete method exists and is callable
-        assert hasattr(mock_executor, 'delete_task')
+        assert hasattr(mock_executor, "delete_task")
         assert callable(mock_executor.delete_task)
 
         # Test that delete returns True when task exists
