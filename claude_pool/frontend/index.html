@@ -808,10 +808,11 @@
             border: 1px solid #eee;
             border-radius: 8px;
             padding: 12px 14px;
-            cursor: pointer;
+            cursor: default;
             display: flex;
             align-items: center;
             gap: 10px;
+            flex-wrap: wrap;
         }
 
         .chat-item:hover { background: #f0f0ff; }
@@ -963,6 +964,15 @@
             }
 
             .task-actions button {
+                flex: 1;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .chat-item .task-actions {
+                width: 100%;
+            }
+            .chat-item .task-actions button {
                 flex: 1;
             }
         }
