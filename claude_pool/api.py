@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional, Set
 from uuid import uuid4
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 # ── Pydantic models ───────────────────────────────────────────────
+
 
 class ProjectEntry(BaseModel):
     name: str
@@ -54,6 +55,25 @@ class TaskResponse(BaseModel):
     bucket_id: str = "main"
 
 
+class TaskDetailResponse(BaseModel):
+    id: str
+    prompt: str
+    directory: str
+    status: str
+    exit_code: Optional[int] = None
+    duration_ms: Optional[int] = None
+    retry_count: int = 0
+    bucket_id: str = "main"
+    args: list[str] = []
+    json_output: Optional[dict] = None
+
+
+class TaskPatchInput(BaseModel):
+    prompt: Optional[str] = None
+    model: Optional[str] = None
+    effort: Optional[str] = None
+
+
 class PoolStatusResponse(BaseModel):
     total_tasks: int
     pending_tasks: int
@@ -64,16 +84,20 @@ class PoolStatusResponse(BaseModel):
     pool_suspended: bool
     suspension_remaining: float = 0.0
     retry_count: int = 0
+    claude_status: str
+    rate_limit_result: Optional[str] = None
 
 
 class ChatCreateInput(BaseModel):
     """Input model for creating a chat bucket."""
+
     directory: str
     label: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
     """Response model for a chat bucket."""
+
     id: str
     label: str
     directory: Optional[str] = None
@@ -84,6 +108,7 @@ class ChatResponse(BaseModel):
 
 class MessageInput(BaseModel):
     """Input model for sending a chat message (creates a task)."""
+
     prompt: str
     model: Optional[str] = None
     effort: Optional[str] = None
@@ -91,6 +116,7 @@ class MessageInput(BaseModel):
 
 class MessageResponse(BaseModel):
     """Response model for a chat message (task projected as chat turn)."""
+
     id: str
     role: str = "user"
     content: str
@@ -102,6 +128,7 @@ class MessageResponse(BaseModel):
 
 
 # ── Helpers ───────────────────────────────────────────────────────
+
 
 def _validate_directory(directory: str) -> Path:
     """Resolve and validate that a directory is inside the allow-list.
@@ -143,6 +170,7 @@ def _task_to_message(task: Task) -> MessageResponse:
 
 
 # ── API server ────────────────────────────────────────────────────
+
 
 class ApiServer:
     """FastAPI server for Claude Pool."""
@@ -193,7 +221,9 @@ class ApiServer:
 
         @self.app.on_event("startup")
         async def startup():
-            self.executor = TaskExecutor(self.pool_file, on_task_update=self._on_task_update)
+            self.executor = TaskExecutor(
+                self.pool_file, on_task_update=self._on_task_update, install_signal_handlers=False
+            )
             await self.executor.load_tasks()
             asyncio.create_task(self.executor.run_pool())
             logger.info("API server started with task executor")
@@ -216,18 +246,41 @@ class ApiServer:
         async def get_status() -> PoolStatusResponse:
             if not self.executor:
                 raise HTTPException(status_code=503, detail="Executor not initialized")
+            self.executor.check_pool_updates()
             pool = self.executor.pool
             tasks = pool.tasks
+
+            pending_count = sum(1 for t in tasks if t.status == "pending")
+            running_count = sum(1 for t in tasks if t.status == "running")
+            rate_limit_count = sum(1 for t in tasks if t.status == "rate_limit_retry")
+
+            rate_limit_result = None
+            if rate_limit_count > 0:
+                rl_task = next((t for t in tasks if t.status == "rate_limit_retry"), None)
+                if rl_task and rl_task.json_output:
+                    rate_limit_result = rl_task.json_output.get("result")
+                elif rl_task:
+                    rate_limit_result = "Rate limit detected"
+
+            if rate_limit_count > 0 or pool.is_suspended:
+                claude_status = "rate_limit"
+            elif running_count > 0 or pending_count > 0:
+                claude_status = "running"
+            else:
+                claude_status = "waiting request"
+
             return PoolStatusResponse(
                 total_tasks=len(tasks),
-                pending_tasks=sum(1 for t in tasks if t.status == "pending"),
-                running_tasks=sum(1 for t in tasks if t.status == "running"),
+                pending_tasks=pending_count,
+                running_tasks=running_count,
                 completed_tasks=sum(1 for t in tasks if t.status == "success"),
                 failed_tasks=sum(1 for t in tasks if t.status == "failed"),
                 skipped_tasks=sum(1 for t in tasks if t.status == "skipped"),
                 pool_suspended=pool.is_suspended,
                 suspension_remaining=pool.suspension_remaining,
                 retry_count=pool.retry_count,
+                claude_status=claude_status,
+                rate_limit_result=rate_limit_result,
             )
 
         # ── Tasks ─────────────────────────────────────────────────
@@ -252,6 +305,26 @@ class ApiServer:
                 )
                 for t in tasks
             ]
+
+        @self.app.get("/api/tasks/{task_id}")
+        async def get_task(task_id: str) -> TaskDetailResponse:
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+            task = next((t for t in self.executor.pool.tasks if t.id == task_id), None)
+            if not task:
+                raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+            return TaskDetailResponse(
+                id=task.id,
+                prompt=task.prompt,
+                directory=str(task.directory),
+                status=task.status,
+                exit_code=task.exit_code,
+                duration_ms=task.duration_ms,
+                retry_count=task.retry_count,
+                bucket_id=task.bucket_id,
+                args=task.args,
+                json_output=task.json_output,
+            )
 
         @self.app.post("/api/tasks")
         async def create_task(task_input: TaskInput) -> TaskResponse:
@@ -290,10 +363,17 @@ class ApiServer:
             self.executor.pool.tasks.append(new_task)
             self.executor._save_state()
 
-            await self._broadcast_event({
-                "event": "task_created",
-                "task": {"id": new_task.id, "prompt": new_task.prompt, "status": new_task.status},
-            })
+            await self._broadcast_event(
+                {
+                    "event": "task_created",
+                    "task": {
+                        "id": new_task.id,
+                        "prompt": new_task.prompt,
+                        "status": new_task.status,
+                    },
+                }
+            )
+            await self._broadcast_pool_status()
 
             return TaskResponse(
                 id=new_task.id,
@@ -321,10 +401,13 @@ class ApiServer:
             task.json_output = None
             task.retry_count += 1
             self.executor._save_state()
-            await self._broadcast_event({
-                "event": "task_updated",
-                "task": {"id": task.id, "status": task.status, "retry_count": task.retry_count},
-            })
+            await self._broadcast_event(
+                {
+                    "event": "task_updated",
+                    "task": {"id": task.id, "status": task.status, "retry_count": task.retry_count},
+                }
+            )
+            await self._broadcast_pool_status()
             return TaskResponse(
                 id=task.id,
                 prompt=task.prompt,
@@ -343,12 +426,16 @@ class ApiServer:
             task = next((t for t in self.executor.pool.tasks if t.id == task_id), None)
             if not task:
                 raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-            if not (self.executor.current_task and self.executor.current_task.id == task_id):
-                raise HTTPException(status_code=400, detail="Task is not currently running")
-            self.executor.skip_current()
+            if task.status not in ("pending", "rate_limit_retry"):
+                raise HTTPException(
+                    status_code=400, detail=f"Cannot skip task in {task.status} status"
+                )
+            task.status = "skipped"
+            self.executor._save_state()
             await self._broadcast_event(
                 {"event": "task_skipped", "task": {"id": task.id, "status": "skipped"}}
             )
+            await self._broadcast_pool_status()
             return TaskResponse(
                 id=task.id,
                 prompt=task.prompt,
@@ -357,6 +444,132 @@ class ApiServer:
                 retry_count=task.retry_count,
                 bucket_id=task.bucket_id,
             )
+
+        @self.app.delete("/api/tasks/{task_id}")
+        async def delete_task(task_id: str) -> dict:
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+            task = next((t for t in self.executor.pool.tasks if t.id == task_id), None)
+            if not task:
+                raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+            self.executor.pool.tasks.remove(task)
+            self.executor._save_state()
+            await self._broadcast_event(
+                {"event": "task_deleted", "task": {"id": task.id}}
+            )
+            await self._broadcast_pool_status()
+            return {"status": "success", "id": task_id}
+
+        @self.app.post("/api/tasks/{task_id}/duplicate")
+        async def duplicate_task(task_id: str) -> TaskResponse:
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+            task = next((t for t in self.executor.pool.tasks if t.id == task_id), None)
+            if not task:
+                raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+            from copy import deepcopy
+
+            new_task = deepcopy(task)
+            new_task.id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
+            new_task.status = "pending"
+            new_task.exit_code = None
+            new_task.duration_ms = None
+            new_task.json_output = None
+            new_task.retry_count = 0
+            new_task.created_at = datetime.now().isoformat()
+            self.executor.pool.tasks.append(new_task)
+            self.executor._save_state()
+            await self._broadcast_event(
+                {
+                    "event": "task_created",
+                    "task": {
+                        "id": new_task.id,
+                        "prompt": new_task.prompt,
+                        "status": new_task.status,
+                    },
+                }
+            )
+            await self._broadcast_pool_status()
+            return TaskResponse(
+                id=new_task.id,
+                prompt=new_task.prompt,
+                directory=str(new_task.directory),
+                status=new_task.status,
+                retry_count=0,
+                bucket_id=new_task.bucket_id,
+            )
+            await self._broadcast_pool_status()
+            return TaskResponse(
+                id=new_task.id,
+                prompt=new_task.prompt,
+                directory=str(new_task.directory),
+                status=new_task.status,
+                retry_count=0,
+                bucket_id=new_task.bucket_id,
+            )
+
+        @self.app.patch("/api/tasks/{task_id}")
+        async def update_task(task_id: str, patch: TaskPatchInput) -> TaskResponse:
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+            task = next((t for t in self.executor.pool.tasks if t.id == task_id), None)
+            if not task:
+                raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+            if task.status != "pending":
+                raise HTTPException(
+                    status_code=400, detail=f"Cannot update task in {task.status} status"
+                )
+            if patch.prompt is not None:
+                task.prompt = patch.prompt
+            if patch.model is not None or patch.effort is not None:
+                new_args = list(task.args)
+                if patch.model is not None:
+                    if "--model" in new_args:
+                        idx = new_args.index("--model")
+                        new_args[idx + 1] = patch.model
+                    else:
+                        new_args.extend(["--model", patch.model])
+                if patch.effort is not None:
+                    if "--effort" in new_args:
+                        idx = new_args.index("--effort")
+                        new_args[idx + 1] = patch.effort
+                    else:
+                        new_args.extend(["--effort", patch.effort])
+                task.args = new_args
+            self.executor._save_state()
+            await self._broadcast_event(
+                {
+                    "event": "task_updated",
+                    "task": {
+                        "id": task.id,
+                        "status": task.status,
+                        "prompt": task.prompt,
+                        "retry_count": task.retry_count,
+                        "bucket_id": task.bucket_id,
+                    },
+                }
+            )
+            return TaskResponse(
+                id=task.id,
+                prompt=task.prompt,
+                directory=str(task.directory),
+                status=task.status,
+                retry_count=task.retry_count,
+                bucket_id=task.bucket_id,
+            )
+
+        @self.app.post("/api/pool/instant-retry")
+        async def instant_retry() -> dict:
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+            self.executor.pool.suspended_until = None
+            self.executor._save_state()
+            await self._broadcast_pool_status()
+            logger.info("Instant retry requested: pool suspension cleared")
+            return {
+                "status": "success",
+                "message": "Pool suspension cleared, retrying task immediately",
+            }
 
         # ── Directories ───────────────────────────────────────────
 
@@ -431,14 +644,16 @@ class ApiServer:
                 bucket_tasks = [t for t in self.executor.pool.tasks if t.bucket_id == bid]
                 message_count = len(bucket_tasks)
                 last_activity = max((t.created_at for t in bucket_tasks), default=None)
-                result.append(ChatResponse(
-                    id=bid,
-                    label=bucket.label,
-                    directory=bucket.directory,
-                    created_at=bucket.created_at,
-                    message_count=message_count,
-                    last_activity=last_activity,
-                ))
+                result.append(
+                    ChatResponse(
+                        id=bid,
+                        label=bucket.label,
+                        directory=bucket.directory,
+                        created_at=bucket.created_at,
+                        message_count=message_count,
+                        last_activity=last_activity,
+                    )
+                )
             result.sort(key=lambda c: c.created_at, reverse=True)
             return result
 
@@ -482,7 +697,10 @@ class ApiServer:
                 deleted_tasks = self.executor.delete_bucket(chat_id)
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e))
-            await self._broadcast_event({"event": "chat_deleted", "id": chat_id, "deleted_tasks": deleted_tasks})
+            await self._broadcast_event(
+                {"event": "chat_deleted", "id": chat_id, "deleted_tasks": deleted_tasks}
+            )
+            await self._broadcast_pool_status()
             return {"deleted_tasks": deleted_tasks}
 
         @self.app.get("/api/chats/{chat_id}/messages")
@@ -491,11 +709,7 @@ class ApiServer:
                 raise HTTPException(status_code=503, detail="Executor not initialized")
             if chat_id not in self.executor.pool.buckets:
                 raise HTTPException(status_code=404, detail=f"Chat {chat_id} not found")
-            msgs = [
-                _task_to_message(t)
-                for t in self.executor.pool.tasks
-                if t.bucket_id == chat_id
-            ]
+            msgs = [_task_to_message(t) for t in self.executor.pool.tasks if t.bucket_id == chat_id]
             msgs.sort(key=lambda m: m.created_at)
             return msgs
 
@@ -527,11 +741,14 @@ class ApiServer:
             self.executor._save_state()
 
             msg = _task_to_message(new_task)
-            await self._broadcast_event({
-                "event": "chat_message",
-                "chat_id": chat_id,
-                "message": msg.model_dump(),
-            })
+            await self._broadcast_event(
+                {
+                    "event": "chat_message",
+                    "chat_id": chat_id,
+                    "message": msg.model_dump(),
+                }
+            )
+            await self._broadcast_pool_status()
             return msg
 
         # ── WebSocket ─────────────────────────────────────────────
@@ -555,19 +772,24 @@ class ApiServer:
                 self.ws_clients.discard(websocket)
 
     def _on_task_update(self, task: Task) -> None:
-        asyncio.create_task(self._broadcast_event({
-            "event": "task_updated",
-            "task": {
-                "id": task.id,
-                "prompt": task.prompt[:50],
-                "status": task.status,
-                "exit_code": task.exit_code,
-                "duration_ms": task.duration_ms,
-                "retry_count": task.retry_count,
-                "bucket_id": task.bucket_id,
-                "result": task.json_output.get("result") if task.json_output else None,
-            },
-        }))
+        asyncio.create_task(
+            self._broadcast_event(
+                {
+                    "event": "task_updated",
+                    "task": {
+                        "id": task.id,
+                        "prompt": task.prompt[:50],
+                        "status": task.status,
+                        "exit_code": task.exit_code,
+                        "duration_ms": task.duration_ms,
+                        "retry_count": task.retry_count,
+                        "bucket_id": task.bucket_id,
+                        "result": task.json_output.get("result") if task.json_output else None,
+                    },
+                }
+            )
+        )
+        asyncio.create_task(self._broadcast_pool_status())
 
     async def _broadcast_event(self, message: dict) -> None:
         if not self.ws_clients:
@@ -580,6 +802,47 @@ class ApiServer:
                 logger.debug(f"Failed to send WebSocket message: {e}")
                 disconnected.add(client)
         self.ws_clients -= disconnected
+
+    async def _broadcast_pool_status(self) -> None:
+        if not self.executor:
+            return
+        self.executor.check_pool_updates()
+        pool = self.executor.pool
+        tasks = pool.tasks
+
+        pending_count = sum(1 for t in tasks if t.status == "pending")
+        running_count = sum(1 for t in tasks if t.status == "running")
+        rate_limit_count = sum(1 for t in tasks if t.status == "rate_limit_retry")
+
+        rate_limit_result = None
+        if rate_limit_count > 0:
+            rl_task = next((t for t in tasks if t.status == "rate_limit_retry"), None)
+            if rl_task and rl_task.json_output:
+                rate_limit_result = rl_task.json_output.get("result")
+            elif rl_task:
+                rate_limit_result = "Rate limit detected"
+
+        if rate_limit_count > 0 or pool.is_suspended:
+            claude_status = "rate_limit"
+        elif running_count > 0 or pending_count > 0:
+            claude_status = "running"
+        else:
+            claude_status = "waiting request"
+
+        status_data = {
+            "total_tasks": len(tasks),
+            "pending_tasks": pending_count,
+            "running_tasks": running_count,
+            "completed_tasks": sum(1 for t in tasks if t.status == "success"),
+            "failed_tasks": sum(1 for t in tasks if t.status == "failed"),
+            "skipped_tasks": sum(1 for t in tasks if t.status == "skipped"),
+            "pool_suspended": pool.is_suspended,
+            "suspension_remaining": pool.suspension_remaining,
+            "retry_count": pool.retry_count,
+            "claude_status": claude_status,
+            "rate_limit_result": rate_limit_result,
+        }
+        await self._broadcast_event({"event": "pool_status", "data": status_data})
 
 
 def create_app(pool_file: Path) -> FastAPI:

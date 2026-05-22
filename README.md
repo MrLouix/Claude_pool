@@ -109,6 +109,19 @@ Une fois le serveur démarré, ouvrez **http://localhost:8000** dans votre navig
 
 La tâche apparaît dans la liste et sera exécutée dès que Claude est disponible.
 
+### Détails d'une tâche
+
+Cliquez sur n'importe quelle tâche dans la liste **Recent Tasks** pour ouvrir un panneau de détails avec :
+
+- Tous les champs : ID, statut, directory (lecture seule), prompt, args, exit code, durée, retry count, résultat
+- **Prompt** et **résultat** sont scrollables pour les longs contenus
+- Actions disponibles selon le statut :
+  - **Skip** — pour les tâches `pending` ou `rate_limit_retry`
+  - **Retry** — pour les tâches `failed` ou `success`
+  - **Delete** — fonctionne dans tous les statuts
+  - **Duplicate** — crée une copie en statut `pending`
+- Pour les tâches `pending` uniquement : bouton **✏️ Edit** pour modifier le prompt, le modèle et le niveau d'effort
+
 ### Run Dev Plan — générer un plan de développement automatiquement
 
 Le bouton **⚙ Run Dev Plan** (en haut de la section *Add New Task*) vous permet de confier à Claude la planification complète d'un projet :
@@ -275,9 +288,13 @@ Quand le serveur est démarré avec `--serve`, vous pouvez aussi interagir via d
 |---------|----------|-------------|
 | `GET` | `/api/status` | État du pool |
 | `GET` | `/api/tasks` | Liste des tâches |
+| `GET` | `/api/tasks/{id}` | Détails complets d'une tâche |
 | `POST` | `/api/tasks` | Ajouter une tâche |
+| `PATCH` | `/api/tasks/{id}` | Modifier une tâche (pending uniquement) |
+| `DELETE` | `/api/tasks/{id}` | Supprimer une tâche (tous statuts) |
 | `POST` | `/api/tasks/{id}/retry` | Réessayer une tâche |
-| `POST` | `/api/tasks/{id}/skip` | Ignorer une tâche |
+| `POST` | `/api/tasks/{id}/skip` | Ignorer une tâche (pending / rate_limit_retry) |
+| `POST` | `/api/tasks/{id}/duplicate` | Dupliquer une tâche |
 | `GET` | `/api/chats` | Liste des chats |
 | `POST` | `/api/chats` | Créer un chat |
 | `DELETE` | `/api/chats/{id}` | Supprimer un chat |
@@ -319,7 +336,7 @@ source venv/bin/activate
 pytest tests/ -v
 ```
 
-146 tests couvrent l'exécuteur, le TUI, les modèles, le parseur, le stockage, l'API REST et les scénarios bout-en-bout.
+152 tests couvrent l'exécuteur, le TUI, les modèles, le parseur, le stockage, l'API REST et les scénarios bout-en-bout.
 
 ---
 
