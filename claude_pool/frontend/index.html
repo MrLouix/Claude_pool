@@ -2003,9 +2003,9 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 const responseHtml = m.assistant_response && !thinking
                     ? `<div class="message-result">${renderText(m.assistant_response)}</div>` : thinking;
                 const retryBtn = m.status === 'failed'
-                    ? `<button class="btn-success" style="font-size:12px;padding:5px 10px;" onclick="retryMessage('${m.id}')">Retry</button>` : '';
+                    ? `<button class="btn-success" style="font-size:12px;padding:5px 10px;" onclick="event.stopPropagation();retryMessage('${m.id}')">Retry</button>` : '';
                 return `
-                    <div class="message-bubble ${m.status}" data-msg-id="${m.id}">
+                    <div class="message-bubble ${m.status}" data-msg-id="${m.id}" style="cursor:pointer;" onclick="navigate('task/${m.id}')">
                         <div class="message-prompt">${escapeHtml(content.substring(0, 200))}${content.length > 200 ? '…' : ''}</div>
                         <div class="message-meta">
                             <span class="task-status ${m.status}">${m.status}</span>
