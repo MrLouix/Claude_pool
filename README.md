@@ -39,60 +39,119 @@ Avant de commencer, vous avez besoin de :
 
 ## Installation (première fois)
 
-### Option A — Télécharger la release (recommandé)
+### Prérequis
 
-Pas besoin de Git. Téléchargez le wheel depuis la page GitHub :
+1. **Python 3.11+** — [python.org/downloads](https://www.python.org/downloads/)
+   - Sous Windows : cochez **"Add Python to PATH"** lors de l'installation
+2. **Claude CLI** — installé et authentifié ([claude.ai/code](https://claude.ai/code))
 
-**[Télécharger claude_pool-1.1.0-py3-none-any.whl](https://github.com/MrLouix/Claude_pool/raw/feat/chat-tab/dist/claude_pool-1.1.0-py3-none-any.whl)**
+### Windows — Installation depuis la release
 
-Puis installez-le :
+1. Téléchargez le fichier `.whl` depuis la [page des releases GitHub](https://github.com/MrLouix/Claude_pool/releases/latest)
+2. Ouvrez **PowerShell** ou **Command Prompt**
+3. Installez le package :
+
+```powershell
+pip install --no-cache-dir claude_pool-1.1.0-py3-none-any.whl
+```
+
+> Si `pip` n'est pas reconnu, utilisez `python -m pip install --no-cache-dir claude_pool-1.1.0-py3-none-any.whl`
+
+### Linux / macOS — Installation depuis la release
 
 ```bash
 pip install claude_pool-1.1.0-py3-none-any.whl
 ```
 
-C'est tout — `claude-pool` est maintenant disponible comme commande dans votre terminal.
-
-> **Python requis :** 3.11 ou plus récent. Vérifiez avec `python3 --version`.
-
-### Option B — Cloner le dépôt (pour les contributeurs)
+### Option B — Cloner le dépôt (contributeurs)
 
 ```bash
 git clone https://github.com/MrLouix/Claude_pool.git
 cd Claude_pool
-./claude-pool.sh install
+./claude-pool.sh install   # Linux/macOS
 ```
-
-Le script `install` crée automatiquement un environnement Python isolé (`venv`) et installe toutes les dépendances.
 
 ---
 
 ## Démarrer le serveur
 
+### Windows (PowerShell)
+
+```powershell
+# Créer un dossier de travail
+mkdir $env:USERPROFILE\claude-pool-data
+
+# Démarrer le serveur
+claude-pool --pool $env:USERPROFILE\claude-pool-data\pool.json --serve --port 8000 --no-tui
+```
+
+Ou avec le chemin complet :
+
+```powershell
+claude-pool --pool C:\Users\VotreNom\claude-pool-data\pool.json --serve --port 8000 --no-tui
+```
+
+### Linux / macOS
+
 ```bash
-# Créer un dossier de travail et démarrer le tableau de bord web
 mkdir -p ~/claude-pool-data
 claude-pool --pool ~/claude-pool-data/pool.json --serve --port 8000 --no-tui
 ```
 
-Puis ouvrez votre navigateur sur **http://localhost:8000**.
+Puis ouvrez **http://localhost:8000** dans votre navigateur.
 
 > Le fichier `pool.json` est créé automatiquement au premier démarrage.
 
 ### Autres modes de lancement
 
 ```bash
-# Avec l'interface TUI dans le terminal (pas de navigateur)
-claude-pool --pool ~/claude-pool-data/pool.json
+# Interface TUI dans le terminal (pas de navigateur)
+claude-pool --pool pool.json
 
-# Mode silencieux + serveur web
-claude-pool --pool ~/claude-pool-data/pool.json --serve --no-tui
-
-# Port personnalisé
-claude-pool --pool ~/claude-pool-data/pool.json --serve --port 9000 --no-tui
+# Serveur web sur un port personnalisé
+claude-pool --pool pool.json --serve --port 9000 --no-tui
 ```
 
-> **Installation via clone :** si vous avez utilisé l'Option B, remplacez `claude-pool` par `./claude-pool.sh`.
+### Arrêter le serveur
+
+- **Ctrl + C** dans le terminal où le serveur tourne
+- Sous Windows, si le serveur tourne en arrière-plan :
+
+```powershell
+# Trouver le processus sur le port 8000
+netstat -ano | findstr :8000
+# Tuer le processus (remplacer PID par le numéro trouvé)
+taskkill /PID <PID> /F
+```
+
+---
+
+## Mettre à jour et redémarrer le serveur
+
+### Windows
+
+```powershell
+# 1. Arrêter le serveur (Ctrl+C)
+
+# 2. Télécharger la nouvelle release depuis GitHub
+#    (ou utiliser pip si le package est sur PyPI)
+pip install --no-cache-dir --force-reinstall claude_pool-1.1.0-py3-none-any.whl
+
+# 3. Redémarrer le serveur
+claude-pool --pool $env:USERPROFILE\claude-pool-data\pool.json --serve --port 8000 --no-tui
+```
+
+### Linux / macOS
+
+```bash
+# 1. Arrêter le serveur (Ctrl+C)
+
+# 2. Réinstaller le package
+pip install --force-reinstall claude_pool-1.1.0-py3-none-any.whl
+
+# 3. Redémarrer
+claude-pool --pool ~/claude-pool-data/pool.json --serve --port 8000 --no-tui
+```
 
 ---
 
