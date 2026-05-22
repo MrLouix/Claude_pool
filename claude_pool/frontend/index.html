@@ -1556,19 +1556,29 @@
         }
 
         function setTaskFilter(status) {
-            taskStatusFilter = status;
+            if (status === 'all') {
+                taskStatusFilters = new Set(['all']);
+            } else {
+                taskStatusFilters.delete('all');
+                if (taskStatusFilters.has(status)) {
+                    taskStatusFilters.delete(status);
+                } else {
+                    taskStatusFilters.add(status);
+                }
+                if (taskStatusFilters.size === 0) taskStatusFilters = new Set(['all']);
+            }
             document.querySelectorAll('.task-filter-pill').forEach(p => {
-                p.classList.toggle('active', p.dataset.status === status);
+                p.classList.toggle('active', taskStatusFilters.has(p.dataset.status));
             });
             renderTasks(lastTasks);
         }
 
         function renderTasks(tasks) {
-            const filtered = taskStatusFilter === 'all'
+            const filtered = taskStatusFilters.has('all')
                 ? tasks
-                : tasks.filter(t => t.status === taskStatusFilter);
+                : tasks.filter(t => taskStatusFilters.has(t.status));
             if (!filtered.length) {
-                taskList.innerHTML = taskStatusFilter === 'all'
+                taskList.innerHTML = taskStatusFilters.has('all')
                     ? '<div class="empty-state">No tasks yet</div>'
                     : '<div class="empty-state">No tasks match this filter.</div>';
                 return;
@@ -1837,7 +1847,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
 
         let currentChatId = null;
         let currentTaskId = null;
-        let taskStatusFilter = 'all';
+        let taskStatusFilters = new Set(['all']);
         let lastTasks = [];
         const dashboardView = document.getElementById('dashboard-view');
         const chatView = document.getElementById('chat-view');
