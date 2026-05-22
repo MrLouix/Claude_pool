@@ -192,6 +192,15 @@ class TaskExecutor:
             task.exit_code = process.returncode
             task.duration_ms = int((time.time() - start_time) * 1000)
 
+            # Dump raw output for inspection (overwritten each run)
+            log_path = self.pool_file.parent / "last_claude_output.log"
+            with open(log_path, "w", encoding="utf-8") as _f:
+                _f.write(f"=== task {task.id} | exit_code {task.exit_code} | {task.duration_ms} ms ===\n")
+                _f.write("--- stdout ---\n")
+                _f.write(stdout.decode("utf-8", errors="replace") if stdout else "(empty)\n")
+                _f.write("--- stderr ---\n")
+                _f.write(stderr.decode("utf-8", errors="replace") if stderr else "(empty)\n")
+
             # Parse output
             if stdout:
                 task.json_output = parse_claude_output(stdout)
