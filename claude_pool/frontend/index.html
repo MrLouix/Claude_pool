@@ -2334,8 +2334,14 @@ Return a brief summary of the tasks you created (step titles and task IDs return
             const canSkip = task.status === 'pending' || task.status === 'rate_limit_retry';
             const canRetry = task.status === 'failed' || task.status === 'success';
             const canEdit = task.status === 'pending';
-            document.getElementById('td-btn-skip').style.display = canSkip ? 'inline-block' : 'none';
-            document.getElementById('td-btn-retry').style.display = canRetry ? 'inline-block' : 'none';
+            const skipBtn = document.getElementById('td-btn-skip');
+            const retryBtn = document.getElementById('td-btn-retry');
+            skipBtn.style.display = canSkip ? 'inline-block' : 'none';
+            skipBtn.dataset.canSkip = canSkip;
+            retryBtn.style.display = canRetry ? 'inline-block' : 'none';
+            retryBtn.dataset.canRetry = canRetry;
+            document.getElementById('td-btn-delete').style.display = 'inline-block';
+            document.getElementById('td-btn-duplicate').style.display = 'inline-block';
             document.getElementById('td-btn-edit').style.display = canEdit ? 'inline-block' : 'none';
             document.getElementById('td-btn-save').style.display = 'none';
             document.getElementById('td-btn-cancel-edit').style.display = 'none';
@@ -2350,6 +2356,11 @@ Return a brief summary of the tasks you created (step titles and task IDs return
             document.getElementById('td-prompt').readOnly = false;
             document.getElementById('td-prompt').focus();
             document.getElementById('td-edit-row').style.display = 'grid';
+            // Swap action buttons
+            document.getElementById('td-btn-skip').style.display = 'none';
+            document.getElementById('td-btn-retry').style.display = 'none';
+            document.getElementById('td-btn-delete').style.display = 'none';
+            document.getElementById('td-btn-duplicate').style.display = 'none';
             document.getElementById('td-btn-edit').style.display = 'none';
             document.getElementById('td-btn-save').style.display = 'inline-block';
             document.getElementById('td-btn-cancel-edit').style.display = 'inline-block';
@@ -2359,23 +2370,33 @@ Return a brief summary of the tasks you created (step titles and task IDs return
             tdEditMode = false;
             document.getElementById('td-prompt').readOnly = true;
             document.getElementById('td-prompt').value = tdOriginalPrompt;
+            document.getElementById('td-edit-model').value = tdOriginalModel;
+            document.getElementById('td-edit-effort').value = tdOriginalEffort;
             document.getElementById('td-edit-row').style.display = 'none';
-            document.getElementById('td-btn-edit').style.display = 'inline-block';
             document.getElementById('td-btn-save').style.display = 'none';
             document.getElementById('td-btn-cancel-edit').style.display = 'none';
+            // Restore buttons to their pre-edit visibility (renderTaskDetail already set them)
+            document.getElementById('td-btn-delete').style.display = 'inline-block';
+            document.getElementById('td-btn-duplicate').style.display = 'inline-block';
+            document.getElementById('td-btn-edit').style.display = 'inline-block';
+            // Skip/Retry keep their status-driven visibility from renderTaskDetail
+            const skipBtn = document.getElementById('td-btn-skip');
+            const retryBtn = document.getElementById('td-btn-retry');
+            if (skipBtn.dataset.canSkip === 'true') skipBtn.style.display = 'inline-block';
+            if (retryBtn.dataset.canRetry === 'true') retryBtn.style.display = 'inline-block';
         }
 
         async function tdSaveTask() {
             if (!currentTaskId) return;
-            const prompt = document.getElementById('td-prompt').value;
-            const model = document.getElementById('td-edit-model').value || null;
-            const effort = document.getElementById('td-edit-effort').value || null;
+            const prompt = document.getElementById('td-prompt').value.trim();
+            if (!prompt) { alert('Prompt cannot be empty.'); return; }
+            const model = document.getElementById('td-edit-model').value;   // "" = default
+            const effort = document.getElementById('td-edit-effort').value; // "" = default
             try {
-                const body = {};
-                if (prompt !== tdOriginalPrompt) body.prompt = prompt;
-                if (model !== tdOriginalModel) body.model = model;
-                if (effort !== tdOriginalEffort) body.effort = effort;
-                if (Object.keys(body).length === 0) { tdCancelEdit(); return; }
+                const body = { prompt };
+                // Only send model/effort when they changed; send null to clear a previously set value
+                if (model !== tdOriginalModel) body.model = model || null;
+                if (effort !== tdOriginalEffort) body.effort = effort || null;
                 const res = await fetch(`/api/tasks/${currentTaskId}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
@@ -2383,17 +2404,22 @@ Return a brief summary of the tasks you created (step titles and task IDs return
                 });
                 if (res.ok) {
                     logEvent(`Task ${currentTaskId} updated`, 'info');
-                    tdCancelEdit();
                     fetchTasks();
-                    loadTaskView(currentTaskId);
+                    loadTaskView(currentTaskId); // exits edit mode via full re-render
                 } else {
                     const err = await res.json();
+                    alert(`Error: ${err.detail}`);
                     logEvent(`Error updating task: ${err.detail}`, 'error');
                 }
             } catch (e) {
+                alert(`Error saving task: ${e}`);
                 logEvent(`Error updating task: ${e}`, 'error');
             }
         }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && tdEditMode) tdCancelEdit();
+        });
 
         async function tdSkipTask() {
             if (!currentTaskId) return;
