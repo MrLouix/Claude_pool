@@ -947,6 +947,26 @@
                 width: 100%;
             }
 
+            /* Exempt header/action buttons from full-width */
+            .btn-back,
+            .btn-danger,
+            .btn-run-plan,
+            .btn-instant-retry,
+            .task-filter-pill,
+            .modal-close,
+            .td-btn,
+            .chat-header-actions button,
+            .task-view-header button,
+            .controls button,
+            .task-actions button {
+                width: auto;
+            }
+
+            /* Chat header wraps gracefully on mobile */
+            .chat-header {
+                flex-wrap: wrap;
+            }
+
             .controls {
                 flex-wrap: wrap;
             }
