@@ -3,10 +3,49 @@
 import argparse
 import asyncio
 import logging
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 from .executor import TaskExecutor
+
+
+def check_claude_cli() -> bool:
+    """Check that the Claude CLI is installed and reachable. Prints a warning if not."""
+    if shutil.which("claude") is None:
+        print(
+            "\n[WARNING] 'claude' command not found in PATH.\n"
+            "  Claude Pool requires the Claude CLI to be installed and authenticated.\n"
+            "  Install it from: https://claude.ai/code\n",
+            file=sys.stderr,
+        )
+        return False
+
+    try:
+        result = subprocess.run(
+            ["claude", "--version"],
+            capture_output=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            print(
+                "\n[WARNING] 'claude --version' returned a non-zero exit code.\n"
+                "  The Claude CLI may not be properly installed or authenticated.\n"
+                "  Install it from: https://claude.ai/code\n",
+                file=sys.stderr,
+            )
+            return False
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+        print(
+            f"\n[WARNING] Could not run 'claude --version': {exc}\n"
+            "  The Claude CLI may not be properly installed.\n"
+            "  Install it from: https://claude.ai/code\n",
+            file=sys.stderr,
+        )
+        return False
+
+    return True
 
 
 def setup_logging(verbose: bool = False, debug: bool = False, tui_mode: bool = False) -> None:
@@ -188,6 +227,8 @@ def main() -> None:
     setup_logging(
         verbose=args.verbose, debug=args.debug, tui_mode=not args.no_tui and not args.serve
     )
+
+    check_claude_cli()
 
     try:
         if args.serve:
