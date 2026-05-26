@@ -1018,29 +1018,9 @@
         </div>
 
         <div class="stats">
-            <div class="stat-card">
-                <h3>Total Tasks</h3>
-                <div class="number" id="total-tasks">0</div>
-            </div>
             <div class="stat-card pending">
                 <h3>Pending</h3>
                 <div class="number" id="pending-tasks">0</div>
-            </div>
-            <div class="stat-card running">
-                <h3>Running</h3>
-                <div class="number" id="running-tasks">0</div>
-            </div>
-            <div class="stat-card success">
-                <h3>Success</h3>
-                <div class="number" id="completed-tasks">0</div>
-            </div>
-            <div class="stat-card failed">
-                <h3>Failed</h3>
-                <div class="number" id="failed-tasks">0</div>
-            </div>
-            <div class="stat-card">
-                <h3>Skipped</h3>
-                <div class="number" id="skipped-tasks">0</div>
             </div>
         </div>
 
@@ -1251,7 +1231,7 @@
         </div>
         <div class="chat-input-row">
             <textarea id="chat-input" rows="2" placeholder="Type a message… (Enter to send, Shift+Enter for newline)"></textarea>
-            <button class="btn-primary" id="btn-send-message">Send</button>
+            <button class="btn-primary" id="btn-send-message" style="padding:8px 12px;font-size:18px;line-height:1;min-width:0;">⬆</button>
         </div>
     </div>
 
@@ -1484,12 +1464,7 @@
         }
 
         function updatePoolStatus(status) {
-            document.getElementById('total-tasks').textContent = status.total_tasks;
             document.getElementById('pending-tasks').textContent = status.pending_tasks;
-            document.getElementById('running-tasks').textContent = status.running_tasks;
-            document.getElementById('completed-tasks').textContent = status.completed_tasks;
-            document.getElementById('failed-tasks').textContent = status.failed_tasks;
-            document.getElementById('skipped-tasks').textContent = status.skipped_tasks;
             updateChatSuspensionBanner(status);
 
             const banner = document.getElementById('claude-status-banner');
@@ -1593,7 +1568,7 @@
                 return '<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:#e5e7eb;color:#555;margin-left:6px;font-weight:600;">CLI</span>';
             }
             const label = chatLabelMap[bucketId] || bucketId;
-            return `<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:#ede9fe;color:#6d28d9;margin-left:6px;font-weight:600;cursor:pointer;" onclick="navigate('chat/${bucketId}')">Chat: ${escapeHtml(label)}</span>`;
+            return `<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:#ede9fe;color:#6d28d9;margin-left:6px;font-weight:600;cursor:pointer;" onclick="event.stopPropagation();navigate('chat/${bucketId}')">Chat: ${escapeHtml(label)}</span>`;
         }
 
         function setTaskFilter(status) {
@@ -1889,6 +1864,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         let currentChatId = null;
         let currentChatDirectory = '';
         let currentTaskId = null;
+        let taskSourceChatId = null;
         let taskStatusFilters = new Set(['all']);
         let lastTasks = [];
         const dashboardView = document.getElementById('dashboard-view');
@@ -1958,6 +1934,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         }
 
         function showTaskView(taskId) {
+            taskSourceChatId = currentChatId;
             currentTaskId = taskId;
             currentChatId = null;
             dashboardView.style.display = 'none';
@@ -1981,7 +1958,8 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 document.getElementById('tv-created-at').textContent = task.created_at || '—';
                 document.getElementById('tv-json-output').textContent = task.json_output ? JSON.stringify(task.json_output, null, 2) : '—';
                 // Back button
-                document.getElementById('tv-btn-back').onclick = () => navigate('');
+                document.getElementById('tv-btn-back').onclick = () =>
+                    taskSourceChatId ? navigate(`chat/${taskSourceChatId}`) : navigate('');
                 // Shared render (populates td-* fields + button visibility)
                 renderTaskDetail(task);
             } catch (e) {
