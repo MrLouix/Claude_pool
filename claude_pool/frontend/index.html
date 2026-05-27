@@ -1314,6 +1314,14 @@
                         <input type="checkbox" id="chat-plan-unit-tests">
                         <label for="chat-plan-unit-tests">Write unit tests for each step</label>
                     </div>
+                    <div class="plan-option-row" style="margin-top:8px;gap:8px;">
+                        <label for="chat-plan-priority" style="font-weight:600;font-size:13px;color:#555;">Priority</label>
+                        <select id="chat-plan-priority" style="padding:4px 8px;border:1px solid #ddd;border-radius:5px;font-size:13px;font-family:inherit;background:#fff;">
+                            <option value="1">1 — High</option>
+                            <option value="2" selected>2 — Normal</option>
+                            <option value="3">3 — Low</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="plan-section">
                     <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">GitHub push strategy</label>
@@ -2300,7 +2308,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             btnChatRunPlanConfirm.disabled = !chatPlanSpecInput.value.trim();
         });
 
-        function buildChatOrchestratorPrompt(directory, spec, unitTests, pushStrategy) {
+        function buildChatOrchestratorPrompt(directory, spec, unitTests, pushStrategy, priority) {
             const apiOrigin = window.location.origin;
             const bucketId = currentChatId;
             const unitTestsNote = unitTests
@@ -2318,6 +2326,8 @@ Your task: analyze the specification below, break it into sequential implementat
 
 API ENDPOINT: ${apiOrigin}/api/chats/${bucketId}/messages
 WORKING DIRECTORY FOR ALL SUBTASKS: ${directory}
+TASK PRIORITY: ${priority}
+When calling the API to enqueue each task, include "priority": ${priority} in the JSON request body.
 
 CODING SPECIFICATION:
 ---
@@ -2335,7 +2345,7 @@ Run the following Python code for each step (Python is always available):
 
 import urllib.request, json
 step_prompt = """<YOUR STEP PROMPT HERE>"""
-data = json.dumps({"prompt": step_prompt}).encode()
+data = json.dumps({"prompt": step_prompt, "priority": ${priority}}).encode()
 req = urllib.request.Request("${apiOrigin}/api/chats/${bucketId}/messages", data, {"Content-Type": "application/json"})
 urllib.request.urlopen(req)
 
@@ -2352,9 +2362,10 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             const spec = chatPlanSpecInput.value.trim();
             const unitTests = document.getElementById('chat-plan-unit-tests').checked;
             const pushStrategy = document.querySelector('input[name="chat-plan-push"]:checked')?.value || 'none';
+            const priority = parseInt(document.getElementById('chat-plan-priority').value);
             if (!spec || !currentChatId) return;
 
-            const prompt = buildChatOrchestratorPrompt(currentChatDirectory, spec, unitTests, pushStrategy);
+            const prompt = buildChatOrchestratorPrompt(currentChatDirectory, spec, unitTests, pushStrategy, priority);
             btnChatRunPlanConfirm.disabled = true;
             btnChatRunPlanConfirm.textContent = 'Enqueuing…';
 
@@ -2362,7 +2373,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 const res = await fetch(`/api/chats/${currentChatId}/messages`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt }),
+                    body: JSON.stringify({ prompt, priority }),
                 });
                 if (res.ok) {
                     closeChatRunPlanModal();
