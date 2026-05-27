@@ -1387,6 +1387,8 @@
             return `${protocol}//${window.location.host}/ws/events`;
         }
 
+        let wsPingInterval = null;
+
         function connectWebSocket() {
             ws = new WebSocket(getWebSocketURL());
 
@@ -1394,9 +1396,13 @@
                 wsStatus.textContent = 'Connected';
                 wsStatus.className = 'status-badge connected';
                 logEvent('WebSocket connected', 'info');
+                wsPingInterval = setInterval(() => {
+                    if (ws.readyState === WebSocket.OPEN) ws.send('ping');
+                }, 30000);
             };
 
             ws.onmessage = (event) => {
+                if (event.data === 'pong') return;
                 const message = JSON.parse(event.data);
                 handleWebSocketMessage(message);
             };
@@ -1406,6 +1412,7 @@
             };
 
             ws.onclose = () => {
+                clearInterval(wsPingInterval);
                 wsStatus.textContent = 'Disconnected';
                 wsStatus.className = 'status-badge disconnected';
                 logEvent('WebSocket disconnected. Reconnecting...', 'warning');
