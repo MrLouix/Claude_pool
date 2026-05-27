@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from .executor import TaskExecutor
 from .models import Bucket, Task
@@ -42,6 +42,14 @@ class TaskInput(BaseModel):
     args: list[str] = []
     model: Optional[str] = None
     effort: Optional[str] = None
+    priority: int = 2
+
+    @field_validator("priority")
+    @classmethod
+    def priority_must_be_valid(cls, v: int) -> int:
+        if v not in (1, 2, 3):
+            raise ValueError("priority must be 1, 2, or 3")
+        return v
 
 
 class TaskResponse(BaseModel):
@@ -53,6 +61,7 @@ class TaskResponse(BaseModel):
     duration_ms: Optional[int] = None
     retry_count: int = 0
     bucket_id: str = "main"
+    priority: int = 2
 
 
 class TaskDetailResponse(BaseModel):
@@ -67,12 +76,21 @@ class TaskDetailResponse(BaseModel):
     args: list[str] = []
     json_output: Optional[dict] = None
     created_at: Optional[str] = None
+    priority: int = 2
 
 
 class TaskPatchInput(BaseModel):
     prompt: Optional[str] = None
     model: Optional[str] = None
     effort: Optional[str] = None
+    priority: Optional[int] = None
+
+    @field_validator("priority")
+    @classmethod
+    def priority_must_be_valid(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v not in (1, 2, 3):
+            raise ValueError("priority must be 1, 2, or 3")
+        return v
 
 
 class PoolStatusResponse(BaseModel):
@@ -113,6 +131,14 @@ class MessageInput(BaseModel):
     prompt: str
     model: Optional[str] = None
     effort: Optional[str] = None
+    priority: int = 2
+
+    @field_validator("priority")
+    @classmethod
+    def priority_must_be_valid(cls, v: int) -> int:
+        if v not in (1, 2, 3):
+            raise ValueError("priority must be 1, 2, or 3")
+        return v
 
 
 class MessageResponse(BaseModel):
@@ -313,6 +339,7 @@ class ApiServer:
                     duration_ms=t.duration_ms,
                     retry_count=t.retry_count,
                     bucket_id=t.bucket_id,
+                    priority=t.priority,
                 )
                 for t in tasks
             ]
@@ -336,6 +363,7 @@ class ApiServer:
                 args=task.args,
                 json_output=task.json_output,
                 created_at=task.created_at,
+                priority=task.priority,
             )
 
         @self.app.post("/api/tasks")
@@ -371,6 +399,7 @@ class ApiServer:
                 directory=Path(directory),
                 args=args,
                 status="pending",
+                priority=task_input.priority,
             )
             self.executor.pool.tasks.append(new_task)
             self.executor._save_state()
@@ -394,6 +423,7 @@ class ApiServer:
                 status=new_task.status,
                 retry_count=0,
                 bucket_id=new_task.bucket_id,
+                priority=new_task.priority,
             )
 
         @self.app.post("/api/tasks/{task_id}/retry")
@@ -431,6 +461,7 @@ class ApiServer:
                 duration_ms=task.duration_ms,
                 retry_count=task.retry_count,
                 bucket_id=task.bucket_id,
+                priority=task.priority,
             )
 
         @self.app.post("/api/tasks/{task_id}/skip")
@@ -457,6 +488,7 @@ class ApiServer:
                 status="skipped",
                 retry_count=task.retry_count,
                 bucket_id=task.bucket_id,
+                priority=task.priority,
             )
 
         @self.app.delete("/api/tasks/{task_id}")
@@ -511,15 +543,7 @@ class ApiServer:
                 status=new_task.status,
                 retry_count=0,
                 bucket_id=new_task.bucket_id,
-            )
-            await self._broadcast_pool_status()
-            return TaskResponse(
-                id=new_task.id,
-                prompt=new_task.prompt,
-                directory=str(new_task.directory),
-                status=new_task.status,
-                retry_count=0,
-                bucket_id=new_task.bucket_id,
+                priority=new_task.priority,
             )
 
         @self.app.patch("/api/tasks/{task_id}")
@@ -535,6 +559,8 @@ class ApiServer:
                 )
             if patch.prompt is not None:
                 task.prompt = patch.prompt
+            if patch.priority is not None:
+                task.priority = patch.priority
             if patch.model is not None or patch.effort is not None:
                 new_args = list(task.args)
                 if patch.model is not None:
@@ -570,6 +596,7 @@ class ApiServer:
                 status=task.status,
                 retry_count=task.retry_count,
                 bucket_id=task.bucket_id,
+                priority=task.priority,
             )
 
         @self.app.post("/api/pool/instant-retry")
@@ -756,6 +783,7 @@ class ApiServer:
                 directory=directory,
                 args=args,
                 bucket_id=chat_id,
+                priority=message_input.priority,
             )
             self.executor.pool.tasks.append(new_task)
             self.executor._save_state()

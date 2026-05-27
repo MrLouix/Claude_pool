@@ -785,6 +785,7 @@ class PoolTUI(App):
                 directory=Path(result["directory"]),
                 args=result["args"],
                 status="pending",
+                priority=2,
             )
 
             # Add to executor's pool

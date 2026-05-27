@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from claude_pool.models import Task
 
@@ -117,3 +118,73 @@ def test_task_roundtrip():
     assert restored.duration_ms == original.duration_ms
     assert restored.json_output == original.json_output
     assert restored.retry_count == original.retry_count
+
+
+# ── Priority tests ─────────────────────────────────────────────────────────────
+
+def test_task_priority_defaults_to_2():
+    task = Task(id="t1", prompt="p", directory=Path("/tmp"))
+    assert task.priority == 2
+
+
+def test_task_from_dict_priority_explicit():
+    data = {"id": "t2", "prompt": "p", "directory": "/tmp", "priority": 1}
+    task = Task.from_dict(data)
+    assert task.priority == 1
+
+
+def test_task_from_dict_priority_missing_defaults_to_2():
+    """Loading a pool.json entry without a priority key yields priority=2."""
+    data = {"id": "t3", "prompt": "p", "directory": "/tmp"}
+    task = Task.from_dict(data)
+    assert task.priority == 2
+
+
+def test_task_to_dict_includes_priority():
+    task = Task(id="t4", prompt="p", directory=Path("/tmp"), priority=3)
+    d = task.to_dict()
+    assert d["priority"] == 3
+
+
+def test_task_roundtrip_preserves_priority():
+    """Saving and reloading a task preserves its priority."""
+    original = Task(id="t5", prompt="p", directory=Path("/tmp"), priority=1)
+    restored = Task.from_dict(original.to_dict())
+    assert restored.priority == 1
+
+
+def test_task_input_priority_validation():
+    """Pydantic TaskInput rejects priority values outside [1, 2, 3]."""
+    from claude_pool.api import TaskInput
+
+    assert TaskInput(prompt="p", priority=1).priority == 1
+    assert TaskInput(prompt="p", priority=2).priority == 2
+    assert TaskInput(prompt="p", priority=3).priority == 3
+    assert TaskInput(prompt="p").priority == 2  # default
+
+    with pytest.raises(ValidationError):
+        TaskInput(prompt="p", priority=0)
+    with pytest.raises(ValidationError):
+        TaskInput(prompt="p", priority=4)
+
+
+def test_task_patch_input_priority_validation():
+    """Pydantic TaskPatchInput rejects priority values outside [1, 2, 3]."""
+    from claude_pool.api import TaskPatchInput
+
+    assert TaskPatchInput(priority=None).priority is None  # optional
+    assert TaskPatchInput(priority=1).priority == 1
+
+    with pytest.raises(ValidationError):
+        TaskPatchInput(priority=5)
+
+
+def test_message_input_priority_validation():
+    """Pydantic MessageInput rejects priority values outside [1, 2, 3]."""
+    from claude_pool.api import MessageInput
+
+    assert MessageInput(prompt="p").priority == 2  # default
+    assert MessageInput(prompt="p", priority=3).priority == 3
+
+    with pytest.raises(ValidationError):
+        MessageInput(prompt="p", priority=0)

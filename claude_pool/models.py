@@ -84,6 +84,7 @@ class Task:
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     session_id: str | None = None
     bucket_id: str = "main"
+    priority: int = 2
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Task":
@@ -112,6 +113,9 @@ class Task:
 
         bucket_id = str(data.get("bucket_id", "main"))
 
+        priority_raw = data.get("priority", 2)
+        priority = int(priority_raw) if priority_raw is not None else 2
+
         return cls(
             id=str(data["id"]),
             prompt=str(data["prompt"]),
@@ -125,6 +129,7 @@ class Task:
             created_at=str(created_at),
             session_id=session_id,
             bucket_id=bucket_id,
+            priority=priority,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -142,4 +147,5 @@ class Task:
             "created_at": self.created_at,
             "session_id": self.session_id,
             "bucket_id": self.bucket_id,
+            "priority": self.priority,
         }
