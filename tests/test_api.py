@@ -431,3 +431,157 @@ def test_post_instant_retry(api):
     assert r.json()["status"] == "success"
     assert server.executor.pool.suspended_until is None
     assert server.executor.pool.is_suspended is False
+
+
+# ── POST /api/tasks — priority ────────────────────────────────────────────────
+
+
+def test_post_task_with_priority_1(api):
+    """POST /api/tasks with priority=1 creates a task with priority=1."""
+    client, server = api
+    r = client.post(
+        "/api/tasks",
+        json={"prompt": "High priority task", "directory": str(Path.home()), "priority": 1},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["priority"] == 1
+    task = next(t for t in server.executor.pool.tasks if t.id == data["id"])
+    assert task.priority == 1
+
+
+def test_post_task_default_priority_is_2(api):
+    """POST /api/tasks without priority defaults to 2."""
+    client, server = api
+    r = client.post(
+        "/api/tasks",
+        json={"prompt": "Normal task", "directory": str(Path.home())},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["priority"] == 2
+    task = next(t for t in server.executor.pool.tasks if t.id == data["id"])
+    assert task.priority == 2
+
+
+def test_post_task_priority_5_returns_422(api):
+    """POST /api/tasks with priority=5 returns 422 Unprocessable Entity."""
+    client, _ = api
+    r = client.post(
+        "/api/tasks",
+        json={"prompt": "Bad priority", "directory": str(Path.home()), "priority": 5},
+    )
+    assert r.status_code == 422
+
+
+def test_post_task_priority_0_returns_422(api):
+    """POST /api/tasks with priority=0 returns 422."""
+    client, _ = api
+    r = client.post(
+        "/api/tasks",
+        json={"prompt": "Bad priority", "directory": str(Path.home()), "priority": 0},
+    )
+    assert r.status_code == 422
+
+
+# ── GET /api/tasks — priority ─────────────────────────────────────────────────
+
+
+def test_get_tasks_includes_priority(api):
+    """GET /api/tasks response includes priority field."""
+    client, server = api
+    bid = _add_chat(server)
+    task = _add_task(server, bid, prompt="check priority")
+    task.priority = 3
+    server.executor._save_state()
+
+    r = client.get("/api/tasks")
+    assert r.status_code == 200
+    tasks = r.json()
+    match = next((t for t in tasks if t["id"] == task.id), None)
+    assert match is not None
+    assert match["priority"] == 3
+
+
+def test_get_task_detail_includes_priority(api):
+    """GET /api/tasks/{id} response includes priority field."""
+    client, server = api
+    bid = _add_chat(server)
+    task = _add_task(server, bid)
+    task.priority = 1
+    server.executor._save_state()
+
+    r = client.get(f"/api/tasks/{task.id}")
+    assert r.status_code == 200
+    assert r.json()["priority"] == 1
+
+
+# ── PATCH /api/tasks/{id} — priority ─────────────────────────────────────────
+
+
+def test_patch_task_priority_3(api):
+    """PATCH /api/tasks/{id} with priority=3 updates the task."""
+    client, server = api
+    bid = _add_chat(server)
+    task = _add_task(server, bid, status="pending")
+
+    r = client.patch(f"/api/tasks/{task.id}", json={"priority": 3})
+    assert r.status_code == 200
+    assert r.json()["priority"] == 3
+    assert task.priority == 3
+
+
+def test_patch_task_priority_0_returns_422(api):
+    """PATCH /api/tasks/{id} with priority=0 returns 422."""
+    client, server = api
+    bid = _add_chat(server)
+    task = _add_task(server, bid, status="pending")
+
+    r = client.patch(f"/api/tasks/{task.id}", json={"priority": 0})
+    assert r.status_code == 422
+
+
+def test_patch_task_priority_4_returns_422(api):
+    """PATCH /api/tasks/{id} with priority=4 returns 422."""
+    client, server = api
+    bid = _add_chat(server)
+    task = _add_task(server, bid, status="pending")
+
+    r = client.patch(f"/api/tasks/{task.id}", json={"priority": 4})
+    assert r.status_code == 422
+
+
+# ── POST /api/chats/{id}/messages — priority ──────────────────────────────────
+
+
+def test_post_message_with_priority_1(api):
+    """POST /api/chats/{id}/messages with priority=1 creates a task with priority=1."""
+    client, server = api
+    bid = _add_chat(server)
+
+    r = client.post(f"/api/chats/{bid}/messages", json={"prompt": "urgent", "priority": 1})
+    assert r.status_code == 201
+    task_id = r.json()["id"]
+    task = next(t for t in server.executor.pool.tasks if t.id == task_id)
+    assert task.priority == 1
+
+
+def test_post_message_default_priority_is_2(api):
+    """POST /api/chats/{id}/messages without priority defaults to 2."""
+    client, server = api
+    bid = _add_chat(server)
+
+    r = client.post(f"/api/chats/{bid}/messages", json={"prompt": "normal"})
+    assert r.status_code == 201
+    task_id = r.json()["id"]
+    task = next(t for t in server.executor.pool.tasks if t.id == task_id)
+    assert task.priority == 2
+
+
+def test_post_message_priority_5_returns_422(api):
+    """POST /api/chats/{id}/messages with priority=5 returns 422."""
+    client, server = api
+    bid = _add_chat(server)
+
+    r = client.post(f"/api/chats/{bid}/messages", json={"prompt": "bad", "priority": 5})
+    assert r.status_code == 422
