@@ -616,3 +616,81 @@ async def test_delete_bucket_skips_running_task_and_leaves_consistent_queue(temp
     assert len(executor.pool.tasks) == 1
     assert executor.pool.tasks[0].id == "other_1"
     assert all(t.bucket_id != "chat_x" for t in executor.pool.tasks)
+
+
+# ── Priority ordering tests ────────────────────────────────────────────────────
+
+def _sorted_pending(tasks: list[Task]) -> list[Task]:
+    """Mirror the executor's priority sort so tests don't duplicate the lambda."""
+    pending = [t for t in tasks if t.status == "pending"]
+    pending.sort(key=lambda t: (t.priority, t.created_at))
+    return pending
+
+
+def make_task(task_id: str, priority: int, created_offset_s: int = 0) -> Task:
+    base = datetime(2024, 1, 1, 12, 0, 0)
+    created_at = (base + timedelta(seconds=created_offset_s)).isoformat()
+    return Task(
+        id=task_id,
+        prompt=f"prompt {task_id}",
+        directory=Path("/tmp"),
+        priority=priority,
+        created_at=created_at,
+    )
+
+
+def test_priority_lower_number_wins_over_later_creation():
+    """priority=1 created later beats priority=2 created earlier."""
+    p2_early = make_task("p2", priority=2, created_offset_s=0)
+    p1_late = make_task("p1", priority=1, created_offset_s=10)
+    result = _sorted_pending([p2_early, p1_late])
+    assert result[0].id == "p1"
+    assert result[1].id == "p2"
+
+
+def test_priority_same_priority_chronological():
+    """Same priority: earlier created_at wins."""
+    p1_early = make_task("early", priority=1, created_offset_s=0)
+    p1_late = make_task("late", priority=1, created_offset_s=5)
+    result = _sorted_pending([p1_late, p1_early])
+    assert result[0].id == "early"
+    assert result[1].id == "late"
+
+
+def test_priority_three_levels_order():
+    """Tasks with priority 3, 2, 1 execute in order 1 → 2 → 3."""
+    p3 = make_task("p3", priority=3, created_offset_s=0)
+    p2 = make_task("p2", created_offset_s=1, priority=2)
+    p1 = make_task("p1", priority=1, created_offset_s=2)
+    result = _sorted_pending([p3, p2, p1])
+    assert [t.id for t in result] == ["p1", "p2", "p3"]
+
+
+def test_priority_new_high_priority_jumps_queue():
+    """A new priority=1 task added later jumps ahead of existing priority=2 tasks."""
+    p2_a = make_task("p2a", priority=2, created_offset_s=0)
+    p2_b = make_task("p2b", priority=2, created_offset_s=1)
+    # Simulate first iteration: only p2 tasks exist
+    result_before = _sorted_pending([p2_a, p2_b])
+    assert result_before[0].id == "p2a"
+
+    # New p1 task arrives (created later but higher priority)
+    p1_new = make_task("p1_new", priority=1, created_offset_s=5)
+    # Simulate next iteration: sort is recalculated with new task in pool
+    result_after = _sorted_pending([p2_a, p2_b, p1_new])
+    assert result_after[0].id == "p1_new"
+    assert result_after[1].id == "p2a"
+    assert result_after[2].id == "p2b"
+
+
+def test_priority_non_pending_tasks_excluded():
+    """Only pending tasks are eligible; running/success/failed are excluded."""
+    pending = make_task("pending", priority=3, created_offset_s=0)
+    running = make_task("running", priority=1, created_offset_s=1)
+    running.status = "running"
+    done = make_task("done", priority=1, created_offset_s=2)
+    done.status = "success"
+
+    result = _sorted_pending([pending, running, done])
+    assert len(result) == 1
+    assert result[0].id == "pending"

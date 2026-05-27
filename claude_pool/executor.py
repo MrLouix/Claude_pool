@@ -394,8 +394,8 @@ class TaskExecutor:
                 await asyncio.sleep(1)
                 continue
 
-            # Sort pending tasks by created_at (chronological order)
-            pending_tasks.sort(key=lambda t: t.created_at)
+            # Sort pending tasks by (priority ASC, created_at ASC), recalculated each iteration
+            pending_tasks.sort(key=lambda t: (t.priority, t.created_at))
 
             # Execute next pending task
             task = pending_tasks[0]
@@ -466,11 +466,11 @@ class TaskExecutor:
                 # Then add more pending tasks up to max_concurrent
                 available_slots = self.max_concurrent - len(tasks_to_execute)
                 if available_slots > 0:
-                    pending_tasks.sort(key=lambda t: t.created_at)
+                    pending_tasks.sort(key=lambda t: (t.priority, t.created_at))
                     tasks_to_execute.extend(pending_tasks[:available_slots])
             else:
                 # Execute pending tasks up to max_concurrent
-                pending_tasks.sort(key=lambda t: t.created_at)
+                pending_tasks.sort(key=lambda t: (t.priority, t.created_at))
                 tasks_to_execute = pending_tasks[: self.max_concurrent]
 
             if not tasks_to_execute:
