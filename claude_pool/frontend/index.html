@@ -172,6 +172,15 @@
     .stat-card.success .number { color: #10b981; }
     .stat-card.failed .number { color: #ef4444; }
 
+    .priority-badge {
+        display: inline-block;
+        font-size: 11px; padding: 2px 7px; border-radius: 10px;
+        margin-left: 6px; font-weight: 600; vertical-align: middle;
+    }
+    .priority-badge.p1 { background: #fee2e2; color: #b91c1c; }
+    .priority-badge.p2 { background: #e5e7eb; color: #555; }
+    .priority-badge.p3 { background: #dbeafe; color: #1d4ed8; }
+
 
     /* ---- Mobile / responsive helpers ---- */
 
@@ -735,7 +744,7 @@
         .td-result-md code { background: #f0f0f0; color: #c7254e; padding: 1px 4px; border-radius: 3px; font-size: 13px; }
         .td-result-md pre code { background: none; color: inherit; padding: 0; }
         .td-result-md strong { font-weight: 700; }
-        .td-edit-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 8px; border-top: 1px solid #eee; }
+        .td-edit-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding-top: 8px; border-top: 1px solid #eee; }
         .td-edit-row select {
             padding: 8px; border: 1px solid #ddd; border-radius: 5px;
             font-family: inherit; font-size: 14px; background: #fff;
@@ -1152,6 +1161,10 @@
                 <label>Created At</label>
                 <div class="td-value" id="tv-created-at">—</div>
             </div>
+            <div class="td-field">
+                <label>Priority</label>
+                <div class="td-value" id="td-priority">—</div>
+            </div>
             <div class="td-field td-prompt-field">
                 <label>Prompt</label>
                 <textarea class="td-prompt-textarea" id="td-prompt" readonly></textarea>
@@ -1174,6 +1187,14 @@
                         <option value="medium">medium</option>
                         <option value="high">high</option>
                         <option value="max">max</option>
+                    </select>
+                </div>
+                <div class="td-field">
+                    <label>Priority</label>
+                    <select id="td-edit-priority">
+                        <option value="1">1 — High</option>
+                        <option value="2">2 — Normal</option>
+                        <option value="3">3 — Low</option>
                     </select>
                 </div>
             </div>
@@ -1578,6 +1599,13 @@
             }
         }
 
+        function priorityBadge(priority) {
+            const p = priority || 2;
+            const labels = { 1: 'P1', 2: 'P2', 3: 'P3' };
+            const cls = { 1: 'p1', 2: 'p2', 3: 'p3' };
+            return `<span class="priority-badge ${cls[p]}">${labels[p]}</span>`;
+        }
+
         function bucketBadge(bucketId) {
             if (!bucketId || bucketId === 'main') {
                 return '<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:#e5e7eb;color:#555;margin-left:6px;font-weight:600;">CLI</span>';
@@ -1622,7 +1650,7 @@
                     <div class="task-info">
                         <div class="task-id">${task.id}</div>
                         <div class="task-prompt">${escapeHtml(task.prompt.substring(0, 100))}${task.prompt.length > 100 ? '…' : ''}</div>
-                        <span class="task-status ${task.status}">${task.status}</span>${bucketBadge(task.bucket_id)}
+                        <span class="task-status ${task.status}">${task.status}</span>${priorityBadge(task.priority)}${bucketBadge(task.bucket_id)}
                     </div>
                 </div>
             `).join('');
@@ -2393,6 +2421,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         let tdOriginalPrompt = '';
         let tdOriginalModel = '';
         let tdOriginalEffort = '';
+        let tdOriginalPriority = 2;
 
         function renderTaskDetail(task) {
             document.getElementById('td-id').textContent = task.id;
@@ -2416,12 +2445,15 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             tdOriginalPrompt = task.prompt;
             tdOriginalModel = '';
             tdOriginalEffort = '';
+            tdOriginalPriority = task.priority || 2;
             if (task.args) {
                 const mi = task.args.indexOf('--model');
                 if (mi >= 0 && mi + 1 < task.args.length) tdOriginalModel = task.args[mi + 1];
                 const ei = task.args.indexOf('--effort');
                 if (ei >= 0 && ei + 1 < task.args.length) tdOriginalEffort = task.args[ei + 1];
             }
+            const priorityLabels = { 1: '1 — High', 2: '2 — Normal', 3: '3 — Low' };
+            document.getElementById('td-priority').textContent = priorityLabels[tdOriginalPriority] || tdOriginalPriority;
             // Button visibility
             const canSkip = task.status === 'pending' || task.status === 'rate_limit_retry';
             const canRetry = task.status === 'failed' || task.status === 'success';
@@ -2445,6 +2477,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             // Reset edit selects
             document.getElementById('td-edit-model').value = tdOriginalModel;
             document.getElementById('td-edit-effort').value = tdOriginalEffort;
+            document.getElementById('td-edit-priority').value = String(tdOriginalPriority);
         }
 
         function tdToggleEdit() {
@@ -2469,6 +2502,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             document.getElementById('td-prompt').value = tdOriginalPrompt;
             document.getElementById('td-edit-model').value = tdOriginalModel;
             document.getElementById('td-edit-effort').value = tdOriginalEffort;
+            document.getElementById('td-edit-priority').value = String(tdOriginalPriority);
             document.getElementById('td-edit-row').style.display = 'none';
             document.getElementById('td-btn-save').style.display = 'none';
             document.getElementById('td-btn-cancel-edit').style.display = 'none';
@@ -2491,11 +2525,13 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             if (!prompt) { alert('Prompt cannot be empty.'); return; }
             const model = document.getElementById('td-edit-model').value;   // "" = default
             const effort = document.getElementById('td-edit-effort').value; // "" = default
+            const priority = parseInt(document.getElementById('td-edit-priority').value);
             try {
                 const body = { prompt };
                 // Only send model/effort when they changed; send null to clear a previously set value
                 if (model !== tdOriginalModel) body.model = model || null;
                 if (effort !== tdOriginalEffort) body.effort = effort || null;
+                if (priority !== tdOriginalPriority) body.priority = priority;
                 const res = await fetch(`/api/tasks/${currentTaskId}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
