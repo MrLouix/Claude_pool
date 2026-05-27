@@ -62,6 +62,7 @@ class TaskResponse(BaseModel):
     retry_count: int = 0
     bucket_id: str = "main"
     priority: int = 2
+    created_at: Optional[str] = None
 
 
 class TaskDetailResponse(BaseModel):
@@ -340,6 +341,7 @@ class ApiServer:
                     retry_count=t.retry_count,
                     bucket_id=t.bucket_id,
                     priority=t.priority,
+                    created_at=t.created_at,
                 )
                 for t in tasks
             ]

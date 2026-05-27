@@ -1636,7 +1636,12 @@
             // Running list: all non-success tasks, sorted by execution order (priority ASC, created_at ASC)
             const running = tasks
                 .filter(t => t.status !== 'success')
-                .sort((a, b) => (a.priority - b.priority) || a.created_at.localeCompare(b.created_at));
+                .sort((a, b) => {
+                    const pDiff = (a.priority ?? 2) - (b.priority ?? 2);
+                    const aTime = a.created_at || '';
+                    const bTime = b.created_at || '';
+                    return pDiff || aTime.localeCompare(bTime);
+                });
 
             taskList.innerHTML = running.length
                 ? running.map(taskItemHtml).join('')
@@ -1645,7 +1650,11 @@
             // Completed list: success tasks only, most recent first
             const completed = tasks
                 .filter(t => t.status === 'success')
-                .sort((a, b) => b.created_at.localeCompare(a.created_at));
+                .sort((a, b) => {
+                    const aTime = a.created_at || '';
+                    const bTime = b.created_at || '';
+                    return bTime.localeCompare(aTime);
+                });
 
             successList.innerHTML = completed.length
                 ? completed.map(taskItemHtml).join('')
