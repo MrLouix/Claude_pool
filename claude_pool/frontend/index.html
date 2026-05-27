@@ -1102,21 +1102,19 @@
         </div>
 
         <div class="section">
-            <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-                Recent Tasks
-                <div id="task-filter-pills" style="display:flex;flex-wrap:wrap;gap:6px;">
-                    <button class="task-filter-pill active" data-status="all" onclick="setTaskFilter('all')">All</button>
-                    <button class="task-filter-pill" data-status="pending" onclick="setTaskFilter('pending')">Pending</button>
-                    <button class="task-filter-pill" data-status="running" onclick="setTaskFilter('running')">Running</button>
-                    <button class="task-filter-pill" data-status="success" onclick="setTaskFilter('success')">Success</button>
-                    <button class="task-filter-pill" data-status="failed" onclick="setTaskFilter('failed')">Failed</button>
-                    <button class="task-filter-pill" data-status="skipped" onclick="setTaskFilter('skipped')">Skipped</button>
-                    <button class="task-filter-pill" data-status="rate_limit_retry" onclick="setTaskFilter('rate_limit_retry')">Rate limit retry</button>
-                </div>
-            </div>
+            <div class="section-header">Running List</div>
             <div class="section-content">
                 <div class="task-list" id="task-list">
                     <div class="empty-state">No tasks yet</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">Completed</div>
+            <div class="section-content">
+                <div class="task-list" id="success-list">
+                    <div class="empty-state">No completed tasks</div>
                 </div>
             </div>
         </div>
@@ -1418,6 +1416,7 @@
         const wsStatus = document.getElementById('ws-status');
         const eventLog = document.getElementById('event-log');
         const taskList = document.getElementById('task-list');
+        const successList = document.getElementById('success-list');
 
         function getWebSocketURL() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1622,46 +1621,35 @@
             return `<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:#ede9fe;color:#6d28d9;margin-left:6px;font-weight:600;cursor:pointer;" onclick="event.stopPropagation();navigate('chat/${bucketId}')">Chat: ${escapeHtml(label)}</span>`;
         }
 
-        function setTaskFilter(status) {
-            if (status === 'all') {
-                taskStatusFilters = new Set(['all']);
-            } else {
-                taskStatusFilters.delete('all');
-                if (taskStatusFilters.has(status)) {
-                    taskStatusFilters.delete(status);
-                } else {
-                    taskStatusFilters.add(status);
-                }
-                if (taskStatusFilters.size === 0) taskStatusFilters = new Set(['all']);
-            }
-            document.querySelectorAll('.task-filter-pill').forEach(p => {
-                p.classList.toggle('active', taskStatusFilters.has(p.dataset.status));
-            });
-            renderTasks(lastTasks);
-        }
-
-        function renderTasks(tasks) {
-            const filtered = taskStatusFilters.has('all')
-                ? tasks
-                : tasks.filter(t => taskStatusFilters.has(t.status));
-            if (!filtered.length) {
-                taskList.innerHTML = taskStatusFilters.has('all')
-                    ? '<div class="empty-state">No tasks yet</div>'
-                    : '<div class="empty-state">No tasks match this filter.</div>';
-                return;
-            }
-            // shadow tasks with filtered for the rest of the function
-            tasks = filtered;
-
-            taskList.innerHTML = tasks.map(task => `
+        function taskItemHtml(task) {
+            return `
                 <div class="task-item" data-task-id="${task.id}" onclick="navigate('task/${task.id}')" style="cursor:pointer;">
                     <div class="task-info">
                         <div class="task-id">${task.id}</div>
                         <div class="task-prompt">${escapeHtml(task.prompt.substring(0, 100))}${task.prompt.length > 100 ? '…' : ''}</div>
                         <span class="task-status ${task.status}">${task.status}</span>${priorityBadge(task.priority)}${bucketBadge(task.bucket_id)}
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+        }
+
+        function renderTasks(tasks) {
+            // Running list: all non-success tasks, sorted by execution order (priority ASC, created_at ASC)
+            const running = tasks
+                .filter(t => t.status !== 'success')
+                .sort((a, b) => (a.priority - b.priority) || a.created_at.localeCompare(b.created_at));
+
+            taskList.innerHTML = running.length
+                ? running.map(taskItemHtml).join('')
+                : '<div class="empty-state">No tasks yet</div>';
+
+            // Completed list: success tasks only, most recent first
+            const completed = tasks
+                .filter(t => t.status === 'success')
+                .sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+            successList.innerHTML = completed.length
+                ? completed.map(taskItemHtml).join('')
+                : '<div class="empty-state">No completed tasks</div>';
         }
 
         async function retryTask(taskId) {
@@ -1917,7 +1905,6 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         let currentChatDirectory = '';
         let currentTaskId = null;
         let taskSourceChatId = null;
-        let taskStatusFilters = new Set(['all']);
         let lastTasks = [];
         const dashboardView = document.getElementById('dashboard-view');
         const chatView = document.getElementById('chat-view');
