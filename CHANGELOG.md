@@ -4,8 +4,43 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-27
+
 ### Added
-- feat: chat tabs in dashboard with shared pool execution
+- **Priority system** (1 = High, 2 = Normal, 3 = Low) for tasks
+  - `priority` field on `Task` dataclass (default 2), persisted in `pool.json`
+  - Executor sorts pending tasks by `(priority ASC, created_at ASC)` before each iteration (sequential and concurrent modes)
+  - All API endpoints expose and accept `priority`: `TaskInput`, `TaskResponse`, `TaskDetailResponse`, `TaskPatchInput`, `MessageInput`
+  - Task creation form: priority dropdown (default Normal)
+  - Task list: priority badge (P1/P2/P3) displayed next to status
+  - Task detail view: read-only priority field; edit mode includes priority dropdown
+  - Run Dev Plan modal: priority dropdown; orchestrator prompt passes `priority` to enqueued subtasks
+- **Running List** panel: tasks ordered by execution priority (non-success tasks only)
+- **Completed** panel: separate list of `success` tasks sorted by completion time (newest first)
+
+### Fixed
+- Back navigation from task detail inside a chat now returns to the chat view (not the dashboard)
+- Chat bucket badge in task list no longer also opens the task detail (event propagation fix)
+- `created_at` field now correctly populated in task detail view
+- WebSocket keepalive ping (every 30 s) prevents mobile disconnects
+
+### Changed
+- Dashboard stats: simplified to show only the pending task count
+- Chat send button replaced with compact ⬆ arrow button
+- "Recent Tasks" panel renamed to "Running List"
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.1.1] - 2025-XX-XX
+
+### Fixed
+- Hotfixes and minor stability improvements
+
+## [1.1.0] - 2025-XX-XX
+
+### Added
+- Chat tabs in dashboard with shared pool execution
   - `pool.json` v2 schema: `buckets` dict + `bucket_id` per task, with automatic migration from v1/v0
   - `Bucket` dataclass (id, type, label, directory, created_at); `"main"` bucket always present
   - `TaskExecutor.delete_bucket()`: removes bucket + all its tasks, skips running task if needed
@@ -17,9 +52,6 @@ All notable changes to this project will be documented in this file.
   - Auto-scroll only when already at bottom of message thread
   - `renderText`: markdown-lite rendering (code fences, inline code, bold, newlines) with correct code block isolation
   - Suspended-pool banner inside chat view (from `pool_status` WS event)
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.0.0] - 2024-01-XX
 

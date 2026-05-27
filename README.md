@@ -9,9 +9,11 @@ Claude Pool vous permet de constituer une file d'attente de tâches de code et d
 ## Ce que ça fait
 
 - **File d'attente de tâches** : vous ajoutez des tâches (= des instructions pour Claude), elles s'exécutent séquentiellement
+- **Priorités** : assignez une priorité 1 (haute), 2 (normale) ou 3 (basse) à chaque tâche — l'exécuteur trie par `(priorité, date de création)`
 - **Tableau de bord web** : suivez l'avancement depuis `http://localhost:8000`
+- **Running List** : panneau en temps réel des tâches en cours/en attente, trié par ordre d'exécution ; panneau séparé pour les tâches terminées
 - **Chat en direct** : ouvrez un onglet de conversation et échangez avec Claude dans une interface façon messagerie, tout en partageant la même file d'exécution
-- **Run Dev Plan** : décrivez un projet en texte libre, Claude découpe lui-même en étapes et les enfile dans la queue
+- **Run Dev Plan** : décrivez un projet en texte libre, Claude découpe lui-même en étapes et les enfile dans la queue (avec priorité configurable)
 - **Gestion des rate limits** : si Claude est temporairement indisponible, le pool attend automatiquement et réessaie
 - **TUI interactif** : interface en ligne de commande pour surveiller les tâches sans navigateur
 
@@ -52,15 +54,15 @@ Avant de commencer, vous avez besoin de :
 3. Installez le package :
 
 ```powershell
-pip install --no-cache-dir claude_pool-1.1.0-py3-none-any.whl
+pip install --no-cache-dir claude_pool-1.2.0-py3-none-any.whl
 ```
 
-> Si `pip` n'est pas reconnu, utilisez `python -m pip install --no-cache-dir claude_pool-1.1.0-py3-none-any.whl`
+> Si `pip` n'est pas reconnu, utilisez `python -m pip install --no-cache-dir claude_pool-1.2.0-py3-none-any.whl`
 
 ### Linux / macOS — Installation depuis la release
 
 ```bash
-pip install claude_pool-1.1.0-py3-none-any.whl
+pip install claude_pool-1.2.0-py3-none-any.whl
 ```
 
 ### Option B — Cloner le dépôt (contributeurs)
@@ -135,7 +137,7 @@ taskkill /PID <PID> /F
 
 # 2. Télécharger la nouvelle release depuis GitHub
 #    (ou utiliser pip si le package est sur PyPI)
-pip install --no-cache-dir --force-reinstall claude_pool-1.1.0-py3-none-any.whl
+pip install --no-cache-dir --force-reinstall claude_pool-1.2.0-py3-none-any.whl
 
 # 3. Redémarrer le serveur
 claude-pool --pool $env:USERPROFILE\claude-pool-data\pool.json --serve --port 8000 --no-tui
@@ -147,7 +149,7 @@ claude-pool --pool $env:USERPROFILE\claude-pool-data\pool.json --serve --port 80
 # 1. Arrêter le serveur (Ctrl+C)
 
 # 2. Réinstaller le package
-pip install --force-reinstall claude_pool-1.1.0-py3-none-any.whl
+pip install --force-reinstall claude_pool-1.2.0-py3-none-any.whl
 
 # 3. Redémarrer
 claude-pool --pool ~/claude-pool-data/pool.json --serve --port 8000 --no-tui
@@ -170,7 +172,7 @@ La tâche apparaît dans la liste et sera exécutée dès que Claude est disponi
 
 ### Détails d'une tâche
 
-Cliquez sur n'importe quelle tâche dans la liste **Recent Tasks** pour ouvrir un panneau de détails avec :
+Cliquez sur n'importe quelle tâche dans la **Running List** ou le panneau **Completed** pour ouvrir un panneau de détails avec :
 
 - Tous les champs : ID, statut, directory (lecture seule), prompt, args, exit code, durée, retry count, résultat
 - **Prompt** et **résultat** sont scrollables pour les longs contenus
@@ -179,7 +181,7 @@ Cliquez sur n'importe quelle tâche dans la liste **Recent Tasks** pour ouvrir u
   - **Retry** — pour les tâches `failed` ou `success`
   - **Delete** — fonctionne dans tous les statuts
   - **Duplicate** — crée une copie en statut `pending`
-- Pour les tâches `pending` uniquement : bouton **✏️ Edit** pour modifier le prompt, le modèle et le niveau d'effort
+- Pour les tâches `pending` uniquement : bouton **✏️ Edit** pour modifier le prompt, le modèle, le niveau d'effort et la priorité
 
 ### Run Dev Plan — générer un plan de développement automatiquement
 
@@ -295,6 +297,7 @@ Les champs `id`, `status`, `args`, etc. sont tous optionnels : Claude Pool les r
       "directory": "/chemin/absolu/vers/le/projet",
       "status": "pending",
       "args": ["--model", "haiku", "--effort", "low"],
+      "priority": 2,
       "exit_code": null,
       "duration_ms": null,
       "json_output": null,
@@ -324,6 +327,18 @@ Les champs `id`, `status`, `args`, etc. sont tous optionnels : Claude Pool les r
 | `--model` | `haiku`, `sonnet`, `opus` | `sonnet` |
 | `--effort` | `low`, `medium`, `high`, `max` | `medium` |
 | `--max-budget-usd` | nombre décimal | pas de limite |
+
+### Priorité des tâches
+
+Le champ `priority` (entier 1–3) contrôle l'ordre d'exécution :
+
+| Valeur | Signification |
+|--------|--------------|
+| `1` | Haute — exécutée en premier |
+| `2` | Normale (défaut) |
+| `3` | Basse — exécutée en dernier |
+
+Les tâches sont triées par `(priority ASC, created_at ASC)` avant chaque itération de l'exécuteur.
 
 ---
 
