@@ -66,6 +66,7 @@ class TaskDetailResponse(BaseModel):
     bucket_id: str = "main"
     args: list[str] = []
     json_output: Optional[dict] = None
+    created_at: Optional[str] = None
 
 
 class TaskPatchInput(BaseModel):
@@ -334,6 +335,7 @@ class ApiServer:
                 bucket_id=task.bucket_id,
                 args=task.args,
                 json_output=task.json_output,
+                created_at=task.created_at,
             )
 
         @self.app.post("/api/tasks")
