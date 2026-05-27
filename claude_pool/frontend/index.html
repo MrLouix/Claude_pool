@@ -1078,6 +1078,14 @@
                                 <option value="max">max</option>
                             </select>
                         </div>
+                        <div class="form-group">
+                            <label for="task-priority">Priority</label>
+                            <select id="task-priority" name="priority">
+                                <option value="1">1 — High</option>
+                                <option value="2" selected>2 — Normal</option>
+                                <option value="3">3 — Low</option>
+                            </select>
+                        </div>
                     </div>
                     <button type="submit" class="btn-primary">Create Task</button>
                 </form>
@@ -1656,6 +1664,7 @@
                 directory: document.getElementById('directory').value,
                 model: document.getElementById('model').value || null,
                 effort: document.getElementById('effort').value || null,
+                priority: parseInt(document.getElementById('task-priority').value),
             };
 
             try {
