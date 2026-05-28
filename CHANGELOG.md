@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-05-29
+
+### Fixed
+- Event Log panel moved above Completed panel in dashboard
+- Task cards no longer overflow outside the Completed panel on mobile (`overflow: hidden` on `.section`, `min-width: 0` on `.task-info`)
+- WebSocket generic error (`[object Event]`) suppressed — reconnect message is sufficient
+
 ## [1.2.0] - 2026-05-27
 
 ### Added
