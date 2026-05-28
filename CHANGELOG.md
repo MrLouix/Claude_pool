@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [1.2.1] - 2026-05-29
+## [1.2.2] - 2026-05-29
 
 ### Fixed
 - Event Log panel moved above Completed panel in dashboard
