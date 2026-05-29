@@ -248,6 +248,7 @@
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             margin-bottom: 20px;
+            overflow: hidden;
         }
 
         .section-header {
@@ -320,6 +321,8 @@
 
         .task-info {
             flex: 1;
+            min-width: 0;
+            overflow: hidden;
         }
 
         .task-id {
@@ -847,6 +850,27 @@
 
         .chat-item-count { font-size: 12px; color: #aaa; flex-shrink: 0; }
 
+        .chat-usage-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin-left: 6px;
+            align-self: center;
+            title: attr(data-title);
+        }
+        .chat-usage-dot.warn  { background: #f59e0b; }
+        .chat-usage-dot.alert { background: #ef4444; }
+
+        .chat-session-banner {
+            border-radius: 8px;
+            padding: 10px 16px;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        .chat-session-banner.warn  { background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; }
+        .chat-session-banner.alert { background: #fee2e2; border: 1px solid #ef4444; color: #991b1b; }
+
         /* ---- Run Dev Plan ---- */
         .btn-run-plan {
             background: #764ba2;
@@ -1111,19 +1135,19 @@
         </div>
 
         <div class="section">
-            <div class="section-header">Completed</div>
+            <div class="section-header">Event Log</div>
             <div class="section-content">
-                <div class="task-list" id="success-list">
-                    <div class="empty-state">No completed tasks</div>
+                <div class="log-container" id="event-log">
+                    <div class="log-line"><span class="log-timestamp">[00:00:00]</span> Waiting for events...</div>
                 </div>
             </div>
         </div>
 
         <div class="section">
-            <div class="section-header">Event Log</div>
+            <div class="section-header">Completed</div>
             <div class="section-content">
-                <div class="log-container" id="event-log">
-                    <div class="log-line"><span class="log-timestamp">[00:00:00]</span> Waiting for events...</div>
+                <div class="task-list" id="success-list">
+                    <div class="empty-state">No completed tasks</div>
                 </div>
             </div>
         </div>
@@ -1253,6 +1277,7 @@
         <div id="chat-suspended-banner" style="display:none;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 16px;margin-bottom:10px;color:#92400e;font-size:13px;">
             ⏸ Pool is suspended — messages will be processed after it resumes.
         </div>
+        <div id="chat-session-banner" class="chat-session-banner" style="display:none;"></div>
         <div class="message-thread" id="message-thread">
             <div class="empty-state">No messages yet.</div>
         </div>
@@ -1443,8 +1468,8 @@
                 handleWebSocketMessage(message);
             };
 
-            ws.onerror = (error) => {
-                logEvent(`WebSocket error: ${error}`, 'error');
+            ws.onerror = () => {
+                // Browser fires a generic error before onclose on network drops (e.g. mobile screen off) — onclose handles reconnect
             };
 
             ws.onclose = () => {
@@ -2038,11 +2063,20 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 el.innerHTML = '<div class="empty-state">No chats yet.</div>';
                 return;
             }
-            el.innerHTML = chats.map(c => `
+            el.innerHTML = chats.map(c => {
+                const u = c.session_usage_percent;
+                const dotClass = u >= 85 ? 'alert' : u >= 60 ? 'warn' : '';
+                const dotTitle = u != null ? `Session: ${Math.round(u)}%` : '';
+                const dot = dotClass
+                    ? `<span class="chat-usage-dot ${dotClass}" title="${dotTitle}"></span>`
+                    : '';
+                return `
                 <div class="chat-item">
                     <span style="font-size:20px;flex-shrink:0;">💬</span>
                     <div class="chat-item-info" onclick="navigate('chat/${c.id}')" style="cursor:pointer;">
-                        <div class="chat-item-label">${escapeHtml(c.label)}</div>
+                        <div class="chat-item-label" style="display:flex;align-items:center;gap:4px;">
+                            ${escapeHtml(c.label)}${dot}
+                        </div>
                         <div class="chat-item-dir">${escapeHtml(c.directory || '')}</div>
                     </div>
                     <span class="chat-item-count">${c.message_count} msg${c.message_count !== 1 ? 's' : ''}</span>
@@ -2050,8 +2084,8 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                         <button class="btn-primary" style="font-size:12px;padding:5px 10px;" onclick="navigate('chat/${c.id}')">Open</button>
                         <button class="btn-danger" style="font-size:12px;padding:5px 10px;" onclick="deleteChat('${c.id}','${escapeHtml(c.label)}')">Delete</button>
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         }
 
         window.deleteChat = async function(chatId, label) {
@@ -2124,6 +2158,20 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 document.getElementById('chat-header-dir').textContent = chat.directory || '';
                 currentChatDirectory = chat.directory || '';
                 document.getElementById('chat-plan-dir-display').textContent = currentChatDirectory || '(no directory)';
+
+                const banner = document.getElementById('chat-session-banner');
+                const u = chat.session_usage_percent;
+                if (u >= 85) {
+                    banner.className = 'chat-session-banner alert';
+                    banner.innerHTML = `🔴 Session at ${Math.round(u)}% — starting a new chat will significantly reduce costs.`;
+                    banner.style.display = '';
+                } else if (u >= 60) {
+                    banner.className = 'chat-session-banner warn';
+                    banner.innerHTML = `⚠️ Session at ${Math.round(u)}% — consider starting a new chat to keep costs low.`;
+                    banner.style.display = '';
+                } else {
+                    banner.style.display = 'none';
+                }
             } catch (e) { /* ignore */ }
         }
 

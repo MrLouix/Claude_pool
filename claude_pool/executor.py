@@ -103,28 +103,22 @@ class TaskExecutor:
             logger.error(f"Error loading tasks: {e}")
             raise
 
-    def _find_session_for_directory(self, directory: Path) -> str | None:
-        """Find the most recent session_id for tasks in a given directory.
-
-        Searches for the most recently completed task with status == "success"
-        in the same directory and with a non-None session_id.
-
-        Args:
-            directory: Directory to search for
-
-        Returns:
-            session_id if found, None otherwise
-        """
+    def _find_session_for_directory(self, directory: Path, bucket_id: str) -> str | None:
+        """Find the most recent session_id for tasks in the same directory and bucket."""
         matching_tasks = [
             t
             for t in self.pool.tasks
-            if (t.status == "success" and t.directory == directory and t.session_id is not None)
+            if (
+                t.status == "success"
+                and t.directory == directory
+                and t.bucket_id == bucket_id
+                and t.session_id is not None
+            )
         ]
 
         if not matching_tasks:
             return None
 
-        # Sort by created_at descending (most recent first)
         matching_tasks.sort(key=lambda t: t.created_at, reverse=True)
         return matching_tasks[0].session_id
 
@@ -156,7 +150,7 @@ class TaskExecutor:
         logger.info(f"Working directory: {task.directory}")
 
         # Check for existing session in the same directory
-        session_id = self._find_session_for_directory(task.directory)
+        session_id = self._find_session_for_directory(task.directory, task.bucket_id)
 
         # Build command
         cmd = [

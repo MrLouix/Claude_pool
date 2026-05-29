@@ -124,6 +124,7 @@ class ChatResponse(BaseModel):
     created_at: str
     message_count: int = 0
     last_activity: Optional[str] = None
+    session_usage_percent: Optional[float] = None
 
 
 class MessageInput(BaseModel):
@@ -693,6 +694,15 @@ class ApiServer:
                 bucket_tasks = [t for t in self.executor.pool.tasks if t.bucket_id == bid]
                 message_count = len(bucket_tasks)
                 last_activity = max((t.created_at for t in bucket_tasks), default=None)
+                dir_tasks = [
+                    t for t in self.executor.pool.tasks
+                    if t.bucket_id == bid and t.status == "success" and t.json_output
+                ]
+                dir_tasks.sort(key=lambda t: t.created_at, reverse=True)
+                session_usage = (
+                    dir_tasks[0].json_output.get("session_usage_percent")
+                    if dir_tasks else None
+                )
                 result.append(
                     ChatResponse(
                         id=bid,
@@ -701,6 +711,7 @@ class ApiServer:
                         created_at=bucket.created_at,
                         message_count=message_count,
                         last_activity=last_activity,
+                        session_usage_percent=session_usage,
                     )
                 )
             result.sort(key=lambda c: c.created_at, reverse=True)

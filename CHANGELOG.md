@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-05-29
+
+### Added
+- Session usage indicator (colored dot) on chat cards in dashboard: yellow ≥ 60%, red ≥ 85%
+- Warning banner inside chat view when session usage is high
+
+### Fixed
+- Sessions are now isolated per chat bucket (`bucket_id` filter in session lookup)
+- `session_usage_percent` in chat API computed from the correct bucket's tasks
+
 ## [1.2.2] - 2026-05-29
 
 ### Fixed
