@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-05-29
+
+### Changed
+- Session usage calculation now based on 1M token context window (was 200k)
+
 ## [1.2.3] - 2026-05-29
 
 ### Added

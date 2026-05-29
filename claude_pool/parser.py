@@ -77,9 +77,9 @@ def parse_claude_output(stdout: bytes) -> dict[str, Any]:
                 total_tokens += usage.get("cache_read_input_tokens", 0)
                 total_tokens += usage.get("cache_creation_input_tokens", 0)
 
-            # Calculate session usage (estimate based on 200k context window)
+            # Calculate session usage (estimate based on 1M context window)
             session_usage_percent = (
-                min(100.0, (total_tokens / 200000) * 100) if total_tokens > 0 else 0.0
+                min(100.0, (total_tokens / 1000000) * 100) if total_tokens > 0 else 0.0
             )
 
             # Extract session_id if present
