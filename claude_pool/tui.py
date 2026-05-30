@@ -396,11 +396,9 @@ class JsonOutputWidget(Static):
             self.update("No task selected")
             return
 
-        # Build content using string concatenation instead of list
         content = f"[bold]Task {task.id}[/bold]\n\n"
-        content += f"[bold]Prompt:[/bold] {task.prompt}\n\n"
+        content += f"[bold]Prompt:[/bold]\n{task.prompt}\n\n"
 
-        # Status line
         if task.exit_code is not None:
             meaning = get_exit_code_meaning(task.exit_code)
             content += f"Exit: {task.exit_code} ({meaning}) | "
@@ -412,47 +410,64 @@ class JsonOutputWidget(Static):
         else:
             content += "Duration: - | "
 
-        content += f"Retry: {task.retry_count}\n\n"
-
-        # JSON output
-        if task.json_output is None:
-            content += "[dim]No output yet[/dim]"
-        else:
-            output = task.json_output
-
-            # Tokens
-            if "tokens_used" in output:
-                content += f"[bold]Tokens used:[/bold] {output['tokens_used']:,}\n"
-
-            # Session usage
-            if "session_usage_percent" in output:
-                usage = output["session_usage_percent"]
-                color = "red" if usage > 80 else "yellow" if usage > 50 else "green"
-                content += f"[bold]Session usage:[/bold] [{color}]{usage}%[/{color}]\n\n"
-
-            # Result
-            result_value = output.get("result", "")
-            if result_value:
-                result = str(result_value).strip()
-                content += f"[bold]Result:[/bold]\n{result}\n\n"
-
-            # Code blocks
-            if "code_blocks" in output and output["code_blocks"]:
-                content += f"[bold]Code blocks:[/bold] {len(output['code_blocks'])}\n"
-                for i, block in enumerate(output["code_blocks"][:5]):
-                    lang = block.get("language", "unknown")
-                    filename = block.get("filename", "")
-                    content += f"  [{i+1}] {lang}: {filename}\n"
-                content += "\n"
-
-            # Files changed
-            if "files_changed" in output and output["files_changed"]:
-                files = ", ".join(output["files_changed"][:5])
-                if len(output["files_changed"]) > 5:
-                    files += f" ... ({len(output['files_changed'])} total)"
-                content += f"[bold]Files changed:[/bold] {files}\n\n"
+        content += f"Retry: {task.retry_count}"
 
         self.update(content)
+
+
+class ResultWidget(Static):
+    """Widget displaying task result and output."""
+
+    can_focus = True
+
+    def __init__(self) -> None:
+        """Initialize the result widget."""
+        super().__init__()
+        self.current_task: Task | None = None
+
+    def update_content(self, task: Task | None) -> None:
+        """Update the displayed result."""
+        self.current_task = task
+
+        if task is None:
+            self.update("")
+            return
+
+        if task.json_output is None:
+            self.update("[dim]No output yet[/dim]")
+            return
+
+        output = task.json_output
+        content = ""
+
+        if "tokens_used" in output:
+            content += f"[bold]Tokens used:[/bold] {output['tokens_used']:,}\n"
+
+        if "session_usage_percent" in output:
+            usage = output["session_usage_percent"]
+            color = "red" if usage > 80 else "yellow" if usage > 50 else "green"
+            content += f"[bold]Session usage:[/bold] [{color}]{usage}%[/{color}]\n\n"
+
+        result_value = output.get("result", "")
+        if result_value:
+            result = str(result_value).strip()
+            content += f"[bold]Result:[/bold]\n{result}\n\n"
+
+        if "code_blocks" in output and output["code_blocks"]:
+            content += f"[bold]Code blocks:[/bold] {len(output['code_blocks'])}\n"
+            for i, block in enumerate(output["code_blocks"][:5]):
+                lang = block.get("language", "unknown")
+                filename = block.get("filename", "")
+                content += f"  [{i+1}] {lang}: {filename}\n"
+            content += "\n"
+
+        if "files_changed" in output and output["files_changed"]:
+            files = ", ".join(output["files_changed"][:5])
+            if len(output["files_changed"]) > 5:
+                files += f" ... ({len(output['files_changed'])} total)"
+            content += f"[bold]Files changed:[/bold] {files}\n\n"
+
+        self.update(content if content else "[dim]No output yet[/dim]")
 
 
 class LogWidget(Static):
@@ -493,10 +508,26 @@ class PoolTUI(App):
 
     #json_output_container {
         height: 50%;
+        layout: vertical;
+    }
+
+    #prompt_container {
+        height: 1fr;
         border: solid blue;
     }
-    
+
+    #result_container {
+        height: 1fr;
+        border: solid cyan;
+    }
+
     #json_output {
+        width: 100%;
+        height: auto;
+        padding: 1;
+    }
+
+    #result_output {
         width: 100%;
         height: auto;
         padding: 1;
@@ -551,11 +582,15 @@ class PoolTUI(App):
         task_list_widget.id = "task_list_widget"
         yield task_list_widget
 
-        # Wrap json output in scrollable container
-        with ScrollableContainer(id="json_output_container"):
-            json_widget = JsonOutputWidget()
-            json_widget.id = "json_output"
-            yield json_widget
+        with Container(id="json_output_container"):
+            with ScrollableContainer(id="prompt_container"):
+                json_widget = JsonOutputWidget()
+                json_widget.id = "json_output"
+                yield json_widget
+            with ScrollableContainer(id="result_container"):
+                result_widget = ResultWidget()
+                result_widget.id = "result_output"
+                yield result_widget
 
         # Wrap logs in scrollable container
         with ScrollableContainer(id="logs_container"):
@@ -573,6 +608,11 @@ class PoolTUI(App):
             id="controls",
         )
         yield Footer()
+
+    def _update_detail(self, task: "Task | None") -> None:
+        """Update both prompt and result detail widgets."""
+        self.query_one("#json_output", JsonOutputWidget).update_content(task)
+        self.query_one("#result_output", ResultWidget).update_content(task)
 
     async def on_mount(self) -> None:
         """Called when app is mounted."""
@@ -622,33 +662,28 @@ class PoolTUI(App):
         log_widget = self.query_one("#logs", LogWidget)
         log_widget.add_log(f"Task {task.id}: {task.status}")
 
-        # Update JSON output if this is the selected task
         if self.selected_task and self.selected_task.id == task.id:
-            json_output = self.query_one("#json_output", JsonOutputWidget)
-            json_output.update_content(task)
+            self._update_detail(task)
 
     @on(DataTable.RowHighlighted)
     def on_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         """Handle task row selection."""
-        json_output = self.query_one("#json_output", JsonOutputWidget)
         task_list = self.query_one("#task_list_widget", TaskListWidget)
         table = self.query_one("#task_list_widget DataTable", DataTable)
 
-        # If clicking on header (cursor_row == -1 or row_key is None), deselect
         if event.row_key is None or table.cursor_row < 0:
             self.selected_task = None
-            json_output.update_content(None)
+            self._update_detail(None)
             return
 
-        # Get the row index (cursor_row is 0-based)
         row_idx = table.cursor_row
 
         if str(row_idx) in task_list.task_map:
             self.selected_task = task_list.task_map[str(row_idx)]
-            json_output.update_content(self.selected_task)
+            self._update_detail(self.selected_task)
         else:
             self.selected_task = None
-            json_output.update_content(None)
+            self._update_detail(None)
 
     def action_show_detail(self) -> None:
         """Show detailed output for selected task."""
@@ -698,8 +733,7 @@ class PoolTUI(App):
                 task_list.update_tasks()
 
                 self.selected_task = None
-                json_output = self.query_one("#json_output", JsonOutputWidget)
-                json_output.update_content(None)
+                self._update_detail(None)
 
     @on(Button.Pressed, "#add_task_btn")
     def on_add_task_pressed(self) -> None:
@@ -759,8 +793,7 @@ class PoolTUI(App):
             task_list = self.query_one("#task_list_widget", TaskListWidget)
             task_list.update_tasks()
 
-            json_output = self.query_one("#json_output", JsonOutputWidget)
-            json_output.update_content(task)
+            self._update_detail(task)
         else:
             log_widget = self.query_one("#logs", LogWidget)
             log_widget.add_log(f"[yellow]Task {task.id} is {task.status}, cannot retry[/yellow]")
