@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from claude_pool.executor import TaskExecutor
+from claude_pool.executor import TaskExecutor, _RATE_LIMIT_PATTERNS
 from claude_pool.models import Bucket, PoolState, Task
 
 
@@ -694,3 +694,152 @@ def test_priority_non_pending_tasks_excluded():
     result = _sorted_pending([pending, running, done])
     assert len(result) == 1
     assert result[0].id == "pending"
+
+
+# ── New helper tests ──────────────────────────────────────────────────────────
+
+
+class TestBuildCommand:
+    def _executor(self, tmp_path: Path) -> TaskExecutor:
+        return TaskExecutor(tmp_path / "pool.json", install_signal_handlers=False)
+
+    def test_base_command_structure(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        task = Task(id="t1", prompt="do something", directory=Path("/tmp"), args=[])
+        cmd = ex._build_command(task, session_id=None)
+        assert cmd[:6] == ["claude", "-p", "do something", "--output-format", "json", "--dangerously-skip-permissions"]
+        assert "--resume" not in cmd
+
+    def test_session_resume_appended(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        task = Task(id="t1", prompt="p", directory=Path("/tmp"), args=[])
+        cmd = ex._build_command(task, session_id="sess_xyz")
+        resume_idx = cmd.index("--resume")
+        assert cmd[resume_idx + 1] == "sess_xyz"
+
+    def test_extra_args_appended_after_resume(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        task = Task(id="t1", prompt="p", directory=Path("/tmp"), args=["--model", "opus"])
+        cmd = ex._build_command(task, session_id="sess_abc")
+        assert cmd[-2:] == ["--model", "opus"]
+        assert "--resume" in cmd
+
+    def test_extra_args_appended_without_resume(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        task = Task(id="t1", prompt="p", directory=Path("/tmp"), args=["--model", "opus"])
+        cmd = ex._build_command(task, session_id=None)
+        assert cmd[-2:] == ["--model", "opus"]
+
+
+class TestClassifyExit:
+    def _executor(self, tmp_path: Path) -> TaskExecutor:
+        return TaskExecutor(tmp_path / "pool.json", install_signal_handlers=False)
+
+    def test_exit_0_is_success(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        status, is_rl = ex._classify_exit(0, b"", b"", None)
+        assert status == "success"
+        assert is_rl is False
+
+    def test_exit_2_is_failed(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        status, is_rl = ex._classify_exit(2, b"", b"", None)
+        assert status == "failed"
+        assert is_rl is False
+
+    def test_exit_1_with_rate_limit_pattern_in_stderr(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        status, is_rl = ex._classify_exit(1, b"", b"Error: rate limit exceeded", None)
+        assert status == "rate_limit_retry"
+        assert is_rl is True
+
+    def test_exit_1_with_rate_limit_in_stdout(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        status, is_rl = ex._classify_exit(1, b"you've hit your limit", b"", None)
+        assert status == "rate_limit_retry"
+        assert is_rl is True
+
+    def test_exit_1_with_rate_limit_in_json_result(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        status, is_rl = ex._classify_exit(1, b"", b"", {"result": "too many requests"})
+        assert status == "rate_limit_retry"
+        assert is_rl is True
+
+    def test_exit_1_high_usage_triggers_rate_limit(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        status, is_rl = ex._classify_exit(1, b"", b"", {"session_usage_percent": 85, "result": ""})
+        assert status == "rate_limit_retry"
+        assert is_rl is True
+
+    def test_exit_1_no_rate_limit_is_failed(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        status, is_rl = ex._classify_exit(1, b"", b"some other error", {"result": "oops"})
+        assert status == "failed"
+        assert is_rl is False
+
+    def test_all_rate_limit_patterns_detected(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        for pattern in _RATE_LIMIT_PATTERNS:
+            status, is_rl = ex._classify_exit(1, b"", pattern.encode(), None)
+            assert status == "rate_limit_retry", f"pattern not detected: {pattern!r}"
+            assert is_rl is True
+
+
+class TestMergeNewTasks:
+    def _executor(self, tmp_path: Path) -> TaskExecutor:
+        return TaskExecutor(tmp_path / "pool.json", install_signal_handlers=False)
+
+    def test_new_task_is_added(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        ex.pool = PoolState(tasks=[], pool_file=ex.pool_file)
+        new_task = Task(id="new_1", prompt="new", directory=Path("/tmp"))
+        new_pool = PoolState(tasks=[new_task], pool_file=ex.pool_file)
+        changed = ex._merge_new_tasks(new_pool)
+        assert changed is True
+        assert any(t.id == "new_1" for t in ex.pool.tasks)
+
+    def test_existing_unchanged_task_skipped(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        existing = Task(id="t1", prompt="p", directory=Path("/tmp"), status="running")
+        ex.pool = PoolState(tasks=[existing], pool_file=ex.pool_file)
+        same_task = Task(id="t1", prompt="p", directory=Path("/tmp"), status="running")
+        new_pool = PoolState(tasks=[same_task], pool_file=ex.pool_file)
+        changed = ex._merge_new_tasks(new_pool)
+        assert changed is False
+
+    def test_task_reset_to_pending_updates_fields(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        existing = Task(id="t1", prompt="p", directory=Path("/tmp"), status="failed", exit_code=2)
+        ex.pool = PoolState(tasks=[existing], pool_file=ex.pool_file)
+        reset_task = Task(id="t1", prompt="p", directory=Path("/tmp"), status="pending", exit_code=None)
+        new_pool = PoolState(tasks=[reset_task], pool_file=ex.pool_file)
+        changed = ex._merge_new_tasks(new_pool)
+        assert changed is True
+        assert existing.status == "pending"
+
+    def test_callback_called_for_new_task(self, tmp_path: Path):
+        callback = MagicMock()
+        ex = self._executor(tmp_path)
+        ex.on_task_update = callback
+        ex.pool = PoolState(tasks=[], pool_file=ex.pool_file)
+        new_task = Task(id="cb_1", prompt="p", directory=Path("/tmp"))
+        new_pool = PoolState(tasks=[new_task], pool_file=ex.pool_file)
+        ex._merge_new_tasks(new_pool)
+        callback.assert_called_once_with(new_task)
+
+
+class TestDoSave:
+    def test_save_writes_file(self, tmp_path: Path):
+        pool_file = tmp_path / "pool.json"
+        ex = TaskExecutor(pool_file, install_signal_handlers=False)
+        ex.pool = PoolState(tasks=[], pool_file=pool_file)
+        ex._do_save()
+        assert pool_file.exists()
+
+    def test_save_updates_last_save_mtime(self, tmp_path: Path):
+        pool_file = tmp_path / "pool.json"
+        ex = TaskExecutor(pool_file, install_signal_handlers=False)
+        ex.pool = PoolState(tasks=[], pool_file=pool_file)
+        ex._do_save()
+        import os
+        assert ex._last_save_mtime == os.path.getmtime(str(pool_file))
