@@ -4,7 +4,9 @@ import asyncio
 import json
 import logging
 import os
+import platform
 import uuid as _uuid
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Set
@@ -12,151 +14,44 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, field_validator
 
+from .api_models import (
+    ChatCreateInput,
+    ChatResponse,
+    MessageInput,
+    MessageResponse,
+    PoolStatusResponse,
+    ProjectEntry,
+    ProjectInput,
+    TaskDetailResponse,
+    TaskInput,
+    TaskPatchInput,
+    TaskResponse,
+)
 from .executor import TaskExecutor
-from .models import Bucket, Task
+from .models import Bucket, PoolState, Task
 
 logger = logging.getLogger(__name__)
 
 
-# ── Pydantic models ───────────────────────────────────────────────
-
-
-class ProjectEntry(BaseModel):
-    name: str
-    github_url: str
-    directory: str
-
-
-class ProjectInput(BaseModel):
-    name: str
-    github_url: str
-    directory: str
-
-
-class TaskInput(BaseModel):
-    prompt: str
-    directory: Optional[str] = None
-    github_url: Optional[str] = None
-    args: list[str] = []
-    model: Optional[str] = None
-    effort: Optional[str] = None
-    priority: int = 2
-
-    @field_validator("priority")
-    @classmethod
-    def priority_must_be_valid(cls, v: int) -> int:
-        if v not in (1, 2, 3):
-            raise ValueError("priority must be 1, 2, or 3")
-        return v
-
-
-class TaskResponse(BaseModel):
-    id: str
-    prompt: str
-    directory: str
-    status: str
-    exit_code: Optional[int] = None
-    duration_ms: Optional[int] = None
-    retry_count: int = 0
-    bucket_id: str = "main"
-    priority: int = 2
-    created_at: Optional[str] = None
-
-
-class TaskDetailResponse(BaseModel):
-    id: str
-    prompt: str
-    directory: str
-    status: str
-    exit_code: Optional[int] = None
-    duration_ms: Optional[int] = None
-    retry_count: int = 0
-    bucket_id: str = "main"
-    args: list[str] = []
-    json_output: Optional[dict] = None
-    created_at: Optional[str] = None
-    priority: int = 2
-
-
-class TaskPatchInput(BaseModel):
-    prompt: Optional[str] = None
-    model: Optional[str] = None
-    effort: Optional[str] = None
-    priority: Optional[int] = None
-
-    @field_validator("priority")
-    @classmethod
-    def priority_must_be_valid(cls, v: Optional[int]) -> Optional[int]:
-        if v is not None and v not in (1, 2, 3):
-            raise ValueError("priority must be 1, 2, or 3")
-        return v
-
-
-class PoolStatusResponse(BaseModel):
-    total_tasks: int
-    pending_tasks: int
-    running_tasks: int
-    completed_tasks: int
-    failed_tasks: int
-    skipped_tasks: int
-    pool_suspended: bool
-    suspension_remaining: float = 0.0
-    retry_count: int = 0
-    claude_status: str
-    rate_limit_result: Optional[str] = None
-
-
-class ChatCreateInput(BaseModel):
-    """Input model for creating a chat bucket."""
-
-    directory: str
-    label: Optional[str] = None
-
-
-class ChatResponse(BaseModel):
-    """Response model for a chat bucket."""
-
-    id: str
-    label: str
-    directory: Optional[str] = None
-    created_at: str
-    message_count: int = 0
-    last_activity: Optional[str] = None
-    session_usage_percent: Optional[float] = None
-
-
-class MessageInput(BaseModel):
-    """Input model for sending a chat message (creates a task)."""
-
-    prompt: str
-    model: Optional[str] = None
-    effort: Optional[str] = None
-    priority: int = 2
-
-    @field_validator("priority")
-    @classmethod
-    def priority_must_be_valid(cls, v: int) -> int:
-        if v not in (1, 2, 3):
-            raise ValueError("priority must be 1, 2, or 3")
-        return v
-
-
-class MessageResponse(BaseModel):
-    """Response model for a chat message (task projected as chat turn)."""
-
-    id: str
-    role: str = "user"
-    content: str
-    created_at: str
-    status: str
-    assistant_response: Optional[str] = None
-    exit_code: Optional[int] = None
-    duration_ms: Optional[int] = None
-
-
 # ── Helpers ───────────────────────────────────────────────────────
+
+
+def _is_allowed_path(resolved: Path) -> bool:
+    """Return True when *resolved* is inside the platform-specific allow-list.
+
+    On Linux/Mac: only /home and /mnt subtrees are permitted.
+    On Windows: all paths are allowed.
+    """
+    if platform.system() == "Windows":
+        return True
+    s = str(resolved).replace("\\", "/")
+    return s.startswith("/home") or s.startswith("/mnt")
+
+
+def _generate_task_id() -> str:
+    """Return a unique task identifier: task_YYYYMMDD_HHMMSS_<8hex>."""
+    return f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
 
 
 def _validate_directory(directory: str) -> Path:
@@ -166,22 +61,54 @@ def _validate_directory(directory: str) -> Path:
     On Windows, allows any path.
     Raises HTTPException(404) if the path does not exist.
     """
-    import platform
-    import logging
-    logger = logging.getLogger(__name__)
     logger.info(f"_validate_directory called with: {directory!r}")
-    # Normalize path separators for cross-platform compatibility
     directory = directory.replace("\\", "/")
     resolved = Path(directory).resolve()
     logger.info(f"Resolved path: {resolved}")
-    s = str(resolved)
-    if platform.system() != "Windows":
-        if not s.startswith("/home") and not s.startswith("/mnt"):
-            raise HTTPException(status_code=403, detail="Access denied: directory outside allow-list")
+    if not _is_allowed_path(resolved):
+        raise HTTPException(status_code=403, detail="Access denied: directory outside allow-list")
     if not resolved.is_dir():
         logger.error(f"Directory not found: {resolved} (original: {directory!r})")
         raise HTTPException(status_code=404, detail=f"Directory not found: {directory}")
     return resolved
+
+
+def _compute_pool_status(pool: "PoolState") -> "PoolStatusResponse":
+    """Build a PoolStatusResponse from *pool*.  Pure function — no side effects."""
+    tasks = pool.tasks
+
+    pending_count = sum(1 for t in tasks if t.status == "pending")
+    running_count = sum(1 for t in tasks if t.status == "running")
+    rate_limit_count = sum(1 for t in tasks if t.status == "rate_limit_retry")
+
+    rate_limit_result = None
+    if rate_limit_count > 0:
+        rl_task = next((t for t in tasks if t.status == "rate_limit_retry"), None)
+        if rl_task and rl_task.json_output:
+            rate_limit_result = rl_task.json_output.get("result")
+        elif rl_task:
+            rate_limit_result = "Rate limit detected"
+
+    if rate_limit_count > 0 or pool.is_suspended:
+        claude_status = "rate_limit"
+    elif running_count > 0 or pending_count > 0:
+        claude_status = "running"
+    else:
+        claude_status = "waiting request"
+
+    return PoolStatusResponse(
+        total_tasks=len(tasks),
+        pending_tasks=pending_count,
+        running_tasks=running_count,
+        completed_tasks=sum(1 for t in tasks if t.status == "success"),
+        failed_tasks=sum(1 for t in tasks if t.status == "failed"),
+        skipped_tasks=sum(1 for t in tasks if t.status == "skipped"),
+        pool_suspended=pool.is_suspended,
+        suspension_remaining=pool.suspension_remaining,
+        retry_count=pool.retry_count,
+        claude_status=claude_status,
+        rate_limit_result=rate_limit_result,
+    )
 
 
 def _task_to_message(task: Task) -> MessageResponse:
@@ -286,41 +213,7 @@ class ApiServer:
             if not self.executor:
                 raise HTTPException(status_code=503, detail="Executor not initialized")
             self.executor.check_pool_updates()
-            pool = self.executor.pool
-            tasks = pool.tasks
-
-            pending_count = sum(1 for t in tasks if t.status == "pending")
-            running_count = sum(1 for t in tasks if t.status == "running")
-            rate_limit_count = sum(1 for t in tasks if t.status == "rate_limit_retry")
-
-            rate_limit_result = None
-            if rate_limit_count > 0:
-                rl_task = next((t for t in tasks if t.status == "rate_limit_retry"), None)
-                if rl_task and rl_task.json_output:
-                    rate_limit_result = rl_task.json_output.get("result")
-                elif rl_task:
-                    rate_limit_result = "Rate limit detected"
-
-            if rate_limit_count > 0 or pool.is_suspended:
-                claude_status = "rate_limit"
-            elif running_count > 0 or pending_count > 0:
-                claude_status = "running"
-            else:
-                claude_status = "waiting request"
-
-            return PoolStatusResponse(
-                total_tasks=len(tasks),
-                pending_tasks=pending_count,
-                running_tasks=running_count,
-                completed_tasks=sum(1 for t in tasks if t.status == "success"),
-                failed_tasks=sum(1 for t in tasks if t.status == "failed"),
-                skipped_tasks=sum(1 for t in tasks if t.status == "skipped"),
-                pool_suspended=pool.is_suspended,
-                suspension_remaining=pool.suspension_remaining,
-                retry_count=pool.retry_count,
-                claude_status=claude_status,
-                rate_limit_result=rate_limit_result,
-            )
+            return _compute_pool_status(self.executor.pool)
 
         # ── Tasks ─────────────────────────────────────────────────
 
@@ -389,7 +282,7 @@ class ApiServer:
                     detail="Either 'directory' or 'github_url' must be provided",
                 )
 
-            task_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
+            task_id = _generate_task_id()
             args = list(task_input.args)
             if task_input.model:
                 args.extend(["--model", task_input.model])
@@ -516,10 +409,8 @@ class ApiServer:
             task = next((t for t in self.executor.pool.tasks if t.id == task_id), None)
             if not task:
                 raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-            from copy import deepcopy
-
             new_task = deepcopy(task)
-            new_task.id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
+            new_task.id = _generate_task_id()
             new_task.status = "pending"
             new_task.exit_code = None
             new_task.duration_ms = None
@@ -623,12 +514,8 @@ class ApiServer:
             try:
                 resolved = target.resolve()
                 s = str(resolved).replace("\\", "/")
-                # On Windows, allow any path (drive letters like C:\)
-                # On Linux, restrict to /home and /mnt
-                import platform
-                if platform.system() != "Windows":
-                    if not s.startswith("/home") and not s.startswith("/mnt"):
-                        raise HTTPException(status_code=403, detail="Access denied")
+                if not _is_allowed_path(resolved):
+                    raise HTTPException(status_code=403, detail="Access denied")
             except HTTPException:
                 raise
             if not resolved.is_dir():
@@ -643,7 +530,6 @@ class ApiServer:
             parent_raw = str(resolved.parent)
             parent = parent_raw.replace("\\", "/") if resolved != Path(resolved.anchor) else None
             return {"current": s, "parent": parent, "entries": entries}
-            return {"current": str(resolved), "parent": parent, "entries": entries}
 
         # ── Projects ──────────────────────────────────────────────
 
@@ -783,7 +669,7 @@ class ApiServer:
             if not bucket:
                 raise HTTPException(status_code=404, detail=f"Chat {chat_id} not found")
 
-            task_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
+            task_id = _generate_task_id()
             directory = Path(bucket.directory) if bucket.directory else Path.cwd()
 
             args: list[str] = []
@@ -870,42 +756,8 @@ class ApiServer:
         if not self.executor:
             return
         self.executor.check_pool_updates()
-        pool = self.executor.pool
-        tasks = pool.tasks
-
-        pending_count = sum(1 for t in tasks if t.status == "pending")
-        running_count = sum(1 for t in tasks if t.status == "running")
-        rate_limit_count = sum(1 for t in tasks if t.status == "rate_limit_retry")
-
-        rate_limit_result = None
-        if rate_limit_count > 0:
-            rl_task = next((t for t in tasks if t.status == "rate_limit_retry"), None)
-            if rl_task and rl_task.json_output:
-                rate_limit_result = rl_task.json_output.get("result")
-            elif rl_task:
-                rate_limit_result = "Rate limit detected"
-
-        if rate_limit_count > 0 or pool.is_suspended:
-            claude_status = "rate_limit"
-        elif running_count > 0 or pending_count > 0:
-            claude_status = "running"
-        else:
-            claude_status = "waiting request"
-
-        status_data = {
-            "total_tasks": len(tasks),
-            "pending_tasks": pending_count,
-            "running_tasks": running_count,
-            "completed_tasks": sum(1 for t in tasks if t.status == "success"),
-            "failed_tasks": sum(1 for t in tasks if t.status == "failed"),
-            "skipped_tasks": sum(1 for t in tasks if t.status == "skipped"),
-            "pool_suspended": pool.is_suspended,
-            "suspension_remaining": pool.suspension_remaining,
-            "retry_count": pool.retry_count,
-            "claude_status": claude_status,
-            "rate_limit_result": rate_limit_result,
-        }
-        await self._broadcast_event({"event": "pool_status", "data": status_data})
+        status = _compute_pool_status(self.executor.pool)
+        await self._broadcast_event({"event": "pool_status", "data": status.model_dump()})
 
 
 def create_app(pool_file: Path) -> FastAPI:
