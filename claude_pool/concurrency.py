@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+from datetime import datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -14,28 +16,25 @@ class TaskSemaphore:
     """
 
     def __init__(self, max_concurrent: int = 1):
-        """Initialize the task semaphore.
+        """Initialise the task semaphore.
 
         Args:
             max_concurrent: Maximum number of tasks to run concurrently (default: 1)
         """
         self.max_concurrent = max_concurrent
         self.semaphore = asyncio.Semaphore(max_concurrent)
-        self.active_tasks = set()
+        self.active_tasks: set[int] = set()
 
     async def acquire(self) -> None:
-        """Acquire a semaphore slot for a task.
-
-        Blocks until a slot is available.
-        """
+        """Acquire a semaphore slot, blocking until one is available."""
         await self.semaphore.acquire()
 
     def release(self) -> None:
-        """Release a semaphore slot."""
+        """Release a previously acquired semaphore slot."""
         self.semaphore.release()
 
-    async def execute_with_limit(self, coro) -> any:
-        """Execute a coroutine with semaphore protection.
+    async def execute_with_limit(self, coro: Any) -> Any:
+        """Execute *coro* inside a semaphore slot.
 
         Args:
             coro: Coroutine to execute
@@ -61,22 +60,28 @@ class TaskSemaphore:
 
     @property
     def available_slots(self) -> int:
-        """Get number of available semaphore slots."""
-        return self.semaphore._value
+        """Number of semaphore slots not currently held."""
+        return self.semaphore._value  # type: ignore[attr-defined]
 
     @property
     def active_count(self) -> int:
-        """Get number of active tasks."""
+        """Number of tasks currently holding a slot."""
         return len(self.active_tasks)
 
-    async def cancel_all(self) -> None:
-        """Cancel all active tasks."""
-        logger.info(f"Cancelling {len(self.active_tasks)} active tasks")
-        for task_id in list(self.active_tasks):
-            self.active_tasks.discard(task_id)
-        self.release()
+    def clear_tracking(self) -> None:
+        """Clear the in-memory active-task tracking set.
+
+        This resets the ``active_tasks`` set used for ``active_count`` and
+        logging.  It does NOT cancel running asyncio coroutines.
+        """
+        logger.info(f"Clearing tracking for {len(self.active_tasks)} active tasks")
+        self.active_tasks.clear()
 
 
+# NOTE: GlobalRateLimitLock is currently unused by the executor.  The executor
+# implements its own suspension via ``PoolState.suspended_until`` and
+# ``TaskExecutor.wait_for_suspension()``.  This class is retained for potential
+# future use but is not exercised in production code paths.
 class GlobalRateLimitLock:
     """Global rate-limit lock that blocks ALL concurrent tasks.
 
@@ -86,36 +91,30 @@ class GlobalRateLimitLock:
     3. Wait period is enforced globally
     """
 
-    def __init__(self):
-        """Initialize the global rate-limit lock."""
+    def __init__(self) -> None:
         self.lock = asyncio.Lock()
         self.suspended = False
-        self.suspension_end_time = None
+        self.suspension_end_time: datetime | None = None
 
     async def acquire_if_not_suspended(self) -> bool:
-        """Try to acquire the lock if not suspended.
+        """Try to acquire the lock when not suspended.
 
         Returns:
-            True if lock was acquired, False if suspended
+            True if the lock was acquired, False if currently suspended.
         """
         if self.suspended:
             return False
-
         return await self.lock.acquire()
 
     def release(self) -> None:
-        """Release the lock."""
+        """Release the lock if it is currently held."""
         if self.lock.locked():
             self.lock.release()
 
-    async def wait_for_suspension_end(self, end_time) -> None:
-        """Wait until the suspension period ends.
-
-        Args:
-            end_time: datetime when suspension should end
-        """
+    async def wait_for_suspension_end(self, end_time: datetime) -> None:
+        """Sleep until *end_time*, polling ``self.suspended`` each second."""
         while self.suspended:
-            remaining = (end_time - asyncio.get_event_loop().time()).total_seconds()
+            remaining = (end_time - datetime.now()).total_seconds()
             if remaining <= 0:
                 break
-            await asyncio.sleep(min(1, remaining))
+            await asyncio.sleep(min(1.0, remaining))

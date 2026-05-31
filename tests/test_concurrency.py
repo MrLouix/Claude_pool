@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from claude_pool.concurrency import TaskSemaphore
+from claude_pool.concurrency import GlobalRateLimitLock, TaskSemaphore
 from claude_pool.executor import TaskExecutor
 from claude_pool.models import PoolState, Task
 
@@ -297,3 +297,72 @@ class TestRunPoolConcurrent:
 
         # Should never exceed max_concurrent
         assert max(active_at_once) <= executor.max_concurrent
+
+
+# ── New helper / renamed method tests ────────────────────────────────────────
+
+
+class TestTaskSemaphoreClearTracking:
+    """Tests for the renamed clear_tracking() (was cancel_all)."""
+
+    @pytest.mark.asyncio
+    async def test_clear_tracking_empties_active_tasks(self):
+        semaphore = TaskSemaphore(max_concurrent=3)
+        # Simulate some active tasks by direct manipulation
+        semaphore.active_tasks = {1, 2, 3}
+        semaphore.clear_tracking()
+        assert semaphore.active_count == 0
+
+    @pytest.mark.asyncio
+    async def test_clear_tracking_on_empty_set_is_safe(self):
+        semaphore = TaskSemaphore(max_concurrent=1)
+        semaphore.clear_tracking()  # should not raise
+        assert semaphore.active_count == 0
+
+    @pytest.mark.asyncio
+    async def test_clear_tracking_does_not_raise_when_no_slot_held(self):
+        """clear_tracking should not call release() and should not raise."""
+        semaphore = TaskSemaphore(max_concurrent=1)
+        semaphore.active_tasks = {99}
+        # No semaphore slot is held — clear_tracking must not call release()
+        semaphore.clear_tracking()
+        # Slot should still be available (nothing was released)
+        assert semaphore.available_slots == 1
+
+
+class TestGlobalRateLimitLock:
+    """Tests for GlobalRateLimitLock (unused in production but exercised here)."""
+
+    @pytest.mark.asyncio
+    async def test_acquire_when_not_suspended_returns_true(self):
+        lock = GlobalRateLimitLock()
+        acquired = await lock.acquire_if_not_suspended()
+        assert acquired is True
+        lock.release()
+
+    @pytest.mark.asyncio
+    async def test_acquire_when_suspended_returns_false(self):
+        lock = GlobalRateLimitLock()
+        lock.suspended = True
+        acquired = await lock.acquire_if_not_suspended()
+        assert acquired is False
+
+    @pytest.mark.asyncio
+    async def test_release_when_not_locked_is_safe(self):
+        lock = GlobalRateLimitLock()
+        lock.release()  # should not raise
+
+    @pytest.mark.asyncio
+    async def test_wait_for_suspension_end_exits_when_unsuspended(self):
+        lock = GlobalRateLimitLock()
+        lock.suspended = False
+        end_time = datetime.now() + timedelta(seconds=60)
+        # suspended=False → loop body never executes, returns immediately
+        await asyncio.wait_for(lock.wait_for_suspension_end(end_time), timeout=0.5)
+
+    @pytest.mark.asyncio
+    async def test_wait_for_suspension_end_exits_when_end_time_passed(self):
+        lock = GlobalRateLimitLock()
+        lock.suspended = True
+        end_time = datetime.now() - timedelta(seconds=10)  # already in the past
+        await asyncio.wait_for(lock.wait_for_suspension_end(end_time), timeout=1.0)

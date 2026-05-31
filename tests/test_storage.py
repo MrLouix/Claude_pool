@@ -7,7 +7,16 @@ from pathlib import Path
 import pytest
 
 from claude_pool.models import Bucket, PoolState, Task
-from claude_pool.storage import load_pool, save_pool
+from claude_pool.storage import (
+    _apply_migrations,
+    _ensure_unique_id,
+    _load_buckets,
+    _load_tasks,
+    _should_keep_task,
+    cleanup_old_tasks,
+    load_pool,
+    save_pool,
+)
 
 
 @pytest.fixture
@@ -364,3 +373,210 @@ def test_save_pool_emits_buckets_key(temp_pool_file: Path):
     assert "buckets" in on_disk
     assert "main" in on_disk["buckets"]
     assert on_disk["buckets"]["main"]["type"] == "cli"
+
+
+# ── Helper function tests ──────────────────────────────────────────────────────
+
+
+class TestApplyMigrations:
+    def test_v0_bare_list_returns_wrapped_dict_and_needs_save(self):
+        tasks = [{"id": "t1", "prompt": "p", "directory": "/tmp"}]
+        data, needs_save = _apply_migrations(tasks)
+        assert needs_save is True
+        assert isinstance(data, dict)
+        assert data["tasks"] == tasks
+        assert data["pool_retry_count"] == 0
+        assert data["pool_suspended_until"] is None
+
+    def test_v1_dict_without_buckets_needs_save(self):
+        v1 = {"pool_retry_count": 0, "pool_suspended_until": None, "tasks": []}
+        data, needs_save = _apply_migrations(v1)
+        assert needs_save is True
+        assert data is v1  # same object, no copy
+
+    def test_v2_dict_with_buckets_does_not_need_save(self):
+        v2 = {"pool_retry_count": 0, "pool_suspended_until": None, "tasks": [], "buckets": {}}
+        data, needs_save = _apply_migrations(v2)
+        assert needs_save is False
+        assert data is v2
+
+    def test_invalid_type_raises_value_error(self):
+        with pytest.raises(ValueError, match="JSON object or array"):
+            _apply_migrations("not a dict or list")
+
+    def test_integer_raises_value_error(self):
+        with pytest.raises(ValueError):
+            _apply_migrations(42)
+
+
+class TestLoadBuckets:
+    def test_empty_input_synthesises_main_bucket(self):
+        buckets = _load_buckets({})
+        assert "main" in buckets
+        assert buckets["main"].type == "cli"
+
+    def test_none_input_synthesises_main_bucket(self):
+        buckets = _load_buckets(None)
+        assert "main" in buckets
+
+    def test_parses_chat_bucket(self):
+        raw = {
+            "chat_abc": {
+                "id": "chat_abc",
+                "type": "chat",
+                "label": "My Chat",
+                "directory": "/tmp",
+                "created_at": "2024-01-01T00:00:00",
+            }
+        }
+        buckets = _load_buckets(raw)
+        assert "chat_abc" in buckets
+        assert buckets["chat_abc"].type == "chat"
+        assert buckets["chat_abc"].label == "My Chat"
+
+    def test_injects_id_when_missing_from_bucket_data(self):
+        raw = {"main": {"type": "cli", "label": "CLI / Dashboard"}}
+        buckets = _load_buckets(raw)
+        assert buckets["main"].id == "main"
+
+    def test_non_dict_bucket_data_is_skipped(self):
+        raw = {"bad_bucket": "not-a-dict", "main": {"type": "cli", "label": "L"}}
+        buckets = _load_buckets(raw)
+        assert "bad_bucket" not in buckets
+        assert "main" in buckets
+
+
+class TestEnsureUniqueId:
+    def test_generates_id_when_missing(self):
+        item: dict = {"prompt": "p", "directory": "/tmp"}
+        ids: set[str] = set()
+        _ensure_unique_id(item, ids)
+        assert "id" in item
+        assert item["id"].startswith("task_")
+        assert item["id"] in ids
+
+    def test_generates_id_when_empty_string(self):
+        item: dict = {"id": "", "prompt": "p", "directory": "/tmp"}
+        ids: set[str] = set()
+        _ensure_unique_id(item, ids)
+        assert item["id"] != ""
+
+    def test_keeps_existing_valid_id(self):
+        item: dict = {"id": "my_id", "prompt": "p", "directory": "/tmp"}
+        ids: set[str] = set()
+        _ensure_unique_id(item, ids)
+        assert item["id"] == "my_id"
+
+    def test_deduplicates_on_collision(self):
+        item: dict = {"id": "clash", "prompt": "p", "directory": "/tmp"}
+        ids: set[str] = {"clash"}
+        _ensure_unique_id(item, ids)
+        assert item["id"] != "clash"
+        assert item["id"].startswith("clash_")
+
+    def test_adds_id_to_existing_set(self):
+        item: dict = {"id": "new_id", "prompt": "p", "directory": "/tmp"}
+        ids: set[str] = set()
+        _ensure_unique_id(item, ids)
+        assert "new_id" in ids
+
+
+class TestLoadTasks:
+    def test_valid_minimal_task(self):
+        raw = [{"id": "t1", "prompt": "do it", "directory": "/tmp"}]
+        tasks = _load_tasks(raw)
+        assert len(tasks) == 1
+        assert tasks[0].id == "t1"
+
+    def test_missing_prompt_raises_key_error(self):
+        raw = [{"id": "t1", "directory": "/tmp"}]
+        with pytest.raises(KeyError, match="prompt"):
+            _load_tasks(raw)
+
+    def test_missing_directory_raises_key_error(self):
+        raw = [{"id": "t1", "prompt": "p"}]
+        with pytest.raises(KeyError, match="directory"):
+            _load_tasks(raw)
+
+    def test_non_dict_item_raises_value_error(self):
+        with pytest.raises(ValueError, match="Invalid task data"):
+            _load_tasks(["not-a-dict"])
+
+    def test_auto_generates_missing_id(self):
+        raw = [{"prompt": "p", "directory": "/tmp"}]
+        tasks = _load_tasks(raw)
+        assert tasks[0].id.startswith("task_")
+
+    def test_deduplicates_colliding_ids(self):
+        raw = [
+            {"id": "same", "prompt": "p1", "directory": "/tmp"},
+            {"id": "same", "prompt": "p2", "directory": "/tmp"},
+        ]
+        tasks = _load_tasks(raw)
+        assert tasks[0].id != tasks[1].id
+
+    def test_defaults_optional_fields_via_task_from_dict(self):
+        raw = [{"id": "t1", "prompt": "p", "directory": "/tmp"}]
+        tasks = _load_tasks(raw)
+        t = tasks[0]
+        assert t.args == []
+        assert t.status == "pending"
+        assert t.exit_code is None
+        assert t.retry_count == 0
+
+
+class TestShouldKeepTask:
+    def _task(self, status: str, age_hours: float) -> Task:
+        created = (datetime.now() - timedelta(hours=age_hours)).isoformat()
+        return Task(id="t", prompt="p", directory=Path("/tmp"), status=status, created_at=created)  # type: ignore[call-arg]
+
+    def test_pending_always_kept(self):
+        cutoff = datetime.now() - timedelta(hours=48)
+        assert _should_keep_task(self._task("pending", age_hours=100), cutoff) is True
+
+    def test_running_always_kept(self):
+        cutoff = datetime.now() - timedelta(hours=48)
+        assert _should_keep_task(self._task("running", age_hours=100), cutoff) is True
+
+    def test_rate_limit_retry_always_kept(self):
+        cutoff = datetime.now() - timedelta(hours=48)
+        assert _should_keep_task(self._task("rate_limit_retry", age_hours=100), cutoff) is True
+
+    def test_recent_success_is_kept(self):
+        cutoff = datetime.now() - timedelta(hours=48)
+        assert _should_keep_task(self._task("success", age_hours=1), cutoff) is True
+
+    def test_old_success_is_removed(self):
+        cutoff = datetime.now() - timedelta(hours=48)
+        assert _should_keep_task(self._task("success", age_hours=72), cutoff) is False
+
+    def test_old_failed_is_removed(self):
+        cutoff = datetime.now() - timedelta(hours=48)
+        assert _should_keep_task(self._task("failed", age_hours=72), cutoff) is False
+
+    def test_old_skipped_is_removed(self):
+        cutoff = datetime.now() - timedelta(hours=48)
+        assert _should_keep_task(self._task("skipped", age_hours=72), cutoff) is False
+
+
+class TestCleanupOldTasks:
+    def _make_state(self, tasks: list[Task], pool_file: Path) -> PoolState:
+        return PoolState(tasks=tasks, pool_file=pool_file)
+
+    def test_removes_old_finished_tasks(self, temp_pool_file: Path):
+        old_time = (datetime.now() - timedelta(hours=72)).isoformat()
+        tasks = [
+            Task(id="old", prompt="p", directory=Path("/tmp"), status="success", created_at=old_time),  # type: ignore[call-arg]
+            Task(id="new", prompt="p", directory=Path("/tmp"), status="pending"),
+        ]
+        state = self._make_state(tasks, temp_pool_file)
+        removed = cleanup_old_tasks(state, max_age_hours=48)
+        assert removed == 1
+        assert len(state.tasks) == 1
+        assert state.tasks[0].id == "new"
+
+    def test_returns_zero_when_nothing_removed(self, temp_pool_file: Path):
+        tasks = [Task(id="t", prompt="p", directory=Path("/tmp"), status="pending")]
+        state = self._make_state(tasks, temp_pool_file)
+        removed = cleanup_old_tasks(state, max_age_hours=48)
+        assert removed == 0
