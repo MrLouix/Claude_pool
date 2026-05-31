@@ -769,9 +769,11 @@ class ApiServer:
                 raise HTTPException(status_code=503, detail="Executor not initialized")
             if chat_id not in self.executor.pool.buckets:
                 raise HTTPException(status_code=404, detail=f"Chat {chat_id} not found")
-            msgs = [_task_to_message(t) for t in self.executor.pool.tasks if t.bucket_id == chat_id]
-            msgs.sort(key=lambda m: m.created_at)
-            return msgs
+            tasks = sorted(
+                (t for t in self.executor.pool.tasks if t.bucket_id == chat_id),
+                key=lambda t: (t.priority, t.created_at),
+            )
+            return [_task_to_message(t) for t in tasks]
 
         @self.app.post("/api/chats/{chat_id}/messages", status_code=201)
         async def create_message(chat_id: str, message_input: MessageInput) -> MessageResponse:
