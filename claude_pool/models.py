@@ -8,9 +8,21 @@ from typing import Any, Literal
 TaskStatus = Literal["pending", "running", "success", "failed", "skipped", "rate_limit_retry"]
 BucketType = Literal["cli", "chat"]
 
+MAIN_BUCKET_LABEL: str = "CLI / Dashboard"
+
+
+def _coerce_int(value: Any, default: int) -> int:
+    """Coerce value to int, returning default if value is None."""
+    return int(value) if value is not None else default
+
+
+def _coerce_optional_int(value: Any) -> int | None:
+    """Coerce value to int, returning None if value is None."""
+    return int(value) if value is not None else None
+
 
 def _default_buckets() -> "dict[str, Bucket]":
-    return {"main": Bucket(id="main", type="cli", label="CLI / Dashboard")}
+    return {"main": Bucket(id="main", type="cli", label=MAIN_BUCKET_LABEL)}
 
 
 @dataclass
@@ -55,7 +67,7 @@ class PoolState:
 
     def __post_init__(self) -> None:
         if "main" not in self.buckets:
-            self.buckets["main"] = Bucket(id="main", type="cli", label="CLI / Dashboard")
+            self.buckets["main"] = Bucket(id="main", type="cli", label=MAIN_BUCKET_LABEL)
 
     @property
     def is_suspended(self) -> bool:
@@ -92,29 +104,11 @@ class Task:
         args_raw = data.get("args", [])
         args_list = list(args_raw) if isinstance(args_raw, list) else []
 
-        exit_code_raw = data.get("exit_code")
-        exit_code = int(exit_code_raw) if exit_code_raw is not None else None
-
-        duration_ms_raw = data.get("duration_ms")
-        duration_ms = int(duration_ms_raw) if duration_ms_raw is not None else None
-
         json_output_raw = data.get("json_output")
         json_output = dict(json_output_raw) if isinstance(json_output_raw, dict) else None
 
-        retry_count_raw = data.get("retry_count", 0)
-        retry_count = int(retry_count_raw) if retry_count_raw is not None else 0
-
-        created_at = data.get("created_at")
-        if not created_at:
-            created_at = datetime.now().isoformat()
-
-        session_id = data.get("session_id")
-        session_id = str(session_id) if session_id is not None else None
-
-        bucket_id = str(data.get("bucket_id", "main"))
-
-        priority_raw = data.get("priority", 2)
-        priority = int(priority_raw) if priority_raw is not None else 2
+        session_id_raw = data.get("session_id")
+        session_id = str(session_id_raw) if session_id_raw is not None else None
 
         return cls(
             id=str(data["id"]),
@@ -122,14 +116,14 @@ class Task:
             directory=Path(str(data["directory"])),
             args=args_list,
             status=str(data.get("status", "pending")),  # type: ignore[arg-type]
-            exit_code=exit_code,
-            duration_ms=duration_ms,
+            exit_code=_coerce_optional_int(data.get("exit_code")),
+            duration_ms=_coerce_optional_int(data.get("duration_ms")),
             json_output=json_output,
-            retry_count=retry_count,
-            created_at=str(created_at),
+            retry_count=_coerce_int(data.get("retry_count"), 0),
+            created_at=str(data.get("created_at") or datetime.now().isoformat()),
             session_id=session_id,
-            bucket_id=bucket_id,
-            priority=priority,
+            bucket_id=str(data.get("bucket_id", "main")),
+            priority=_coerce_int(data.get("priority"), 2),
         )
 
     def to_dict(self) -> dict[str, Any]:

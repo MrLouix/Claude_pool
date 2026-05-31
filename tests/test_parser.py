@@ -4,7 +4,15 @@ import json
 
 import pytest
 
-from claude_pool.parser import parse_claude_output
+from claude_pool.parser import (
+    _TOKEN_FIELDS,
+    _extract_json,
+    _extract_session_id,
+    _make_error_result,
+    _parse_legacy_format,
+    _parse_new_format,
+    parse_claude_output,
+)
 
 
 def test_parse_valid_json():
@@ -261,3 +269,175 @@ def test_parse_new_format_with_session_id():
 
     assert result["session_id"] == test_session_id
     assert result["result"] == "Success with new format"
+
+
+# ── Helper function tests ──────────────────────────────────────────────────────
+
+
+class TestExtractJson:
+    def test_direct_json(self):
+        data = {"key": "value"}
+        assert _extract_json(json.dumps(data)) == data
+
+    def test_json_in_markdown_fence_with_language(self):
+        data = {"result": "ok"}
+        text = f"Some text\n```json\n{json.dumps(data)}\n```\nMore text"
+        assert _extract_json(text) == data
+
+    def test_json_in_markdown_fence_without_language(self):
+        data = {"result": "ok"}
+        text = f"```\n{json.dumps(data)}\n```"
+        assert _extract_json(text) == data
+
+    def test_raw_json_object_embedded_in_text(self):
+        data = {"x": 1}
+        text = f"prefix {json.dumps(data)} suffix"
+        assert _extract_json(text) == data
+
+    def test_raises_value_error_when_no_json(self):
+        with pytest.raises(ValueError, match="no JSON found"):
+            _extract_json("plain text with no JSON here")
+
+    def test_raises_json_decode_error_for_malformed_fence_json(self):
+        text = "```json\n{bad json\n```"
+        with pytest.raises(json.JSONDecodeError):
+            _extract_json(text)
+
+
+class TestExtractSessionId:
+    def test_returns_session_id_field(self):
+        assert _extract_session_id({"session_id": "abc"}) == "abc"
+
+    def test_returns_session_key_field(self):
+        assert _extract_session_id({"sessionKey": "xyz"}) == "xyz"
+
+    def test_session_id_takes_priority_over_session_key(self):
+        assert _extract_session_id({"session_id": "sid", "sessionKey": "sk"}) == "sid"
+
+    def test_returns_none_when_neither_present(self):
+        assert _extract_session_id({}) is None
+
+    def test_returns_none_when_both_falsy(self):
+        assert _extract_session_id({"session_id": "", "sessionKey": ""}) is None
+
+
+class TestMakeErrorResult:
+    def test_without_error_message(self):
+        result = _make_error_result("some text")
+        assert result["parse_error"] is True
+        assert result["result"] == "some text"
+        assert result["code_blocks"] == []
+        assert result["files_changed"] == []
+        assert result["tokens_used"] == 0
+        assert result["session_usage_percent"] == 0.0
+        assert "error_message" not in result
+
+    def test_with_error_message(self):
+        result = _make_error_result("text", "something broke")
+        assert result["parse_error"] is True
+        assert result["error_message"] == "something broke"
+
+    def test_text_truncated_to_1000_chars(self):
+        long_text = "x" * 2000
+        result = _make_error_result(long_text)
+        assert len(result["result"]) == 1000
+
+
+class TestParseNewFormat:
+    def test_basic_result(self):
+        data = {"type": "result", "result": "hello", "usage": {}}
+        result = _parse_new_format(data)
+        assert result["result"] == "hello"
+        assert result["files_changed"] == []
+        assert result["code_blocks"] == []
+
+    def test_token_sum_uses_all_fields(self):
+        data = {
+            "type": "result",
+            "result": "",
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_read_input_tokens": 25,
+                "cache_creation_input_tokens": 10,
+            },
+        }
+        result = _parse_new_format(data)
+        assert result["tokens_used"] == 185
+
+    def test_token_fields_tuple_covers_all_usage_keys(self):
+        assert "input_tokens" in _TOKEN_FIELDS
+        assert "output_tokens" in _TOKEN_FIELDS
+        assert "cache_read_input_tokens" in _TOKEN_FIELDS
+        assert "cache_creation_input_tokens" in _TOKEN_FIELDS
+
+    def test_session_usage_percent_capped_at_100(self):
+        data = {
+            "type": "result",
+            "result": "",
+            "usage": {"input_tokens": 2_000_000},
+        }
+        result = _parse_new_format(data)
+        assert result["session_usage_percent"] == 100.0
+
+    def test_extracts_code_blocks_from_result_text(self):
+        data = {
+            "type": "result",
+            "result": "Here:\n```python\nprint('hi')\n```",
+            "usage": {},
+        }
+        result = _parse_new_format(data)
+        assert len(result["code_blocks"]) == 1
+        assert result["code_blocks"][0]["language"] == "python"
+
+    def test_session_id_included_when_present(self):
+        data = {"type": "result", "result": "", "usage": {}, "session_id": "s123"}
+        result = _parse_new_format(data)
+        assert result["session_id"] == "s123"
+
+    def test_session_id_absent_when_not_in_data(self):
+        data = {"type": "result", "result": "", "usage": {}}
+        result = _parse_new_format(data)
+        assert "session_id" not in result
+
+    def test_non_dict_usage_yields_zero_tokens(self):
+        data = {"type": "result", "result": "", "usage": "bad"}
+        result = _parse_new_format(data)
+        assert result["tokens_used"] == 0
+
+
+class TestParseLegacyFormat:
+    def test_basic_result(self):
+        data = {"result": "done", "tokens_used": 100, "session_usage_percent": 5.0}
+        result = _parse_legacy_format(data)
+        assert result["result"] == "done"
+        assert result["tokens_used"] == 100
+        assert result["session_usage_percent"] == 5.0
+
+    def test_code_blocks_with_lang_alias(self):
+        data = {
+            "result": "",
+            "code_blocks": [{"lang": "js", "content": "x()"}],
+        }
+        result = _parse_legacy_format(data)
+        assert result["code_blocks"][0]["language"] == "js"
+
+    def test_non_list_files_changed_becomes_empty(self):
+        data = {"result": "", "files_changed": "not-a-list"}
+        result = _parse_legacy_format(data)
+        assert result["files_changed"] == []
+
+    def test_non_list_code_blocks_becomes_empty(self):
+        data = {"result": "", "code_blocks": "not-a-list"}
+        result = _parse_legacy_format(data)
+        assert result["code_blocks"] == []
+
+    def test_session_id_via_session_key(self):
+        data = {"result": "", "sessionKey": "sk_abc"}
+        result = _parse_legacy_format(data)
+        assert result["session_id"] == "sk_abc"
+
+    def test_session_id_absent_when_not_in_data(self):
+        data = {"result": ""}
+        result = _parse_legacy_format(data)
+        assert "session_id" not in result

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from claude_pool.models import Task
+from claude_pool.models import MAIN_BUCKET_LABEL, Task, _coerce_int, _coerce_optional_int
 
 
 def test_task_creation():
@@ -188,3 +188,63 @@ def test_message_input_priority_validation():
 
     with pytest.raises(ValidationError):
         MessageInput(prompt="p", priority=0)
+
+
+# ── Helper function tests ──────────────────────────────────────────────────────
+
+
+def test_main_bucket_label_constant():
+    assert MAIN_BUCKET_LABEL == "CLI / Dashboard"
+
+
+def test_coerce_int_with_none_returns_default():
+    assert _coerce_int(None, 0) == 0
+    assert _coerce_int(None, 2) == 2
+
+
+def test_coerce_int_with_value_converts_to_int():
+    assert _coerce_int(5, 0) == 5
+    assert _coerce_int("3", 0) == 3
+    assert _coerce_int(1.9, 0) == 1
+
+
+def test_coerce_int_default_not_used_when_value_present():
+    assert _coerce_int(0, 99) == 0
+
+
+def test_coerce_optional_int_with_none_returns_none():
+    assert _coerce_optional_int(None) is None
+
+
+def test_coerce_optional_int_with_value_converts_to_int():
+    assert _coerce_optional_int(0) == 0
+    assert _coerce_optional_int(42) == 42
+    assert _coerce_optional_int("7") == 7
+
+
+def test_task_from_dict_handles_explicit_null_retry_count():
+    """Explicit null retry_count in JSON falls back to 0 via _coerce_int."""
+    data = {"id": "t", "prompt": "p", "directory": "/tmp", "retry_count": None}
+    task = Task.from_dict(data)
+    assert task.retry_count == 0
+
+
+def test_task_from_dict_handles_explicit_null_priority():
+    """Explicit null priority in JSON falls back to 2 via _coerce_int."""
+    data = {"id": "t", "prompt": "p", "directory": "/tmp", "priority": None}
+    task = Task.from_dict(data)
+    assert task.priority == 2
+
+
+def test_task_from_dict_handles_explicit_null_exit_code():
+    """Explicit null exit_code stays None via _coerce_optional_int."""
+    data = {"id": "t", "prompt": "p", "directory": "/tmp", "exit_code": None}
+    task = Task.from_dict(data)
+    assert task.exit_code is None
+
+
+def test_task_from_dict_handles_explicit_null_duration_ms():
+    """Explicit null duration_ms stays None via _coerce_optional_int."""
+    data = {"id": "t", "prompt": "p", "directory": "/tmp", "duration_ms": None}
+    task = Task.from_dict(data)
+    assert task.duration_ms is None
