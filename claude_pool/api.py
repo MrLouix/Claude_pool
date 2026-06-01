@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+from contextlib import asynccontextmanager
 import os
 import platform
 import uuid as _uuid
@@ -144,10 +145,24 @@ class ApiServer:
     def __init__(self, pool_file: Path):
         self.pool_file = pool_file
         self.executor: Optional[TaskExecutor] = None
+
+        @asynccontextmanager
+        async def lifespan(app: FastAPI):
+            self.executor = TaskExecutor(
+                self.pool_file, on_task_update=self._on_task_update, install_signal_handlers=False
+            )
+            await self.executor.load_tasks()
+            asyncio.create_task(self.executor.run_pool())
+            logger.info("API server started with task executor")
+            yield
+            if self.executor:
+                self.executor.should_stop = True
+
         self.app = FastAPI(
             title="Claude Pool API",
             description="REST API for managing Claude Pool tasks",
             version="1.0.0",
+            lifespan=lifespan,
         )
         self.ws_clients: Set[WebSocket] = set()
 
@@ -184,20 +199,6 @@ class ApiServer:
         return None
 
     def _setup_routes(self) -> None:
-
-        @self.app.on_event("startup")
-        async def startup():
-            self.executor = TaskExecutor(
-                self.pool_file, on_task_update=self._on_task_update, install_signal_handlers=False
-            )
-            await self.executor.load_tasks()
-            asyncio.create_task(self.executor.run_pool())
-            logger.info("API server started with task executor")
-
-        @self.app.on_event("shutdown")
-        async def shutdown():
-            if self.executor:
-                self.executor.should_stop = True
 
         @self.app.get("/")
         async def root():
