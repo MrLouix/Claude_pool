@@ -631,6 +631,20 @@ class TaskExecutor:
         else:
             logger.warning("No current task to skip")
 
+    def reset_task_for_retry(self, task: "Task") -> None:
+        """Reset *task* back to pending and increment its retry counter.
+
+        Args:
+            task: Task to reset (must be in a terminal status: failed or success).
+        """
+        task.status = "pending"
+        task.exit_code = None
+        task.duration_ms = None
+        task.json_output = None
+        task.retry_count += 1
+        logger.info(f"Task {task.id} reset to pending (retry #{task.retry_count})")
+        self._save_state()
+
     def delete_task(self, task_id: str) -> bool:
         """Delete a task from the pool.
 

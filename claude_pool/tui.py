@@ -3,6 +3,8 @@
 import asyncio
 import json
 import logging
+import uuid
+from datetime import datetime
 from pathlib import Path
 
 from textual import on, work
@@ -13,35 +15,9 @@ from textual.widgets import Button, DataTable, Footer, Header, Input, Label, Sel
 
 from .executor import TaskExecutor
 from .models import Task
+from .storage import cleanup_old_tasks
 
 logger = logging.getLogger(__name__)
-
-
-def get_exit_code_meaning(exit_code: int | None) -> str:
-    """Get human-readable meaning of exit code."""
-    if exit_code is None:
-        return ""
-
-    # Common exit codes
-    if exit_code == 0:
-        return "✓ Success"
-    elif exit_code == 1:
-        return "⚠ General error"
-    elif exit_code == 2:
-        return "⚠ Misuse of shell command"
-    elif exit_code == 126:
-        return "⚠ Command cannot execute"
-    elif exit_code == 127:
-        return "⚠ Command not found"
-    elif exit_code == 130:
-        return "⏸ Terminated by Ctrl+C (SIGINT)"
-    elif exit_code == 143:
-        return "⏹ Terminated by SIGTERM (killed/timeout)"
-    elif exit_code >= 128:
-        signal_num = exit_code - 128
-        return f"⏹ Terminated by signal {signal_num}"
-    else:
-        return f"⚠ Error code {exit_code}"
 
 
 class AddTaskScreen(ModalScreen[dict | None]):
@@ -121,8 +97,6 @@ class AddTaskScreen(ModalScreen[dict | None]):
             return
 
         # Validate directory path
-        from pathlib import Path
-
         try:
             dir_path = Path(directory).expanduser().resolve()
             if not dir_path.exists():
@@ -324,7 +298,7 @@ class DetailedOutputScreen(ModalScreen):
 class TaskListWidget(Static):
     """Widget displaying the list of tasks in a table."""
 
-    def __init__(self, executor: TaskExecutor) -> None:
+    def __init__(self, executor: TaskExecutor | None) -> None:
         """Initialize the task list widget."""
         super().__init__()
         self.executor = executor
@@ -339,6 +313,8 @@ class TaskListWidget(Static):
 
     def update_tasks(self) -> None:
         """Update the task list display."""
+        if self.executor is None:
+            return
         table = self.query_one(DataTable)
         table.clear()
         self.task_map.clear()
@@ -373,9 +349,7 @@ class TaskListWidget(Static):
 
             # Add row and store task mapping by row index
             row_key = table.add_row(task_id, prompt, directory, status_display)
-            # Store by both row_key value (int) and task_id (str) for flexibility
             self.task_map[str(idx)] = task
-            self.task_map[task_id] = task
 
 
 class JsonOutputWidget(Static):
@@ -387,6 +361,29 @@ class JsonOutputWidget(Static):
         """Initialize the JSON output widget."""
         super().__init__()
         self.current_task: Task | None = None
+
+    @staticmethod
+    def exit_code_meaning(exit_code: int | None) -> str:
+        """Return a human-readable label for *exit_code*."""
+        if exit_code is None:
+            return ""
+        if exit_code == 0:
+            return "✓ Success"
+        if exit_code == 1:
+            return "⚠ General error"
+        if exit_code == 2:
+            return "⚠ Misuse of shell command"
+        if exit_code == 126:
+            return "⚠ Command cannot execute"
+        if exit_code == 127:
+            return "⚠ Command not found"
+        if exit_code == 130:
+            return "⏸ Terminated by Ctrl+C (SIGINT)"
+        if exit_code == 143:
+            return "⏹ Terminated by SIGTERM (killed/timeout)"
+        if exit_code >= 128:
+            return f"⏹ Terminated by signal {exit_code - 128}"
+        return f"⚠ Error code {exit_code}"
 
     def update_content(self, task: Task | None) -> None:
         """Update the displayed JSON output."""
@@ -400,7 +397,7 @@ class JsonOutputWidget(Static):
         content += f"[bold]Prompt:[/bold]\n{task.prompt}\n\n"
 
         if task.exit_code is not None:
-            meaning = get_exit_code_meaning(task.exit_code)
+            meaning = self.exit_code_meaning(task.exit_code)
             content += f"Exit: {task.exit_code} ({meaning}) | "
         else:
             content += "Exit: - | "
@@ -483,9 +480,7 @@ class LogWidget(Static):
 
     def add_log(self, message: str) -> None:
         """Add a log message."""
-        import datetime
-
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        timestamp = datetime.now().strftime("%H:%M:%S")
         self.logs.append(f"[dim]{timestamp}[/dim] {message}")
         if len(self.logs) > self.max_lines:
             self.logs.pop(0)
@@ -578,7 +573,7 @@ class PoolTUI(App):
         """Compose the UI."""
         yield Header()
 
-        task_list_widget = TaskListWidget(self.executor or TaskExecutor(self.pool_file))
+        task_list_widget = TaskListWidget(None)
         task_list_widget.id = "task_list_widget"
         yield task_list_widget
 
@@ -767,35 +762,21 @@ class PoolTUI(App):
 
     def action_retry_task(self) -> None:
         """Retry selected task by resetting it to pending and incrementing retry count."""
+        log_widget = self.query_one("#logs", LogWidget)
         if not self.selected_task:
-            log_widget = self.query_one("#logs", LogWidget)
             log_widget.add_log("[red]No task selected[/red]")
             return
 
         task = self.selected_task
         if task.status in ("failed", "success"):
-            # Reset task fields
-            task.status = "pending"
-            task.exit_code = None
-            task.duration_ms = None
-            task.json_output = None
-            # Increment retry count
-            task.retry_count += 1
-
             if self.executor:
-                self.executor._save_state()
-
-            log_widget = self.query_one("#logs", LogWidget)
+                self.executor.reset_task_for_retry(task)
             log_widget.add_log(
                 f"[yellow]Task {task.id} reset to pending (retry #{task.retry_count})[/yellow]"
             )
-
-            task_list = self.query_one("#task_list_widget", TaskListWidget)
-            task_list.update_tasks()
-
+            self.query_one("#task_list_widget", TaskListWidget).update_tasks()
             self._update_detail(task)
         else:
-            log_widget = self.query_one("#logs", LogWidget)
             log_widget.add_log(f"[yellow]Task {task.id} is {task.status}, cannot retry[/yellow]")
 
     async def action_add_task(self) -> None:
@@ -803,12 +784,6 @@ class PoolTUI(App):
         result = await self.push_screen_wait(AddTaskScreen())
 
         if result and self.executor:
-            import uuid
-            from datetime import datetime
-
-            from .storage import cleanup_old_tasks
-
-            # Generate unique ID
             task_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
 
             # Create new task

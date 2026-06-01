@@ -786,3 +786,46 @@ class TestAppWithMultipleTasks:
 
         # Should contain status information
         assert task.id in output
+
+
+# ── JsonOutputWidget.exit_code_meaning ───────────────────────────────────────
+
+
+class TestExitCodeMeaning:
+    """Unit tests for JsonOutputWidget.exit_code_meaning (pure static method)."""
+
+    def test_none_returns_empty_string(self):
+        assert JsonOutputWidget.exit_code_meaning(None) == ""
+
+    def test_zero_is_success(self):
+        assert JsonOutputWidget.exit_code_meaning(0) == "✓ Success"
+
+    def test_one_is_general_error(self):
+        assert JsonOutputWidget.exit_code_meaning(1) == "⚠ General error"
+
+    def test_two_is_misuse(self):
+        assert JsonOutputWidget.exit_code_meaning(2) == "⚠ Misuse of shell command"
+
+    def test_126_cannot_execute(self):
+        assert JsonOutputWidget.exit_code_meaning(126) == "⚠ Command cannot execute"
+
+    def test_127_not_found(self):
+        assert JsonOutputWidget.exit_code_meaning(127) == "⚠ Command not found"
+
+    def test_130_sigint(self):
+        assert JsonOutputWidget.exit_code_meaning(130) == "⏸ Terminated by Ctrl+C (SIGINT)"
+
+    def test_143_sigterm(self):
+        assert JsonOutputWidget.exit_code_meaning(143) == "⏹ Terminated by SIGTERM (killed/timeout)"
+
+    def test_128_plus_generic_signal(self):
+        result = JsonOutputWidget.exit_code_meaning(137)
+        assert "signal" in result.lower() or "137" in result
+
+    def test_unknown_positive_code(self):
+        result = JsonOutputWidget.exit_code_meaning(42)
+        assert "42" in result
+
+    def test_all_named_codes_are_non_empty(self):
+        for code in (0, 1, 2, 126, 127, 130, 143):
+            assert JsonOutputWidget.exit_code_meaning(code) != ""

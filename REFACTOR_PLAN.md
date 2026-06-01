@@ -340,3 +340,50 @@ Safest to riskiest, based on test coverage and coupling:
 
 **Each step**: run `tests/` before and after. Accept only the 3 pre-existing
 `test_tui.py` failures. Any new failure = revert before proceeding.
+
+---
+
+## Final Validation Report
+
+- **Tests passed:** 311 / 314 (3 pre-existing failures unchanged — `test_json_output_widget_update_with_task`, `test_json_output_widget_pending_task`, `test_json_output_shows_tokens_used`; all expect `ResultWidget` behaviour from `JsonOutputWidget` and predated this refactor)
+- **New tests added:** 137 (174 → 311 passing)
+
+### Files refactored
+
+| File | Net change vs `main` |
+|------|----------------------|
+| `claude_pool/models.py` | Clearer field names, explicit type annotations, removed redundant `__str__` |
+| `claude_pool/parser.py` | Extracted `_strip_reasoning()`, `_compact_output()` helpers; structured JSON handling |
+| `claude_pool/storage.py` | Separated migration logic into `_migrate_v0()` / `_migrate_v1()`; isolated `_atomic_write()` |
+| `claude_pool/concurrency.py` | Removed dead `_lock` attribute; added `__repr__`; tightened type annotations |
+| `claude_pool/executor.py` | Extracted `_build_command()`, `_classify_exit()`, `_write_debug_log()`, `_do_save()`, `_merge_new_tasks()`, `_handle_initial_suspension()`; added public `reset_task_for_retry()` |
+| `claude_pool/api.py` | Moved all Pydantic models to `api_models.py`; extracted `_is_allowed_path()`, `_generate_task_id()`, `_compute_pool_status()`, `_validate_directory()`, `_task_to_message()`; eliminated ~40-line route duplication |
+| `claude_pool/api_models.py` | **New file** — all API Pydantic models + shared `_validate_priority()` |
+| `claude_pool/tui.py` | Moved in-method imports to top-level; converted module-level `get_exit_code_meaning()` to `JsonOutputWidget.exit_code_meaning()` static method; fixed throwaway `TaskExecutor` created in `compose()`; removed dead `task_map[task_id]` double-store; replaced inline task-reset mutation in `action_retry_task()` with `executor.reset_task_for_retry()` |
+
+### New test files / additions
+
+| File | Tests added | What's covered |
+|------|-------------|----------------|
+| `tests/test_models.py` | +14 | `Task`, `PoolState`, `Message`, migration helpers |
+| `tests/test_parser.py` | +28 | `parse_claude_output`, `_strip_reasoning`, edge cases |
+| `tests/test_storage.py` | +36 | `save_pool`, `load_pool`, v0/v1/v2 migrations, atomic write |
+| `tests/test_concurrency.py` | +10 | `TaskSemaphore` acquire/release, repr |
+| `tests/test_executor.py` | +22 | `_build_command`, `_classify_exit`, `_merge_new_tasks`, `_do_save`, `reset_task_for_retry` |
+| `tests/test_api_helpers.py` | **New** (27) | `_is_allowed_path`, `_generate_task_id`, `_validate_priority`, Pydantic model validators, `_compute_pool_status` |
+| `tests/test_tui.py` | +11 | `JsonOutputWidget.exit_code_meaning` — all named exit codes + edge cases |
+
+### Residual risks
+
+- `tui.py` async paths (`@work` decorated methods, WebSocket callbacks, modal screen results) are not covered by the unit-test suite; they rely on Textual's internal event loop and can only be fully validated with the running TUI.
+- `executor.py` long-running paths (`run_pool`, rate-limit backoff loop, `execute_task` subprocess lifecycle) remain at ~19% coverage; integration tests would require a real `claude` CLI binary.
+- `api.py` WebSocket broadcast and SSE streaming endpoints (lines 707–764) are untested.
+- The 3 pre-existing `test_tui.py` failures reflect a test/implementation mismatch (`ResultWidget` vs `JsonOutputWidget`) that was out of scope for this refactor.
+
+### Possible follow-up
+
+- Fix the 3 pre-existing `test_tui.py` failures by aligning test expectations with `JsonOutputWidget`'s actual rendering contract.
+- Add integration tests for `executor.py` using a `claude` CLI stub/mock subprocess.
+- Cover `api.py` WebSocket and SSE endpoints with async integration tests (FastAPI `TestClient` + `websockets`).
+- Define `MAIN_BUCKET_LABEL` constant in `models.py` to eliminate the `"CLI / Dashboard"` magic string present in `models.py`, `storage.py`.
+- Replace `api.py`'s deprecated `@app.on_event("startup"/"shutdown")` with FastAPI lifespan context manager.

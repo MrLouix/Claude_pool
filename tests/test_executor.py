@@ -843,3 +843,42 @@ class TestDoSave:
         ex._do_save()
         import os
         assert ex._last_save_mtime == os.path.getmtime(str(pool_file))
+
+
+class TestResetTaskForRetry:
+    def _executor(self, tmp_path: Path) -> TaskExecutor:
+        return TaskExecutor(tmp_path / "pool.json", install_signal_handlers=False)
+
+    def test_resets_status_to_pending(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        task = Task(id="t1", prompt="p", directory=Path("/tmp"), status="failed", exit_code=2)
+        ex.pool = PoolState(tasks=[task], pool_file=ex.pool_file)
+        ex.reset_task_for_retry(task)
+        assert task.status == "pending"
+
+    def test_clears_exit_code_and_output(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        task = Task(
+            id="t1", prompt="p", directory=Path("/tmp"),
+            status="success", exit_code=0, duration_ms=500,
+            json_output={"result": "done"}, retry_count=1,
+        )
+        ex.pool = PoolState(tasks=[task], pool_file=ex.pool_file)
+        ex.reset_task_for_retry(task)
+        assert task.exit_code is None
+        assert task.duration_ms is None
+        assert task.json_output is None
+
+    def test_increments_retry_count(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        task = Task(id="t1", prompt="p", directory=Path("/tmp"), status="failed", retry_count=2)
+        ex.pool = PoolState(tasks=[task], pool_file=ex.pool_file)
+        ex.reset_task_for_retry(task)
+        assert task.retry_count == 3
+
+    def test_persists_state(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        task = Task(id="t1", prompt="p", directory=Path("/tmp"), status="failed")
+        ex.pool = PoolState(tasks=[task], pool_file=ex.pool_file)
+        ex.reset_task_for_retry(task)
+        assert ex.pool_file.exists()
