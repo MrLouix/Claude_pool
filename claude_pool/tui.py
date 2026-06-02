@@ -555,6 +555,7 @@ class PoolTUI(App):
     BINDINGS = [
         ("p", "toggle_pause", "Pause/Resume"),
         ("s", "skip_task", "Skip"),
+        ("x", "stop_task", "Stop"),
         ("d", "delete_task", "Delete"),
         ("enter", "show_detail", "Detail"),
         ("q", "quit", "Quit"),
@@ -598,6 +599,7 @@ class PoolTUI(App):
             Button("Add Task", id="add_task_btn", variant="success"),
             Button("Pause", id="pause_btn", variant="warning"),
             Button("Skip", id="skip_btn", variant="error"),
+            Button("Stop", id="stop_btn", variant="error"),
             Button("Delete", id="delete_btn", variant="error"),
             Button("Retry", id="retry_btn", variant="warning"),
             Button("Quit", id="quit_btn", variant="primary"),
@@ -709,6 +711,26 @@ class PoolTUI(App):
             log_widget.add_log(f"[yellow]Skipping task {self.executor.current_task.id}[/yellow]")
             self.executor.skip_current()
 
+    async def action_stop_task(self) -> None:
+        """Hard-stop the currently selected running task."""
+        log_widget = self.query_one("#logs", LogWidget)
+        if not self.selected_task:
+            log_widget.add_log("[red]No task selected[/red]")
+            return
+
+        task = self.selected_task
+        if task.status != "running":
+            log_widget.add_log(f"[yellow]Task {task.id} is {task.status}, cannot stop[/yellow]")
+            return
+
+        result = await self.push_screen_wait(ConfirmDialog(f"Hard-stop running task {task.id}?"))
+
+        if result and self.executor:
+            await self.executor.stop_task(task.id)
+            log_widget.add_log(f"[red]Task {task.id} hard-stopped[/red]")
+            self.query_one("#task_list_widget", TaskListWidget).update_tasks()
+            self._update_detail(self.selected_task)
+
     async def action_delete_task(self) -> None:
         """Delete selected task."""
         if not self.selected_task:
@@ -745,6 +767,11 @@ class PoolTUI(App):
     def on_skip_pressed(self) -> None:
         """Handle skip button press."""
         self.action_skip_task()
+
+    @on(Button.Pressed, "#stop_btn")
+    def on_stop_pressed(self) -> None:
+        """Handle stop button press."""
+        self.run_worker(self.action_stop_task())
 
     @on(Button.Pressed, "#delete_btn")
     def on_delete_pressed(self) -> None:

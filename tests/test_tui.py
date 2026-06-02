@@ -829,3 +829,127 @@ class TestExitCodeMeaning:
     def test_all_named_codes_are_non_empty(self):
         for code in (0, 1, 2, 126, 127, 130, 143):
             assert JsonOutputWidget.exit_code_meaning(code) != ""
+
+
+# ── TestStopTaskAction ────────────────────────────────────────────────────────
+
+
+class TestStopTaskAction:
+    """Tests for PoolTUI.action_stop_task() and the Stop button."""
+
+    @pytest.mark.asyncio
+    async def test_stop_button_exists(self, pool_file_with_tasks: Path, mock_executor):
+        """Stop button is present in the controls bar."""
+        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+            app = PoolTUI(pool_file_with_tasks)
+            async with app.run_test() as pilot:
+                await pilot.pause()
+                stop_btn = app.query_one("#stop_btn", Button)
+                assert stop_btn is not None
+                assert stop_btn.label == "Stop"
+
+    @pytest.mark.asyncio
+    async def test_stop_binding_registered(self, pool_file_with_tasks: Path, mock_executor):
+        """'x' key is bound to stop_task."""
+        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+            app = PoolTUI(pool_file_with_tasks)
+            bindings = [b for b in app.BINDINGS if b[0] == "x"]
+            assert len(bindings) == 1
+            assert bindings[0][1] == "stop_task"
+
+    @pytest.mark.asyncio
+    async def test_stop_task_no_selection(self, pool_file_with_tasks: Path, mock_executor):
+        """action_stop_task with no selected task logs 'No task selected'."""
+        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+            app = PoolTUI(pool_file_with_tasks)
+            async with app.run_test() as pilot:
+                await pilot.pause()
+
+                app.selected_task = None
+                log_widget = app.query_one("#logs", LogWidget)
+                before = len(log_widget.logs)
+
+                await pilot.press("x")
+                await pilot.pause()
+
+                assert len(log_widget.logs) > before
+                assert any("No task selected" in entry for entry in log_widget.logs)
+
+    @pytest.mark.asyncio
+    async def test_stop_task_wrong_status(self, pool_file_with_tasks: Path, mock_executor):
+        """action_stop_task on a non-running task logs 'cannot stop'."""
+        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+            app = PoolTUI(pool_file_with_tasks)
+            async with app.run_test() as pilot:
+                await pilot.pause()
+
+                # Select the pending task (index 0)
+                pending_task = mock_executor.pool.tasks[0]
+                assert pending_task.status == "pending"
+                app.selected_task = pending_task
+
+                log_widget = app.query_one("#logs", LogWidget)
+                before = len(log_widget.logs)
+
+                await pilot.press("x")
+                await pilot.pause()
+
+                assert len(log_widget.logs) > before
+                assert any("cannot stop" in entry for entry in log_widget.logs)
+
+    @pytest.mark.asyncio
+    async def test_stop_task_calls_executor(self, pool_file_with_tasks: Path, mock_executor):
+        """action_stop_task on a running task calls executor.stop_task with correct id."""
+        mock_executor.stop_task = AsyncMock(return_value=True)
+
+        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+            app = PoolTUI(pool_file_with_tasks)
+            async with app.run_test() as pilot:
+                await pilot.pause()
+
+                running_task = mock_executor.pool.tasks[1]
+                assert running_task.status == "running"
+                app.selected_task = running_task
+
+                # Patch push_screen_wait to auto-confirm without showing dialog
+                with patch.object(app, "push_screen_wait", AsyncMock(return_value=True)):
+                    await app.action_stop_task()
+
+                mock_executor.stop_task.assert_called_once_with(running_task.id)
+
+    @pytest.mark.asyncio
+    async def test_stop_task_logs_hard_stopped(self, pool_file_with_tasks: Path, mock_executor):
+        """action_stop_task logs 'hard-stopped' after executor call."""
+        mock_executor.stop_task = AsyncMock(return_value=True)
+
+        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+            app = PoolTUI(pool_file_with_tasks)
+            async with app.run_test() as pilot:
+                await pilot.pause()
+
+                running_task = mock_executor.pool.tasks[1]
+                app.selected_task = running_task
+                log_widget = app.query_one("#logs", LogWidget)
+
+                with patch.object(app, "push_screen_wait", AsyncMock(return_value=True)):
+                    await app.action_stop_task()
+
+                assert any("hard-stopped" in entry for entry in log_widget.logs)
+
+    @pytest.mark.asyncio
+    async def test_stop_task_no_op_when_cancelled(self, pool_file_with_tasks: Path, mock_executor):
+        """action_stop_task does NOT call executor.stop_task when user dismisses dialog."""
+        mock_executor.stop_task = AsyncMock(return_value=True)
+
+        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+            app = PoolTUI(pool_file_with_tasks)
+            async with app.run_test() as pilot:
+                await pilot.pause()
+
+                running_task = mock_executor.pool.tasks[1]
+                app.selected_task = running_task
+
+                with patch.object(app, "push_screen_wait", AsyncMock(return_value=False)):
+                    await app.action_stop_task()
+
+                mock_executor.stop_task.assert_not_called()
