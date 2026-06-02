@@ -388,6 +388,34 @@ class ApiServer:
                 priority=task.priority,
             )
 
+        @self.app.post("/api/tasks/{task_id}/stop")
+        async def stop_task(task_id: str) -> TaskResponse:
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+            task = next((t for t in self.executor.pool.tasks if t.id == task_id), None)
+            if not task:
+                raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+            if task.status != "running":
+                raise HTTPException(
+                    status_code=400, detail=f"Cannot stop task in {task.status} status"
+                )
+            await self.executor.stop_task(task_id)
+            await self._broadcast_event(
+                {"event": "task_stopped", "task": {"id": task.id, "status": "stopped"}}
+            )
+            await self._broadcast_pool_status()
+            return TaskResponse(
+                id=task.id,
+                prompt=task.prompt,
+                directory=str(task.directory),
+                status=task.status,
+                exit_code=task.exit_code,
+                duration_ms=task.duration_ms,
+                retry_count=task.retry_count,
+                bucket_id=task.bucket_id,
+                priority=task.priority,
+            )
+
         @self.app.delete("/api/tasks/{task_id}")
         async def delete_task(task_id: str) -> dict:
             if not self.executor:
