@@ -333,6 +333,7 @@ class TaskListWidget(Static):
                 "failed": "✗",
                 "skipped": "⏭",
                 "rate_limit_retry": "⟳",
+                "stopped": "⛔",
             }.get(task.status, "?")
 
             status_text = f"{status_emoji} {task.status}"
@@ -340,8 +341,8 @@ class TaskListWidget(Static):
             # Apply color based on status
             if task.status == "success":
                 status_display = f"[green]{status_text}[/green]"
-            elif task.status == "failed":
-                status_display = f"[red]{status_text}[/red]"
+            elif task.status in ("failed", "stopped"):
+                status_display = f"[bold red]{status_text}[/bold red]"
             elif task.status in ("running", "rate_limit_retry"):
                 status_display = f"[yellow]{status_text}[/yellow]"
             else:

@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 _DEFAULT_CLEANUP_AGE_HOURS = 48
 
 # Active statuses that are never removed by cleanup regardless of age.
+# Terminal statuses (success, failed, skipped, stopped) are intentionally
+# excluded — they are eligible for 48-hour automatic cleanup.
 _ACTIVE_STATUSES = frozenset({"pending", "running", "rate_limit_retry"})
 
 

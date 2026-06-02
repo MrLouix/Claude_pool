@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-TaskStatus = Literal["pending", "running", "success", "failed", "skipped", "rate_limit_retry"]
+TaskStatus = Literal["pending", "running", "success", "failed", "skipped", "rate_limit_retry", "stopped"]
 BucketType = Literal["cli", "chat"]
 
 MAIN_BUCKET_LABEL: str = "CLI / Dashboard"

@@ -248,3 +248,22 @@ def test_task_from_dict_handles_explicit_null_duration_ms():
     data = {"id": "t", "prompt": "p", "directory": "/tmp", "duration_ms": None}
     task = Task.from_dict(data)
     assert task.duration_ms is None
+
+
+# ── stopped status ────────────────────────────────────────────────────────────
+
+
+def test_task_accepts_stopped_status():
+    task = Task(id="t", prompt="p", directory=Path("/tmp"), status="stopped")
+    assert task.status == "stopped"
+
+
+def test_task_from_dict_accepts_stopped_status():
+    data = {"id": "t", "prompt": "p", "directory": "/tmp", "status": "stopped"}
+    task = Task.from_dict(data)
+    assert task.status == "stopped"
+
+
+def test_task_to_dict_preserves_stopped_status():
+    task = Task(id="t", prompt="p", directory=Path("/tmp"), status="stopped")
+    assert task.to_dict()["status"] == "stopped"

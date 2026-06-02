@@ -580,3 +580,24 @@ class TestCleanupOldTasks:
         state = self._make_state(tasks, temp_pool_file)
         removed = cleanup_old_tasks(state, max_age_hours=48)
         assert removed == 0
+
+    def test_stopped_task_older_than_48h_is_removed(self, temp_pool_file: Path):
+        """stopped is a terminal status — not in _ACTIVE_STATUSES — so it is cleaned up."""
+        old_time = (datetime.now() - timedelta(hours=72)).isoformat()
+        tasks = [
+            Task(id="old_stopped", prompt="p", directory=Path("/tmp"), status="stopped", created_at=old_time),  # type: ignore[call-arg]
+        ]
+        state = self._make_state(tasks, temp_pool_file)
+        removed = cleanup_old_tasks(state, max_age_hours=48)
+        assert removed == 1
+        assert len(state.tasks) == 0
+
+    def test_stopped_task_younger_than_48h_is_kept(self, temp_pool_file: Path):
+        """A recently-stopped task should survive cleanup."""
+        tasks = [
+            Task(id="recent_stopped", prompt="p", directory=Path("/tmp"), status="stopped"),
+        ]
+        state = self._make_state(tasks, temp_pool_file)
+        removed = cleanup_old_tasks(state, max_age_hours=48)
+        assert removed == 0
+        assert len(state.tasks) == 1
