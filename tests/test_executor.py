@@ -882,3 +882,121 @@ class TestResetTaskForRetry:
         ex.pool = PoolState(tasks=[task], pool_file=ex.pool_file)
         ex.reset_task_for_retry(task)
         assert ex.pool_file.exists()
+
+
+# ── TestStopTask ──────────────────────────────────────────────────────────────
+
+
+class TestStopTask:
+    def _executor(self, tmp_path: Path) -> TaskExecutor:
+        return TaskExecutor(tmp_path / "pool.json", install_signal_handlers=False)
+
+    @pytest.mark.asyncio
+    async def test_stop_task_returns_false_for_unknown_id(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        ex.pool = PoolState(tasks=[], pool_file=ex.pool_file)
+        result = await ex.stop_task("no-such-id")
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_stop_task_returns_false_when_not_running(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        task = Task(id="t1", prompt="p", directory=Path("/tmp"), status="failed")
+        ex.pool = PoolState(tasks=[task], pool_file=ex.pool_file)
+        result = await ex.stop_task(task.id)
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_stop_task_sets_status_stopped(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        task = Task(id="t1", prompt="p", directory=Path("/tmp"), status="running")
+        ex.pool = PoolState(tasks=[task], pool_file=ex.pool_file)
+
+        # Insert a mock process with returncode=None so SIGKILL branch is exercised
+        mock_process = MagicMock()
+        mock_process.returncode = None
+        ex._running_processes[task.id] = mock_process
+
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await ex.stop_task(task.id)
+
+        assert result is True
+        assert task.status == "stopped"
+        mock_process.terminate.assert_called_once()
+        mock_process.kill.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_stop_task_skips_sigkill_when_process_already_exited(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        task = Task(id="t1", prompt="p", directory=Path("/tmp"), status="running")
+        ex.pool = PoolState(tasks=[task], pool_file=ex.pool_file)
+
+        # returncode is set (process already exited) — SIGKILL must NOT be sent
+        mock_process = MagicMock()
+        mock_process.returncode = 0
+        ex._running_processes[task.id] = mock_process
+
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await ex.stop_task(task.id)
+
+        assert result is True
+        mock_process.terminate.assert_called_once()
+        mock_process.kill.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_stop_task_handles_process_lookup_error(self, tmp_path: Path):
+        """process.terminate() raising ProcessLookupError must be swallowed."""
+        ex = self._executor(tmp_path)
+        task = Task(id="t1", prompt="p", directory=Path("/tmp"), status="running")
+        ex.pool = PoolState(tasks=[task], pool_file=ex.pool_file)
+
+        mock_process = MagicMock()
+        mock_process.terminate.side_effect = ProcessLookupError
+        ex._running_processes[task.id] = mock_process
+
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await ex.stop_task(task.id)
+
+        assert result is True
+        assert task.status == "stopped"
+
+    @pytest.mark.asyncio
+    async def test_stop_task_works_without_registered_process(self, tmp_path: Path):
+        """stop_task should still set status=stopped even if _running_processes has no entry."""
+        ex = self._executor(tmp_path)
+        task = Task(id="t1", prompt="p", directory=Path("/tmp"), status="running")
+        ex.pool = PoolState(tasks=[task], pool_file=ex.pool_file)
+        # _running_processes is empty — process not yet registered or already deregistered
+
+        result = await ex.stop_task(task.id)
+
+        assert result is True
+        assert task.status == "stopped"
+
+    @pytest.mark.asyncio
+    async def test_stop_task_persists_state(self, tmp_path: Path):
+        ex = self._executor(tmp_path)
+        task = Task(id="t1", prompt="p", directory=Path("/tmp"), status="running")
+        ex.pool = PoolState(tasks=[task], pool_file=ex.pool_file)
+
+        result = await ex.stop_task(task.id)
+
+        assert result is True
+        assert ex.pool_file.exists()
+
+    @pytest.mark.asyncio
+    async def test_running_processes_deregistered_after_execute_task(self, tmp_path: Path):
+        """_running_processes must be empty after execute_task completes."""
+        ex = self._executor(tmp_path)
+        task = Task(id="t1", prompt="p", directory=Path("/tmp"), status="pending")
+        ex.pool = PoolState(tasks=[task], pool_file=ex.pool_file)
+
+        fake_process = MagicMock()
+        fake_process.returncode = 0
+        # communicate is AsyncMock so wait_for can actually await it
+        fake_process.communicate = AsyncMock(return_value=(b'{"result":"ok"}', b""))
+
+        with patch("claude_pool.executor.asyncio.create_subprocess_exec", AsyncMock(return_value=fake_process)):
+            await ex.execute_task(task)
+
+        assert task.id not in ex._running_processes

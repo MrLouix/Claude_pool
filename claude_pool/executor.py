@@ -63,6 +63,10 @@ class TaskExecutor:
         self.semaphore = TaskSemaphore(max_concurrent)
         self._save_lock = asyncio.Lock()  # Thread-safe state saving
 
+        # Registry of running subprocesses, keyed by task_id.
+        # Populated by execute_task(); consulted by stop_task().
+        self._running_processes: dict[str, asyncio.subprocess.Process] = {}
+
         # Setup signal handlers (skip when embedded in a server like uvicorn)
         if install_signal_handlers:
             signal.signal(signal.SIGINT, self._handle_signal)
@@ -234,6 +238,7 @@ class TaskExecutor:
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(task.directory),
             )
+            self._running_processes[task.id] = process
 
             try:
                 stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30 * 60)
@@ -263,29 +268,33 @@ class TaskExecutor:
                     "parse_error": True,
                 }
 
-            # Determine status based on exit code
-            new_status, is_rate_limit = self._classify_exit(
-                task.exit_code, stdout, stderr, task.json_output
-            )
-            task.status = new_status
-
-            if new_status == "success":
-                logger.info(f"Task {task.id} completed successfully")
-                if task.json_output:
-                    sid = task.json_output.get("session_id")
-                    if sid:
-                        task.session_id = sid
-                        logger.info(f"Persisted session_id for task {task.id}: {sid}")
-                usage = task.json_output.get("session_usage_percent", 0)
-                if usage >= 80:
-                    logger.warning(
-                        f"Task {task.id} succeeded but session usage is {usage}% — "
-                        f"next rate limit will use shorter initial backoff"
-                    )
-            elif is_rate_limit:
-                self._on_rate_limit_detected(task)
+            if task.status == "stopped":
+                # Hard-stopped externally — do not reclassify; preserve "stopped" status
+                logger.info(f"Task {task.id} was hard-stopped; skipping status reclassification")
             else:
-                logger.error(f"Task {task.id} failed with exit code {task.exit_code}")
+                # Determine status based on exit code
+                new_status, is_rate_limit = self._classify_exit(
+                    task.exit_code, stdout, stderr, task.json_output
+                )
+                task.status = new_status
+
+                if new_status == "success":
+                    logger.info(f"Task {task.id} completed successfully")
+                    if task.json_output:
+                        sid = task.json_output.get("session_id")
+                        if sid:
+                            task.session_id = sid
+                            logger.info(f"Persisted session_id for task {task.id}: {sid}")
+                    usage = task.json_output.get("session_usage_percent", 0)
+                    if usage >= 80:
+                        logger.warning(
+                            f"Task {task.id} succeeded but session usage is {usage}% — "
+                            f"next rate limit will use shorter initial backoff"
+                        )
+                elif is_rate_limit:
+                    self._on_rate_limit_detected(task)
+                else:
+                    logger.error(f"Task {task.id} failed with exit code {task.exit_code}")
 
         except Exception as e:
             logger.error(f"Error executing task {task.id}: {e}")
@@ -293,6 +302,8 @@ class TaskExecutor:
             task.exit_code = -1
             task.duration_ms = int((time.time() - start_time) * 1000)
             task.json_output = {"result": f"Execution error: {str(e)}", "parse_error": True}
+        finally:
+            self._running_processes.pop(task.id, None)
 
         self._notify_update(task)
         self._save_state()
@@ -644,6 +655,34 @@ class TaskExecutor:
         task.retry_count += 1
         logger.info(f"Task {task.id} reset to pending (retry #{task.retry_count})")
         self._save_state()
+
+    async def stop_task(self, task_id: str) -> bool:
+        """Send SIGTERM (then SIGKILL) to the subprocess for *task_id*.
+
+        Sets task.status to 'stopped' and persists state.
+        Returns True if the task was found and signalled, False otherwise.
+        """
+        task = next((t for t in self.pool.tasks if t.id == task_id), None)
+        if task is None or task.status != "running":
+            return False
+
+        # Mark stopped immediately so execute_task() skips status reclassification
+        task.status = "stopped"
+        logger.info(f"Hard-stopping task {task_id}")
+
+        process = self._running_processes.get(task_id)
+        if process is not None:
+            try:
+                process.terminate()  # SIGTERM — polite shutdown
+                await asyncio.sleep(5)
+                if process.returncode is None:
+                    process.kill()  # SIGKILL — force kill
+            except ProcessLookupError:
+                pass  # process already exited before we could signal it
+
+        self._notify_update(task)
+        await self._save_state_async()
+        return True
 
     def delete_task(self, task_id: str) -> bool:
         """Delete a task from the pool.
