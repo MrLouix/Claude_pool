@@ -260,6 +260,7 @@ class TaskExecutor:
             self._write_debug_log(task.id, task.exit_code, task.duration_ms, stdout, stderr)
 
             # Parse output
+            responded_at = datetime.now().isoformat()
             if stdout:
                 task.json_output = parse_claude_output(stdout)
             else:
@@ -267,6 +268,7 @@ class TaskExecutor:
                     "result": stderr.decode("utf-8", errors="replace")[:1000],
                     "parse_error": True,
                 }
+            task.json_output["responded_at"] = responded_at
 
             if task.status == "stopped":
                 # Hard-stopped externally — do not reclassify; preserve "stopped" status
