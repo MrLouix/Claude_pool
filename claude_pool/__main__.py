@@ -52,8 +52,8 @@ def setup_logging(verbose: bool = False, debug: bool = False, tui_mode: bool = F
     """Setup logging configuration.
 
     Args:
-        verbose: Enable verbose logging (INFO level)
-        debug: Enable debug logging (DEBUG level)
+        verbose: Enable WARNING level logging
+        debug: Enable DEBUG level logging (includes INFO, WARNING, ERROR)
         tui_mode: If True, disable console logging (use TUI log widget instead)
     """
     if tui_mode:
@@ -71,14 +71,14 @@ def setup_logging(verbose: bool = False, debug: bool = False, tui_mode: bool = F
             # Also print to stderr that debug log file is created
             print("Debug logging enabled. Logs written to: claude_pool_debug.log", file=sys.stderr)
         elif verbose:
-            level = logging.INFO
+            level = logging.WARNING
             logging.basicConfig(
                 level=level,
                 format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
                 datefmt="%H:%M:%S",
             )
         else:
-            level = logging.WARNING
+            level = logging.ERROR
             logging.basicConfig(
                 level=level,
                 format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -93,9 +93,9 @@ def setup_logging(verbose: bool = False, debug: bool = False, tui_mode: bool = F
         if debug:
             level = logging.DEBUG
         elif verbose:
-            level = logging.INFO
-        else:
             level = logging.WARNING
+        else:
+            level = logging.ERROR
 
         logging.basicConfig(
             level=level,
@@ -214,12 +214,12 @@ def main() -> None:
         "-v",
         "--verbose",
         action="store_true",
-        help="Enable verbose logging (INFO level)",
+        help="Enable WARNING level logging (WARNING + ERROR)",
     )
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Enable debug logging (DEBUG level)",
+        help="Enable DEBUG level logging (DEBUG + INFO + WARNING + ERROR)",
     )
     parser.add_argument(
         "--parallel",
