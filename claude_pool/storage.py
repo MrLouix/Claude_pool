@@ -1,5 +1,7 @@
-"""Storage functions for loading and saving task pools."""
+"""Storage functions for loading and saving task pools (SQLite backend)."""
 
+import asyncio
+import concurrent.futures
 import json
 import logging
 import uuid
@@ -7,194 +9,216 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from .database import DatabaseManager
 from .models import MAIN_BUCKET_LABEL, Bucket, PoolState, Task
 
 logger = logging.getLogger(__name__)
 
-# Tasks older than this threshold are eligible for automatic cleanup.
 _DEFAULT_CLEANUP_AGE_HOURS = 48
 
 # Active statuses that are never removed by cleanup regardless of age.
-# Terminal statuses (success, failed, skipped, stopped) are intentionally
-# excluded — they are eligible for 48-hour automatic cleanup.
 _ACTIVE_STATUSES = frozenset({"pending", "running", "rate_limit_retry"})
 
 
-def _apply_migrations(raw_data: Any) -> tuple[dict[str, Any], bool]:
-    """Upgrade pool data to the current v2 format in-memory.
+# ---------------------------------------------------------------------------
+# Async bridge
+# ---------------------------------------------------------------------------
 
-    Returns ``(data_dict, needs_save)`` where ``needs_save`` is True when the
-    file should be rewritten on disk (i.e. it was in an older format).
+def _run_async(coro: Any) -> Any:
+    """Run a coroutine synchronously, even from within a running event loop.
 
-    Handles:
-    - v0: bare task list → wrapped v1 dict
-    - v1: dict without a ``buckets`` key → v2 needs saving
-    - v2: dict with ``buckets`` key → no migration needed
+    Callers inside an async context get a thread-based trampoline so they do
+    not need to be aware of the storage layer's implementation detail.
     """
-    if isinstance(raw_data, list):
-        # v0 → v1: promote bare task array to wrapped dict
-        return {
-            "pool_retry_count": 0,
-            "pool_suspended_until": None,
-            "tasks": raw_data,
-        }, True
-    if not isinstance(raw_data, dict):
-        raise ValueError("Pool file must contain a JSON object or array")
-    # v1 → v2: dict exists but lacks the buckets key
-    return raw_data, "buckets" not in raw_data
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(asyncio.run, coro)
+            return future.result()
 
 
-def _load_buckets(raw_buckets: Any) -> dict[str, Bucket]:
-    """Parse a raw buckets mapping and guarantee the 'main' bucket exists."""
-    buckets: dict[str, Bucket] = {}
-    if raw_buckets and isinstance(raw_buckets, dict):
-        for bid, bdata in raw_buckets.items():
-            if isinstance(bdata, dict):
-                bdata = dict(bdata)
-                bdata.setdefault("id", bid)
-                buckets[bid] = Bucket.from_dict(bdata)
-    if "main" not in buckets:
-        buckets["main"] = Bucket(id="main", type="cli", label=MAIN_BUCKET_LABEL)
-    return buckets
+# ---------------------------------------------------------------------------
+# One-time JSON → SQLite migration
+# ---------------------------------------------------------------------------
 
+def migrate_from_json(json_path: Path, db_path: Path) -> bool:
+    """Migrate a pool.json to pool.db on first use.
 
-def _ensure_unique_id(item: dict[str, Any], existing_ids: set[str]) -> None:
-    """Assign a unique task ID to *item*, modifying it in-place.
+    Conditions for migration (both must hold):
+    - json_path exists
+    - db_path does NOT exist
 
-    Generates a new ID when one is missing; appends a short random suffix when
-    the existing ID collides with a previously seen one.
+    On success renames pool.json to pool.json.bak and returns True.
+    Returns False when no migration is needed.
     """
-    if "id" not in item or not item["id"]:
-        item["id"] = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
-    while item["id"] in existing_ids:
-        item["id"] = f"{item['id']}_{uuid.uuid4().hex[:4]}"
-    existing_ids.add(item["id"])
+    if not json_path.exists() or db_path.exists():
+        return False
+
+    logger.info(f"Migrating {json_path} → {db_path}")
+    content = json_path.read_text(encoding="utf-8").strip()
+    if not content:
+        return False
+
+    raw: Any = json.loads(content)
+    if isinstance(raw, list):
+        raw = {"pool_retry_count": 0, "pool_suspended_until": None, "tasks": raw}
+
+    async def _do_migrate() -> None:
+        db = DatabaseManager(db_path)
+        await db.init()
+
+        await db.set_pool_meta(
+            retry_count=int(raw.get("pool_retry_count", 0)),
+            suspended_until=raw.get("pool_suspended_until"),
+            provider=str(raw.get("provider", "claude")),
+        )
+
+        # Buckets
+        raw_buckets = raw.get("buckets", {})
+        if isinstance(raw_buckets, dict):
+            for bid, bdata in raw_buckets.items():
+                if isinstance(bdata, dict):
+                    bdata = dict(bdata)
+                    bdata.setdefault("id", bid)
+                    bdata.setdefault("type", "cli")
+                    bdata.setdefault("label", bid)
+                    bdata.setdefault("created_at", datetime.now().isoformat())
+                    await db.upsert_bucket(bdata)
+
+        existing = {b["id"] for b in await db.get_all_buckets()}
+        if "main" not in existing:
+            await db.upsert_bucket({
+                "id": "main",
+                "type": "cli",
+                "label": MAIN_BUCKET_LABEL,
+                "directory": None,
+                "created_at": datetime.now().isoformat(),
+            })
+
+        # Tasks
+        seen_ids: set[str] = set()
+        for task_data in raw.get("tasks", []):
+            if not isinstance(task_data, dict):
+                continue
+            task_data = dict(task_data)
+            if not task_data.get("id"):
+                task_data["id"] = (
+                    f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+                )
+            while task_data["id"] in seen_ids:
+                task_data["id"] = f"{task_data['id']}_{uuid.uuid4().hex[:4]}"
+            seen_ids.add(task_data["id"])
+            task_data.setdefault("created_at", datetime.now().isoformat())
+            await db.upsert_task(task_data)
+
+    _run_async(_do_migrate())
+
+    backup = json_path.with_suffix(".json.bak")
+    json_path.rename(backup)
+    logger.info(f"Migration complete. Original backed up to {backup}")
+    return True
 
 
-def _load_tasks(tasks_raw: list[Any]) -> list[Task]:
-    """Validate and deserialise a raw task list.
-
-    Raises:
-        ValueError: if any item is not a dict.
-        KeyError: if a required field (prompt, directory) is missing.
-    """
-    tasks: list[Task] = []
-    existing_ids: set[str] = set()
-
-    for item in tasks_raw:
-        if not isinstance(item, dict):
-            raise ValueError(f"Invalid task data: {item}")
-        if "prompt" not in item:
-            raise KeyError(f"Missing required field 'prompt' in task: {item}")
-        if "directory" not in item:
-            raise KeyError(f"Missing required field 'directory' in task: {item}")
-
-        _ensure_unique_id(item, existing_ids)
-        tasks.append(Task.from_dict(item))
-
-    return tasks
-
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 def load_pool(pool_file: Path) -> PoolState:
-    """Load tasks and pool state from a JSON pool file.
+    """Load pool state from the SQLite database.
 
-    Supports both the wrapped format (dict with 'tasks' key) and the legacy
-    bare-array format for backward compatibility.
-
-    If the file doesn't exist or is empty, initialises it with an empty pool.
-
-    Args:
-        pool_file: Path to the pool.json file
-
-    Returns:
-        PoolState object containing tasks and pool metadata
-
-    Raises:
-        json.JSONDecodeError: If pool file contains invalid JSON
+    pool_file may be a .json or .db path; the .db file is always used.
+    If pool.json exists at the same location and pool.db does not, it is
+    migrated automatically.
     """
-    if not pool_file.exists():
-        logger.info(f"Pool file not found, creating new empty pool: {pool_file}")
-        state = PoolState(pool_file=pool_file)
-        save_pool(state)
-        return state
+    db_path = pool_file.with_suffix(".db")
+    json_path = pool_file.with_suffix(".json")
 
-    content = pool_file.read_text(encoding="utf-8").strip()
+    migrate_from_json(json_path, db_path)
 
-    if not content:
-        logger.info(f"Pool file is empty, initialising: {pool_file}")
-        state = PoolState(pool_file=pool_file)
-        save_pool(state)
-        return state
+    async def _load() -> tuple[dict, list[dict], list[dict]]:
+        db = DatabaseManager(db_path)
+        await db.init()
+        meta = await db.get_pool_meta()
+        task_rows = await db.get_all_tasks()
+        bucket_rows = await db.get_all_buckets()
+        return meta, task_rows, bucket_rows
 
-    raw_data = json.loads(content)
-    data, needs_save = _apply_migrations(raw_data)
+    meta, task_rows, bucket_rows = _run_async(_load())
 
-    suspended_until_raw = data.get("pool_suspended_until")
+    suspended_until_raw = meta.get("suspended_until")
     suspended_until = (
         datetime.fromisoformat(suspended_until_raw) if suspended_until_raw else None
     )
 
-    state = PoolState(
-        retry_count=int(data.get("pool_retry_count", 0)),
+    tasks = [Task.from_dict(row) for row in task_rows]
+
+    buckets: dict[str, Bucket] = {}
+    for row in bucket_rows:
+        buckets[row["id"]] = Bucket.from_dict(row)
+    if "main" not in buckets:
+        buckets["main"] = Bucket(id="main", type="cli", label=MAIN_BUCKET_LABEL)
+
+    return PoolState(
+        retry_count=int(meta.get("retry_count", 0)),
         suspended_until=suspended_until,
-        tasks=_load_tasks(data.get("tasks", [])),
-        pool_file=pool_file,
-        buckets=_load_buckets(data.get("buckets", {})),
+        tasks=tasks,
+        pool_file=db_path,
+        buckets=buckets,
+        provider=str(meta.get("provider", "claude")),
     )
-
-    if needs_save:
-        logger.info(f"Migrating pool file to v2 format: {pool_file}")
-        save_pool(state)
-
-    return state
 
 
 def save_pool(state: PoolState) -> None:
-    """Save pool state to a JSON file.
+    """Persist pool state to the SQLite database.
 
-    Args:
-        state: PoolState object to save
+    Syncs tasks bidirectionally: tasks absent from state are deleted from DB.
     """
-    state.pool_file.parent.mkdir(parents=True, exist_ok=True)
+    db_path = state.pool_file.with_suffix(".db")
+    db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    data = {
-        "pool_retry_count": state.retry_count,
-        "pool_suspended_until": (
-            state.suspended_until.isoformat() if state.suspended_until else None
-        ),
-        "buckets": {bid: b.to_dict() for bid, b in state.buckets.items()},
-        "tasks": [task.to_dict() for task in state.tasks],
-    }
-    state.pool_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    async def _save() -> None:
+        db = DatabaseManager(db_path)
+        await db.init()
+
+        await db.set_pool_meta(
+            retry_count=state.retry_count,
+            suspended_until=(
+                state.suspended_until.isoformat() if state.suspended_until else None
+            ),
+            provider=getattr(state, "provider", "claude"),
+        )
+
+        for task in state.tasks:
+            await db.upsert_task(task.to_dict())
+
+        for bucket in state.buckets.values():
+            await db.upsert_bucket(bucket.to_dict())
+
+        # Remove DB rows for tasks no longer in state
+        all_db_tasks = await db.get_all_tasks()
+        state_ids = {t.id for t in state.tasks}
+        for db_task in all_db_tasks:
+            if db_task["id"] not in state_ids:
+                await db.delete_task(db_task["id"])
+
+    _run_async(_save())
 
 
 def _should_keep_task(task: Task, cutoff_time: datetime) -> bool:
-    """Return True when a task should be retained during cleanup.
-
-    Active tasks (pending / running / rate_limit_retry) are always kept.
-    Finished tasks are kept only when younger than the cutoff.
-    """
+    """Return True when a task should be retained during cleanup."""
     if task.status in _ACTIVE_STATUSES:
         return True
     return datetime.fromisoformat(task.created_at) > cutoff_time
 
 
 def cleanup_old_tasks(state: PoolState, max_age_hours: int = _DEFAULT_CLEANUP_AGE_HOURS) -> int:
-    """Remove finished tasks older than *max_age_hours* (default: 48 h).
+    """Remove finished tasks older than max_age_hours from state and DB.
 
-    Only tasks with status ``success``, ``failed``, or ``skipped`` are
-    eligible for removal.  Active tasks (pending / running / rate_limit_retry)
-    are never removed regardless of age.
-
-    Side-effect: writes the updated pool to disk when at least one task is
-    removed.
-
-    Args:
-        state: PoolState object to clean
-        max_age_hours: Maximum age in hours before a finished task is removed
-
-    Returns:
-        Number of tasks removed
+    Active tasks (pending / running / rate_limit_retry) are never removed.
+    Returns the number of tasks removed.
     """
     cutoff_time = datetime.now() - timedelta(hours=max_age_hours)
     initial_count = len(state.tasks)

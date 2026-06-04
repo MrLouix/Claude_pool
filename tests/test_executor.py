@@ -14,7 +14,7 @@ from claude_pool.models import Bucket, PoolState, Task
 @pytest.fixture
 def temp_pool_file(tmp_path: Path) -> Path:
     """Create a temporary pool file."""
-    return tmp_path / "test_pool.json"
+    return tmp_path / "test_pool.db"
 
 
 @pytest.fixture
@@ -701,7 +701,7 @@ def test_priority_non_pending_tasks_excluded():
 
 class TestBuildCommand:
     def _executor(self, tmp_path: Path) -> TaskExecutor:
-        return TaskExecutor(tmp_path / "pool.json", install_signal_handlers=False)
+        return TaskExecutor(tmp_path / "pool.db", install_signal_handlers=False)
 
     def test_base_command_structure(self, tmp_path: Path):
         ex = self._executor(tmp_path)
@@ -733,7 +733,7 @@ class TestBuildCommand:
 
 class TestClassifyExit:
     def _executor(self, tmp_path: Path) -> TaskExecutor:
-        return TaskExecutor(tmp_path / "pool.json", install_signal_handlers=False)
+        return TaskExecutor(tmp_path / "pool.db", install_signal_handlers=False)
 
     def test_exit_0_is_success(self, tmp_path: Path):
         ex = self._executor(tmp_path)
@@ -787,7 +787,7 @@ class TestClassifyExit:
 
 class TestMergeNewTasks:
     def _executor(self, tmp_path: Path) -> TaskExecutor:
-        return TaskExecutor(tmp_path / "pool.json", install_signal_handlers=False)
+        return TaskExecutor(tmp_path / "pool.db", install_signal_handlers=False)
 
     def test_new_task_is_added(self, tmp_path: Path):
         ex = self._executor(tmp_path)
@@ -830,14 +830,14 @@ class TestMergeNewTasks:
 
 class TestDoSave:
     def test_save_writes_file(self, tmp_path: Path):
-        pool_file = tmp_path / "pool.json"
+        pool_file = tmp_path / "pool.db"
         ex = TaskExecutor(pool_file, install_signal_handlers=False)
         ex.pool = PoolState(tasks=[], pool_file=pool_file)
         ex._do_save()
         assert pool_file.exists()
 
     def test_save_updates_last_save_mtime(self, tmp_path: Path):
-        pool_file = tmp_path / "pool.json"
+        pool_file = tmp_path / "pool.db"
         ex = TaskExecutor(pool_file, install_signal_handlers=False)
         ex.pool = PoolState(tasks=[], pool_file=pool_file)
         ex._do_save()
@@ -847,7 +847,7 @@ class TestDoSave:
 
 class TestResetTaskForRetry:
     def _executor(self, tmp_path: Path) -> TaskExecutor:
-        return TaskExecutor(tmp_path / "pool.json", install_signal_handlers=False)
+        return TaskExecutor(tmp_path / "pool.db", install_signal_handlers=False)
 
     def test_resets_status_to_pending(self, tmp_path: Path):
         ex = self._executor(tmp_path)
@@ -889,7 +889,7 @@ class TestResetTaskForRetry:
 
 class TestStopTask:
     def _executor(self, tmp_path: Path) -> TaskExecutor:
-        return TaskExecutor(tmp_path / "pool.json", install_signal_handlers=False)
+        return TaskExecutor(tmp_path / "pool.db", install_signal_handlers=False)
 
     @pytest.mark.asyncio
     async def test_stop_task_returns_false_for_unknown_id(self, tmp_path: Path):

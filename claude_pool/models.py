@@ -64,6 +64,7 @@ class PoolState:
     tasks: list["Task"] = field(default_factory=list)
     pool_file: Path = Path("pool.json")
     buckets: dict[str, Bucket] = field(default_factory=_default_buckets)
+    provider: str = "claude"
 
     def __post_init__(self) -> None:
         if "main" not in self.buckets:

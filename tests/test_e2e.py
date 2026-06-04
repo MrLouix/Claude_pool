@@ -1,6 +1,5 @@
 """End-to-end tests."""
 
-import json
 from pathlib import Path
 
 import pytest
@@ -11,13 +10,12 @@ from claude_pool.storage import load_pool, save_pool
 
 @pytest.fixture
 def e2e_pool_file(tmp_path: Path) -> Path:
-    """Create a test pool file for e2e tests."""
-    return tmp_path / "e2e_pool.json"
+    """Pool file path for e2e tests (storage layer uses .db extension internally)."""
+    return tmp_path / "e2e_pool.db"
 
 
 def test_full_cycle_save_load(e2e_pool_file: Path):
     """Test complete save/load cycle."""
-    # Create tasks
     tasks = [
         Task(
             id="e2e_001",
@@ -43,17 +41,11 @@ def test_full_cycle_save_load(e2e_pool_file: Path):
     state = PoolState(tasks=tasks, pool_file=e2e_pool_file)
     save_pool(state)
 
-    # Verify file exists and is valid JSON (wrapped format)
+    # Verify the SQLite database file was created
     assert e2e_pool_file.exists()
-    content = json.loads(e2e_pool_file.read_text())
-    assert isinstance(content, dict)
-    assert "tasks" in content
-    assert len(content["tasks"]) == 2
 
-    # Load from file
     loaded_state = load_pool(e2e_pool_file)
 
-    # Verify all data preserved
     assert len(loaded_state.tasks) == 2
     assert loaded_state.tasks[0].id == "e2e_001"
     assert loaded_state.tasks[0].status == "pending"
