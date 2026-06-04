@@ -70,3 +70,6 @@ claude_pool_debug.log
 # Test files
 hello.txt
 test*.txt
+
+# Data folder
+data/
