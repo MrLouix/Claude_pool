@@ -6,6 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 import os
 import platform
+import shutil
 import uuid as _uuid
 from copy import deepcopy
 from datetime import datetime
@@ -143,6 +144,8 @@ class ApiServer:
     """FastAPI server for Claude Pool."""
 
     def __init__(self, pool_file: Path):
+        if pool_file.suffix == ".json":
+            pool_file = pool_file.with_suffix(".db")
         self.pool_file = pool_file
         self.executor: Optional[TaskExecutor] = None
 
@@ -215,6 +218,22 @@ class ApiServer:
                 raise HTTPException(status_code=503, detail="Executor not initialized")
             self.executor.check_pool_updates()
             return _compute_pool_status(self.executor.pool)
+
+        # ── Providers ─────────────────────────────────────────────
+
+        _PROVIDER_CLI = {
+            "claude": "claude",
+            "qwen": "qwen-coder",
+            "opencode": "opencode",
+            "mistral": "codestral",
+        }
+
+        @self.app.get("/api/providers")
+        async def get_providers() -> list[dict]:
+            return [
+                {"name": name, "available": shutil.which(cli) is not None}
+                for name, cli in _PROVIDER_CLI.items()
+            ]
 
         # ── Tasks ─────────────────────────────────────────────────
 
