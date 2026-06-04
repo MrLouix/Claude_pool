@@ -84,6 +84,10 @@ def setup_logging(verbose: bool = False, debug: bool = False, tui_mode: bool = F
                 format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
                 datefmt="%H:%M:%S",
             )
+        # Suppress third-party library logs
+        logging.getLogger("aiosqlite").setLevel(logging.WARNING)
+        logging.getLogger("asyncio").setLevel(logging.WARNING)
+        logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     else:
         # CLI mode: normal logging to console
         if debug:
@@ -98,6 +102,10 @@ def setup_logging(verbose: bool = False, debug: bool = False, tui_mode: bool = F
             format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
             datefmt="%H:%M:%S",
         )
+        # Suppress third-party library logs
+        logging.getLogger("aiosqlite").setLevel(logging.WARNING)
+        logging.getLogger("asyncio").setLevel(logging.WARNING)
+        logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 
 async def run_cli(pool_file: Path, max_concurrent: int = 1) -> int:
