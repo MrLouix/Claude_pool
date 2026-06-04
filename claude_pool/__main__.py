@@ -104,7 +104,7 @@ async def run_cli(pool_file: Path, max_concurrent: int = 1) -> int:
     """Run in CLI mode (no TUI).
 
     Args:
-        pool_file: Path to pool.json
+        pool_file: Path to pool.db
         max_concurrent: Maximum number of concurrent tasks
 
     Returns:
@@ -125,7 +125,7 @@ async def run_tui_mode(pool_file: Path, max_concurrent: int = 1) -> int:
     """Run in TUI mode.
 
     Args:
-        pool_file: Path to pool.json
+        pool_file: Path to pool.db
         max_concurrent: Maximum number of concurrent tasks (not used in TUI)
 
     Returns:
@@ -145,7 +145,7 @@ def run_api_server(pool_file: Path, host: str = "0.0.0.0", port: int = 8000) -> 
     """Run API server with FastAPI/Uvicorn.
 
     Args:
-        pool_file: Path to pool.json
+        pool_file: Path to pool.db
         host: Host to bind to
         port: Port to bind to
 
@@ -177,8 +177,8 @@ def main() -> None:
     parser.add_argument(
         "--pool",
         type=Path,
-        default=Path("pool.json"),
-        help="Path to pool.json file (default: pool.json)",
+        default=Path("pool.db"),
+        help="Path to pool database (default: pool.db)",
     )
     parser.add_argument(
         "--no-tui",
@@ -227,6 +227,9 @@ def main() -> None:
     setup_logging(
         verbose=args.verbose, debug=args.debug, tui_mode=not args.no_tui and not args.serve
     )
+
+    db_path = args.pool if args.pool.suffix == ".db" else args.pool.with_suffix(".db")
+    logging.info(f"Using database: {db_path.resolve()}")
 
     check_claude_cli()
 

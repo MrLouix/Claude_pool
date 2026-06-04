@@ -62,7 +62,7 @@ class PoolState:
     retry_count: int = 0
     suspended_until: datetime | None = None
     tasks: list["Task"] = field(default_factory=list)
-    pool_file: Path = Path("pool.json")
+    pool_file: Path = Path("pool.db")
     buckets: dict[str, Bucket] = field(default_factory=_default_buckets)
     provider: str = "claude"
 

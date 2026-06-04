@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Claude Pool TUI is a Python TUI application (built with Textual) that manages a sequential pool of requests forwarded to the `claude -p` CLI. It loads tasks from `pool.json`, executes them sequentially via `claude -p <prompt> --output-format json --structured-output`, parses results, and saves state back to `pool.json`.
+Claude Pool TUI is a Python TUI application (built with Textual) that manages a sequential pool of requests forwarded to the `claude -p` CLI. It loads tasks from a SQLite database (`pool.db`), executes them sequentially via `claude -p <prompt> --output-format json --structured-output`, parses results, and saves state back to `pool.db`.
 
 **Status:** Specification phase — the full spec is in `docs/spec.md`. No source code has been implemented yet.
 
@@ -22,14 +22,14 @@ The app follows a sequential execution model with rate-limit awareness:
 - **`Task` dataclass**: Holds id, prompt, directory, args, status, exit_code, duration_ms, json_output
 - **`PoolTUI(App)`**: Main Textual application with keyboard bindings (P=pause, S=skip, Del=delete, Q=quit)
 - **`parse_claude_output()`**: Parses Claude CLI JSON output, strips `reasoning`, returns compact structure
-- **`save_pool()` / `load_pool()`**: Serialize/deserialize tasks to `pool.json` (English-only keys)
+- **`save_pool()` / `load_pool()`**: Persist/load tasks to/from `pool.db` via SQLite (English-only keys)
 
 ### Execution flow
 
-1. Load tasks from `pool.json`
+1. Load tasks from `pool.db`
 2. For each pending task: `cd $directory && claude -p "$prompt" --output-format json --structured-output [args...]`
 3. Handle exit codes: 0=success, 1=rate-limit retry with exponential backoff, ≥2=failed
-4. Save updated state back to `pool.json`
+4. Save updated state back to `pool.db`
 5. On SIGINT: graceful shutdown, save current state
 
 ### Rate-limit strategy
@@ -41,7 +41,7 @@ The app follows a sequential execution model with rate-limit awareness:
 
 - `docs/spec.md` — Complete specification (JSON schema, TUI layout, class designs, retry logic, integration points)
 - `docs/chat_spec.md` — Chat Tab feature specification (web dashboard chat interface, bucket-based routing, REST API, WebSocket events)
-- `pool.json` — Runtime task data (JSON array of task objects)
+- `pool.db` — SQLite database storing tasks, pool metadata, and buckets. A `pool.json.bak` backup is created automatically if migrating from a previous JSON-based installation.
 
 ## Constraints
 

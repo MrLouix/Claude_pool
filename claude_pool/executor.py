@@ -44,7 +44,7 @@ class TaskExecutor:
         """Initialize the executor.
 
         Args:
-            pool_file: Path to pool.json
+            pool_file: Path to pool.db
             on_task_update: Optional callback called when a task is updated
             max_concurrent: Maximum number of tasks to run concurrently (default: 1)
             install_signal_handlers: Whether to install SIGINT/SIGTERM handlers.
@@ -383,7 +383,7 @@ class TaskExecutor:
             return
 
         while not self.should_stop:
-            # Check for new tasks in pool.json
+            # Check for new tasks in pool.db
             self.check_pool_updates()
 
             # If pool is currently suspended, wait for expiration
