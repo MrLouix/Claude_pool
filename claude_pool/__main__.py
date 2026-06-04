@@ -149,13 +149,14 @@ async def run_tui_mode(pool_file: Path, max_concurrent: int = 1) -> int:
         return 1
 
 
-def run_api_server(pool_file: Path, host: str = "0.0.0.0", port: int = 8000) -> int:
+def run_api_server(pool_file: Path, host: str = "0.0.0.0", port: int = 8000, log_level: str = "info") -> int:
     """Run API server with FastAPI/Uvicorn.
 
     Args:
         pool_file: Path to pool.db
         host: Host to bind to
         port: Port to bind to
+        log_level: Uvicorn log level (debug, info, warning, error)
 
     Returns:
         Exit code
@@ -170,7 +171,7 @@ def run_api_server(pool_file: Path, host: str = "0.0.0.0", port: int = 8000) -> 
         logging.info(f"Dashboard: http://{host}:{port}")
         logging.info(f"WebSocket: ws://{host}:{port}/ws/events")
 
-        uvicorn.run(app, host=host, port=port, log_level="info")
+        uvicorn.run(app, host=host, port=port, log_level=log_level)
         return 0
     except Exception as e:
         logging.error(f"Error: {e}")
@@ -243,7 +244,14 @@ def main() -> None:
 
     try:
         if args.serve:
-            exit_code = run_api_server(args.pool, host=args.host, port=args.port)
+            # Map CLI log flags to uvicorn log levels
+            if args.debug:
+                uvicorn_log_level = "debug"
+            elif args.verbose:
+                uvicorn_log_level = "warning"
+            else:
+                uvicorn_log_level = "error"
+            exit_code = run_api_server(args.pool, host=args.host, port=args.port, log_level=uvicorn_log_level)
         elif args.no_tui:
             if args.parallel > 1:
                 logging.info(f"Running with {args.parallel} concurrent tasks")
