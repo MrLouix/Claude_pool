@@ -836,13 +836,14 @@ class TestDoSave:
         ex._do_save()
         assert pool_file.exists()
 
-    def test_save_updates_last_save_mtime(self, tmp_path: Path):
+    def test_save_stamps_tracking_hashes(self, tmp_path: Path):
         pool_file = tmp_path / "pool.db"
         ex = TaskExecutor(pool_file, install_signal_handlers=False)
-        ex.pool = PoolState(tasks=[], pool_file=pool_file)
+        task = Task(id="t1", prompt="p", directory=Path("/tmp"))
+        ex.pool = PoolState(tasks=[task], pool_file=pool_file)
         ex._do_save()
-        import os
-        assert ex._last_save_mtime == os.path.getmtime(str(pool_file))
+        assert ex._last_known_task_ids == {"t1"}
+        assert ex._last_pool_meta_hash != ""
 
 
 class TestResetTaskForRetry:

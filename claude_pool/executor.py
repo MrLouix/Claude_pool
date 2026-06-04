@@ -1,9 +1,7 @@
 """Task executor for running Claude Code CLI commands."""
 
 import asyncio
-import json
 import logging
-import os
 import signal
 import time
 from datetime import datetime, timedelta
@@ -16,6 +14,11 @@ from .parser import parse_claude_output
 from .storage import cleanup_old_tasks, load_pool, save_pool
 
 logger = logging.getLogger(__name__)
+
+def _meta_hash(state: "PoolState") -> str:
+    """Stable string representation of pool-level metadata for change detection."""
+    return f"{state.retry_count}|{state.suspended_until}|{getattr(state, 'provider', 'claude')}"
+
 
 _RATE_LIMIT_PATTERNS = (
     "rate limit",
@@ -55,8 +58,9 @@ class TaskExecutor:
         self.should_stop = False
         self.skip_requested = False
         self.on_task_update = on_task_update
-        self.last_pool_mtime = pool_file.stat().st_mtime if pool_file.exists() else 0
-        self._last_save_mtime = 0.0  # Track our own saves to avoid self-triggered reloads
+        # DB-based change detection (replaces legacy mtime tracking)
+        self._last_known_task_ids: set[str] = set()
+        self._last_pool_meta_hash: str = ""
 
         # Concurrency control
         self.max_concurrent = max_concurrent
@@ -79,10 +83,10 @@ class TaskExecutor:
         self._save_state()
 
     def _do_save(self) -> None:
-        """Write pool to disk and update the self-write mtime stamp."""
+        """Write pool to DB and stamp tracking hashes to suppress self-triggered reloads."""
         save_pool(self.pool)
-        if self.pool_file.exists():
-            self._last_save_mtime = os.path.getmtime(str(self.pool_file))
+        self._last_known_task_ids = {t.id for t in self.pool.tasks}
+        self._last_pool_meta_hash = _meta_hash(self.pool)
         logger.debug("State saved successfully")
 
     async def _save_state_async(self) -> None:
@@ -101,7 +105,7 @@ class TaskExecutor:
             logger.error(f"Failed to save state: {e}")
 
     async def load_tasks(self) -> None:
-        """Load tasks and pool state from pool file."""
+        """Load tasks and pool state from the database."""
         try:
             self.pool = load_pool(self.pool_file)
             # Ensure pool_file is preserved after load
@@ -112,6 +116,11 @@ class TaskExecutor:
             removed = cleanup_old_tasks(self.pool, max_age_hours=48)
             if removed > 0:
                 logger.info(f"Automatically cleaned up {removed} old completed tasks")
+
+            # Stamp tracking hashes so the first check_pool_updates call after load
+            # does not treat the initial DB state as an external change.
+            self._last_known_task_ids = {t.id for t in self.pool.tasks}
+            self._last_pool_meta_hash = _meta_hash(self.pool)
         except Exception as e:
             logger.error(f"Error loading tasks: {e}")
             raise
@@ -532,55 +541,38 @@ class TaskExecutor:
                 return t
         return None
 
-    def check_pool_updates(self) -> bool:
-        """Check if pool.json has been modified by an external source and reload if needed.
+    def check_pool_updates(self) -> None:
+        """Detect external DB changes and merge them into the in-memory pool.
 
-        Ignores modifications made by our own _save_state() to prevent self-triggered reloads.
-
-        Returns:
-            True if pool was reloaded, False otherwise
+        Compares the current DB state against the last-known task-ID set and
+        pool-metadata hash.  Our own saves stamp those hashes via _do_save(),
+        so they are never mistaken for external changes.
         """
         try:
-            if not self.pool_file.exists():
-                return False
-
-            current_mtime = os.path.getmtime(str(self.pool_file))
-
-            # Ignore our own saves — only react to external modifications
-            if current_mtime <= self._last_save_mtime:
-                return False
-
-            # Allow a small debounce window for our own saves (filesystem mtime granularity)
-            if current_mtime - self._last_save_mtime < 0.1:
-                return False
-
-            self.last_pool_mtime = current_mtime
-            logger.info("Pool file modified externally, reloading tasks...")
-            try:
-                new_pool = load_pool(self.pool_file)
-            except (json.JSONDecodeError, ValueError, KeyError) as e:
-                logger.error(f"Invalid pool.json format: {e}")
-                return False
-
-            self._merge_new_tasks(new_pool)
-
-            # Preserve pool metadata from the file, but keep in-memory
-            # suspended_until if the pool is currently suspended (an external
-            # edit must not erase a suspension computed by _on_rate_limit_detected)
-            self.pool.retry_count = new_pool.retry_count
-            if not self.pool.is_suspended:
-                # Only reload suspended_until from file if it's still in the future.
-                # If it's expired, don't reload a stale date — keep it cleared.
-                if new_pool.suspended_until is not None and new_pool.is_suspended:
-                    self.pool.suspended_until = new_pool.suspended_until
-
-            # Save back to file to persist auto-generated IDs and initialized fields
-            self._save_state()
-
-            return True
+            new_pool = load_pool(self.pool_file)
         except Exception as e:
-            logger.error(f"Error checking pool updates: {e}")
-        return False
+            logger.error(f"Error reading pool DB for update check: {e}")
+            return
+
+        new_task_ids = {t.id for t in new_pool.tasks}
+        new_meta_hash = _meta_hash(new_pool)
+
+        if new_task_ids == self._last_known_task_ids and new_meta_hash == self._last_pool_meta_hash:
+            return  # Nothing changed externally
+
+        logger.info("External DB change detected, merging updates...")
+
+        self._merge_new_tasks(new_pool)
+
+        # Update pool metadata, but never erase an active suspension
+        self.pool.retry_count = new_pool.retry_count
+        if not self.pool.is_suspended:
+            if new_pool.suspended_until is not None and new_pool.is_suspended:
+                self.pool.suspended_until = new_pool.suspended_until
+
+        # Stamp tracking state to reflect the DB we just read
+        self._last_known_task_ids = new_task_ids
+        self._last_pool_meta_hash = new_meta_hash
 
     def _merge_new_tasks(self, new_pool: "PoolState") -> bool:
         """Merge tasks from *new_pool* into the in-memory pool.
