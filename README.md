@@ -54,15 +54,15 @@ Avant de commencer, vous avez besoin de :
 3. Installez le package :
 
 ```powershell
-pip install --no-cache-dir claude_pool-1.2.4-py3-none-any.whl
+pip install --no-cache-dir claude_pool-1.2.6-py3-none-any.whl
 ```
 
-> Si `pip` n'est pas reconnu, utilisez `python -m pip install --no-cache-dir claude_pool-1.2.4-py3-none-any.whl`
+> Si `pip` n'est pas reconnu, utilisez `python -m pip install --no-cache-dir claude_pool-1.2.6-py3-none-any.whl`
 
 ### Linux / macOS — Installation depuis la release
 
 ```bash
-pip install claude_pool-1.2.4-py3-none-any.whl
+pip install claude_pool-1.2.6-py3-none-any.whl
 ```
 
 ### Option B — Cloner le dépôt (contributeurs)
@@ -84,34 +84,34 @@ cd Claude_pool
 mkdir $env:USERPROFILE\claude-pool-data
 
 # Démarrer le serveur
-claude-pool --pool $env:USERPROFILE\claude-pool-data\pool.json --serve --port 8000 --no-tui
+claude-pool --pool $env:USERPROFILE\claude-pool-data\pool.db --serve --port 8000 --no-tui
 ```
 
 Ou avec le chemin complet :
 
 ```powershell
-claude-pool --pool C:\Users\VotreNom\claude-pool-data\pool.json --serve --port 8000 --no-tui
+claude-pool --pool C:\Users\VotreNom\claude-pool-data\pool.db --serve --port 8000 --no-tui
 ```
 
 ### Linux / macOS
 
 ```bash
 mkdir -p ~/claude-pool-data
-claude-pool --pool ~/claude-pool-data/pool.json --serve --port 8000 --no-tui
+claude-pool --pool ~/claude-pool-data/pool.db --serve --port 8000 --no-tui
 ```
 
 Puis ouvrez **http://localhost:8000** dans votre navigateur.
 
-> Le fichier `pool.json` est créé automatiquement au premier démarrage.
+> La base `pool.db` est créée automatiquement au premier démarrage. Si un `pool.json` existe dans le même dossier, il est migré automatiquement.
 
 ### Autres modes de lancement
 
 ```bash
 # Interface TUI dans le terminal (pas de navigateur)
-claude-pool --pool pool.json
+claude-pool --pool pool.db
 
 # Serveur web sur un port personnalisé
-claude-pool --pool pool.json --serve --port 9000 --no-tui
+claude-pool --pool pool.db --serve --port 9000 --no-tui
 ```
 
 ### Arrêter le serveur
@@ -137,10 +137,10 @@ taskkill /PID <PID> /F
 
 # 2. Télécharger la nouvelle release depuis GitHub
 #    (ou utiliser pip si le package est sur PyPI)
-pip install --no-cache-dir --force-reinstall claude_pool-1.2.4-py3-none-any.whl
+pip install --no-cache-dir --force-reinstall claude_pool-1.2.6-py3-none-any.whl
 
 # 3. Redémarrer le serveur
-claude-pool --pool $env:USERPROFILE\claude-pool-data\pool.json --serve --port 8000 --no-tui
+claude-pool --pool $env:USERPROFILE\claude-pool-data\pool.db --serve --port 8000 --no-tui
 ```
 
 ### Linux / macOS
@@ -149,10 +149,10 @@ claude-pool --pool $env:USERPROFILE\claude-pool-data\pool.json --serve --port 80
 # 1. Arrêter le serveur (Ctrl+C)
 
 # 2. Réinstaller le package
-pip install --force-reinstall claude_pool-1.2.4-py3-none-any.whl
+pip install --force-reinstall claude_pool-1.2.6-py3-none-any.whl
 
 # 3. Redémarrer
-claude-pool --pool ~/claude-pool-data/pool.json --serve --port 8000 --no-tui
+claude-pool --pool ~/claude-pool-data/pool.db --serve --port 8000 --no-tui
 ```
 
 ---
@@ -264,50 +264,31 @@ echo "Mise à jour terminée !"
 
 Après une mise à jour ou un arrêt :
 ```bash
-./claude-pool.sh --pool data/pool.json --serve --port 8000 --no-tui
+./claude-pool.sh --pool data/pool.db --serve --port 8000 --no-tui
 ```
 
 ---
 
-## Format de pool.json
+## Base de données pool.db
 
-Le fichier `pool.json` contient la liste de vos tâches. Vous pouvez l'éditer directement, Claude Pool détectera les changements automatiquement.
+Les tâches sont stockées dans une base SQLite (`pool.db`). La base est créée automatiquement au premier démarrage. Vous pouvez ajouter des tâches via le tableau de bord, l'API REST ou directement en ligne de commande.
 
-```json
-{
-  "tasks": [
-    {
-      "prompt": "Crée un fichier hello_world.py qui affiche Hello World",
-      "directory": "/chemin/absolu/vers/mon/projet"
-    }
-  ]
-}
-```
+> **Migration automatique** : si un fichier `pool.json` existe dans le même dossier, il est migré automatiquement vers `pool.db` au premier démarrage, et renommé en `pool.json.bak`.
 
-Les champs `id`, `status`, `args`, etc. sont tous optionnels : Claude Pool les remplit automatiquement.
+### Champs d'une tâche
 
-### Tous les champs possibles
-
-```json
-{
-  "tasks": [
-    {
-      "id": "tache_001",
-      "prompt": "Instructions détaillées pour Claude",
-      "directory": "/chemin/absolu/vers/le/projet",
-      "status": "pending",
-      "args": ["--model", "haiku", "--effort", "low"],
-      "priority": 2,
-      "exit_code": null,
-      "duration_ms": null,
-      "json_output": null,
-      "retry_count": 0
-    }
-  ],
-  "pool_retry_count": 0,
-  "pool_suspended_until": null
-}
-```
+| Champ | Type | Description |
+|-------|------|-------------|
+| `id` | string | Identifiant unique (généré automatiquement) |
+| `prompt` | string | Instructions pour Claude **(obligatoire)** |
+| `directory` | string | Dossier de travail **(obligatoire)** |
+| `status` | string | Statut courant (voir tableau ci-dessous) |
+| `args` | liste | Arguments supplémentaires pour Claude CLI |
+| `priority` | int 1–3 | Priorité d'exécution (défaut : 2) |
+| `exit_code` | int | Code de sortie du processus |
+| `duration_ms` | int | Durée d'exécution en millisecondes |
+| `json_output` | objet | Réponse JSON de Claude |
+| `retry_count` | int | Nombre de tentatives effectuées |
 
 ### Statuts des tâches
 
@@ -346,7 +327,7 @@ Les tâches sont triées par `(priority ASC, created_at ASC)` avant chaque itér
 
 | Option | Description |
 |--------|-------------|
-| `--pool CHEMIN` | Chemin vers pool.json **(obligatoire)** |
+| `--pool CHEMIN` | Chemin vers pool.db (défaut : `pool.db`) |
 | `--no-tui` | Mode silencieux, sans interface terminal |
 | `--serve` | Démarre le serveur web |
 | `--port PORT` | Port du serveur web (défaut : 8000) |
@@ -393,7 +374,7 @@ claude_pool/
 ├── models.py        # Modèles de données (Task, PoolState)
 ├── executor.py      # Moteur d'exécution des tâches
 ├── api.py           # Serveur FastAPI (REST + WebSocket)
-├── storage.py       # Lecture/écriture de pool.json
+├── storage.py       # Lecture/écriture via SQLite (pool.db)
 ├── parser.py        # Analyse de la sortie JSON de Claude
 ├── tui.py           # Interface terminal (Textual)
 └── frontend/        # Tableau de bord HTML
