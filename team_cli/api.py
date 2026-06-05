@@ -33,7 +33,7 @@ from .api_models import (
     TaskPatchInput,
     TaskResponse,
 )
-from .executor import CLIManager, TaskExecutor
+from .executor import CLIManager, NoCLIAvailableError, TaskExecutor, execute_message
 from .models import Bucket, PoolState, Project, ProjectMessage, Task
 from .cli_detector import detect_clis
 from .config import load_cli_configs
@@ -959,18 +959,21 @@ class ApiServer:
         async def create_project_message(
             project_id: str, message_input: ProjectMessageInput
         ) -> ProjectMessageResponse:
-            """Create a new message in a project."""
+            """Create a new user message, execute it via CLI, and store the reply."""
             if not self.executor:
                 raise HTTPException(status_code=503, detail="Executor not initialized")
-            
-            from .storage import load_project, save_project_message, build_context
-            
+
+            from copy import copy as _copy
+            from .storage import load_project, save_project_message
+            from fastapi.responses import JSONResponse
+
             db_path = self.executor.pool.pool_file.with_suffix(".db")
             project = load_project(db_path, project_id)
-            
+
             if project is None:
                 raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
-            
+
+            # Persist the incoming user message first
             message = ProjectMessage(
                 id=f"msg_{_uuid.uuid4().hex[:8]}",
                 project_id=project_id,
@@ -981,40 +984,8 @@ class ApiServer:
                 metadata={},
                 created_at=datetime.now(),
             )
-            
             save_project_message(db_path, message)
-            
-            # Build context for this message
-            context = build_context(message, db_path)
-            
-            # If this is a user message, create and queue a Task to execute it
-            if message.role == "user":
-                task_id = _generate_task_id()
-                directory = Path(project.directory)
-                
-                # Build args from message input
-                args: list[str] = []
-                if message_input.cli_used:
-                    args.extend(["--cli", message_input.cli_used])
-                
-                # Create task with context embedded in prompt or as separate field
-                # The executor will use the context when executing
-                new_task = Task(
-                    id=task_id,
-                    prompt=message.content,
-                    directory=directory,
-                    args=args,
-                    bucket_id=f"proj_{project_id}",  # Use project-based bucket
-                    priority=2,
-                    model=message_input.cli_used or "",
-                )
-                # Store context in task for executor to use
-                new_task.json_output = {"context": context} if context else None
-                self.executor.pool.tasks.append(new_task)
-                self.executor._save_state()
-                
-                await self._broadcast_pool_status()
-            
+
             await self._broadcast_event({
                 "event": "project_message_created",
                 "project_id": project_id,
@@ -1022,12 +993,68 @@ class ApiServer:
                     "id": message.id,
                     "content": message.content,
                     "role": message.role,
+                    "cli_used": message.cli_used,
                     "linked_message_id": message.linked_message_id,
                     "created_at": message.created_at.isoformat(),
                 },
-                "context": context,
             })
-            
+
+            # Only execute user messages
+            if message.role == "user":
+                # Per-message CLI override: use requested CLI exclusively
+                exec_project = project
+                if message_input.cli_used:
+                    exec_project = _copy(project)
+                    exec_project.default_cli = message_input.cli_used
+                    exec_project.allow_cli_switch = False
+
+                model = message.metadata.get("model") if message.metadata else None
+
+                try:
+                    result = await execute_message(
+                        message=message,
+                        project=exec_project,
+                        cli_manager=self.executor.cli_manager,
+                        db_path=str(db_path),
+                        model=model,
+                    )
+                except NoCLIAvailableError as exc:
+                    raise HTTPException(
+                        status_code=503,
+                        detail={"error": "no_cli_available", "message": str(exc)},
+                    )
+
+                # Build and persist the assistant reply
+                assistant_content = result.get("result", "")
+                assistant_metadata = {
+                    k: v for k, v in result.items()
+                    if k not in ("result", "cli_used", "reasoning")
+                }
+                assistant_msg = ProjectMessage(
+                    id=f"msg_{_uuid.uuid4().hex[:8]}",
+                    project_id=project_id,
+                    content=assistant_content,
+                    role="assistant",
+                    cli_used=result.get("cli_used"),
+                    linked_message_id=message.id,
+                    metadata=assistant_metadata,
+                    created_at=datetime.now(),
+                )
+                save_project_message(db_path, assistant_msg)
+
+                await self._broadcast_event({
+                    "event": "project_message_created",
+                    "project_id": project_id,
+                    "message": {
+                        "id": assistant_msg.id,
+                        "content": assistant_msg.content,
+                        "role": assistant_msg.role,
+                        "cli_used": assistant_msg.cli_used,
+                        "linked_message_id": assistant_msg.linked_message_id,
+                        "created_at": assistant_msg.created_at.isoformat(),
+                    },
+                })
+
             return ProjectMessageResponse(
                 id=message.id,
                 project_id=message.project_id,
