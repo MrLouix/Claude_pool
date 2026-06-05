@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claude-pool"
-version = "1.2.6"
+version = "1.2.7"
 description = "TUI application for managing sequential Claude Code task pools"
 readme = "README.md"
 requires-python = ">=3.11"
