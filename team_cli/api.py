@@ -31,7 +31,7 @@ from .api_models import (
     TaskPatchInput,
     TaskResponse,
 )
-from .executor import TaskExecutor
+from .executor import CLIManager, TaskExecutor
 from .models import Bucket, PoolState, Task
 from .cli_detector import detect_clis
 from .config import load_cli_configs
