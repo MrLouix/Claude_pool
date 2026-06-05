@@ -1220,8 +1220,8 @@
     </style>
 </head>
 <body>
-    <div class="container" id="dashboard-view">
-        <div class="header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+    <div class="container" id="dashboard-view" role="main">
+        <header class="header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
             <div>
                 <h1>📦 Claude Pool Dashboard</h1>
                 <div class="status-line">
@@ -1231,12 +1231,12 @@
             </div>
             <!-- Claude -p Status Banner -->
             <div id="claude-status-banner" class="claude-status-container waiting">
-                <span class="claude-status-dot"></span>
+                <span class="claude-status-dot" aria-hidden="true"></span>
                 <span id="claude-status-text">Waiting for requests</span>
                 <div id="claude-rate-limit-detail" style="display: none; margin-top: 5px; font-size: 12px; opacity: 0.9; width: 100%;"></div>
                 <button id="btn-instant-retry" class="btn-instant-retry" onclick="instantRetry()" style="display: none; margin-top: 8px;">Instant Retry</button>
             </div>
-        </div>
+        </header>
 
         <div class="stats">
             <div class="stat-card pending">
@@ -1249,9 +1249,9 @@
             <button type="button" class="btn-run-plan" id="btn-run-plan" style="width:100%;padding:14px 20px;font-size:15px;">⚙ Run Dev Plan</button>
         </div>
 
-        <div class="section">
+        <div class="section" role="region" aria-labelledby="chats-heading">
             <div class="section-header">
-                <span>Chats</span>
+                <span id="chats-heading">Chats</span>
                 <button type="button" class="btn-primary" id="btn-new-chat" style="font-size:13px;padding:7px 14px;">+ New Chat</button>
             </div>
             <div class="section-content">
@@ -1261,9 +1261,9 @@
             </div>
         </div>
 
-        <div class="section">
+        <div class="section" role="region" aria-labelledby="add-task-heading">
             <div class="section-header">
-                <span>Add New Task</span>
+                <span id="add-task-heading">Add New Task</span>
             </div>
             <div class="section-content">
                 <form class="task-form" id="add-task-form">
@@ -1275,7 +1275,7 @@
                         <label for="directory">Directory (required)</label>
                         <div class="directory-input-row">
                             <input type="text" id="directory" name="directory" placeholder="/path/to/directory" required>
-                            <button type="button" class="btn-browse" id="btn-browse-dir" title="Browse folders">⋯</button>
+                            <button type="button" class="btn-browse" id="btn-browse-dir" title="Browse folders" aria-label="Browse directory">⋯</button>
                         </div>
                     </div>
                     <div class="form-row">
@@ -1313,28 +1313,28 @@
             </div>
         </div>
 
-        <div class="section">
-            <div class="section-header">Running List</div>
+        <div class="section" role="region" aria-labelledby="running-list-heading">
+            <div class="section-header"><span id="running-list-heading">Running List</span></div>
             <div class="section-content">
-                <div class="task-list" id="task-list">
+                <div class="task-list" id="task-list" role="list">
                     <div class="empty-state">No tasks yet. Submit your first task below to get started.</div>
                 </div>
             </div>
         </div>
 
-        <div class="section">
-            <div class="section-header">Event Log</div>
+        <div class="section" role="region" aria-labelledby="event-log-heading">
+            <div class="section-header"><span id="event-log-heading">Event Log</span></div>
             <div class="section-content">
-                <div class="log-container" id="event-log">
+                <div class="log-container" id="event-log" role="log" aria-live="polite" aria-label="Event log">
                     <div class="log-line"><span class="log-timestamp">[00:00:00]</span> Waiting for events...</div>
                 </div>
             </div>
         </div>
 
-        <div class="section">
-            <div class="section-header">Completed</div>
+        <div class="section" role="region" aria-labelledby="completed-heading">
+            <div class="section-header"><span id="completed-heading">Completed</span></div>
             <div class="section-content">
-                <div class="task-list" id="success-list">
+                <div class="task-list" id="success-list" role="list">
                     <div class="empty-state">No completed tasks yet. Completed tasks will appear here.</div>
                 </div>
             </div>
@@ -1470,28 +1470,28 @@
             <div class="empty-state">No messages yet. Send one below to get started.</div>
         </div>
         <div class="chat-input-row">
-            <textarea id="chat-input" rows="2" placeholder="Type a message… (Enter to send, Shift+Enter for newline)"></textarea>
-            <button class="btn-primary" id="btn-send-message" style="padding:8px 12px;font-size:18px;line-height:1;min-width:0;">⬆</button>
+            <textarea id="chat-input" rows="2" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" aria-label="Chat message"></textarea>
+            <button class="btn-primary" id="btn-send-message" style="padding:8px 12px;font-size:18px;line-height:1;min-width:0;" aria-label="Send message">⬆</button>
         </div>
     </div>
 
     <!-- New Chat modal -->
-    <div class="modal-overlay" id="new-chat-modal">
+    <div class="modal-overlay" id="new-chat-modal" role="dialog" aria-modal="true" aria-labelledby="new-chat-modal-title">
         <div class="modal-box" style="max-width:500px;">
             <div class="modal-header">
-                <h3>New Chat</h3>
-                <button class="modal-close" id="new-chat-close">×</button>
+                <h3 id="new-chat-modal-title">New Chat</h3>
+                <button class="modal-close" id="new-chat-close" aria-label="Close">×</button>
             </div>
             <div class="modal-body">
                 <div class="plan-section">
                     <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Chat name</label>
-                    <input type="text" id="new-chat-label" placeholder="My Feature" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px;font-family:inherit;font-size:14px;box-sizing:border-box;">
+                    <input type="text" id="new-chat-label" placeholder="My Feature" aria-label="Chat name" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px;font-family:inherit;font-size:14px;box-sizing:border-box;">
                 </div>
                 <div class="plan-section">
                     <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Working Directory</label>
                     <div class="plan-dir-row">
-                        <input type="text" id="new-chat-directory" placeholder="/path/to/project">
-                        <button type="button" class="btn-browse" id="btn-new-chat-browse" title="Browse folders">⋯</button>
+                        <input type="text" id="new-chat-directory" placeholder="/path/to/project" aria-label="Working directory">
+                        <button type="button" class="btn-browse" id="btn-new-chat-browse" title="Browse folders" aria-label="Browse directory">⋯</button>
                     </div>
                 </div>
             </div>
@@ -1503,11 +1503,11 @@
     </div>
 
     <!-- Chat — Run Dev Plan modal -->
-    <div class="modal-overlay" id="chat-run-plan-modal">
+    <div class="modal-overlay" id="chat-run-plan-modal" role="dialog" aria-modal="true" aria-labelledby="chat-run-plan-modal-title">
         <div class="modal-box" style="max-width:600px;">
             <div class="modal-header">
-                <h3>⚙ Run Dev Plan in this chat</h3>
-                <button class="modal-close" id="chat-run-plan-close">×</button>
+                <h3 id="chat-run-plan-modal-title">⚙ Run Dev Plan in this chat</h3>
+                <button class="modal-close" id="chat-run-plan-close" aria-label="Close">×</button>
             </div>
             <div class="modal-body">
                 <div class="plan-section">
@@ -1516,7 +1516,7 @@
                 </div>
                 <div class="plan-section">
                     <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Coding Specification</label>
-                    <textarea id="chat-plan-spec" rows="7" placeholder="Describe the feature or task in as much detail as possible…"
+                    <textarea id="chat-plan-spec" aria-label="Coding specification" rows="7" placeholder="Describe the feature or task in as much detail as possible…"
                         style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px;font-family:inherit;font-size:14px;resize:vertical;box-sizing:border-box;"></textarea>
                 </div>
                 <div class="plan-section">
@@ -1567,23 +1567,23 @@
     </div>
 
     <!-- Run Dev Plan modal -->
-    <div class="modal-overlay" id="run-plan-modal">
+    <div class="modal-overlay" id="run-plan-modal" role="dialog" aria-modal="true" aria-labelledby="run-plan-modal-title">
         <div class="modal-box" style="max-width:600px;">
             <div class="modal-header">
-                <h3>⚙ Run Dev Plan</h3>
-                <button class="modal-close" id="run-plan-close">×</button>
+                <h3 id="run-plan-modal-title">⚙ Run Dev Plan</h3>
+                <button class="modal-close" id="run-plan-close" aria-label="Close">×</button>
             </div>
             <div class="modal-body">
                 <div class="plan-section">
                     <label>Working Directory</label>
                     <div class="plan-dir-row">
-                        <input type="text" id="plan-directory" placeholder="/path/to/project">
-                        <button type="button" class="btn-browse" id="btn-run-plan-browse" title="Browse folders">⋯</button>
+                        <input type="text" id="plan-directory" placeholder="/path/to/project" aria-label="Working directory">
+                        <button type="button" class="btn-browse" id="btn-run-plan-browse" title="Browse folders" aria-label="Browse directory">⋯</button>
                     </div>
                 </div>
                 <div class="plan-section">
                     <label>Coding Specification</label>
-                    <textarea id="plan-spec" placeholder="Describe what you want to build. Claude will analyze this, define sequential implementation steps, and enqueue each as a separate Claude Pool task."></textarea>
+                    <textarea id="plan-spec" aria-label="Coding specification" placeholder="Describe what you want to build. Claude will analyze this, define sequential implementation steps, and enqueue each as a separate Claude Pool task."></textarea>
                 </div>
                 <div class="plan-section">
                     <label>Options</label>
@@ -1625,11 +1625,11 @@
     </div>
 
     <!-- Directory browser modal -->
-    <div class="modal-overlay" id="dir-modal">
+    <div class="modal-overlay" id="dir-modal" role="dialog" aria-modal="true" aria-labelledby="dir-modal-title">
         <div class="modal-box">
             <div class="modal-header">
-                <h3>Browse Directory</h3>
-                <button class="modal-close" id="dir-modal-close">×</button>
+                <h3 id="dir-modal-title">Browse Directory</h3>
+                <button class="modal-close" id="dir-modal-close" aria-label="Close">×</button>
             </div>
             <div class="modal-body">
                 <div class="dir-breadcrumb" id="dir-breadcrumb"></div>
