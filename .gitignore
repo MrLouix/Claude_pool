@@ -73,3 +73,6 @@ test*.txt
 
 # Data folder
 data/
+
+# Distribution
+dist/
