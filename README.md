@@ -34,7 +34,7 @@ Avant de commencer, vous avez besoin de :
 
 2. **Au moins un CLI IA** installé (Claude, Mistral, Llama, Gemma, etc.)
    - Claude : [claude.ai/code](https://claude.ai/code)
-   - Mistral : [mistral.ai](https://mistral.ai)
+   - Mistral : [console.mistral.ai](https://console.mistral.ai/) (CLI: `vibe-acp`)
    - Llama : [llama.cpp](https://github.com/ggerganov/llama.cpp)
    - Gemma : [google/gemma.cpp](https://github.com/google/gemma.cpp)
 
@@ -128,7 +128,7 @@ TeamCLI détecte automatiquement les CLIs installés et permet d'en configurer d
 
 Au démarrage, TeamCLI recherche les CLIs suivants :
 - `claude` (Anthropic)
-- `mistral` (Mistral AI)
+- `vibe-acp` (Mistral AI)
 - `llama` (Meta Llama)
 - `gemma` (Google Gemma)
 - `openai` (OpenAI)

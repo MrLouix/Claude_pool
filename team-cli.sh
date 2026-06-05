@@ -34,11 +34,11 @@ if [[ "$1" == "install" ]] || [[ "$1" == "setup" ]]; then
         echo -e "${YELLOW}⚠${NC} Claude CLI not found (optional)"
     fi
 
-    if command -v mistral &> /dev/null; then
-        echo -e "${GREEN}✓${NC} Mistral CLI found: $(mistral --version 2>&1 | head -1)"
+    if command -v vibe-acp &> /dev/null; then
+        echo -e "${GREEN}✓${NC} Mistral CLI (vibe-acp) found: $(vibe-acp --version 2>&1 | head -1)"
         CLI_COUNT=$((CLI_COUNT + 1))
     else
-        echo -e "${YELLOW}⚠${NC} Mistral CLI not found (optional)"
+        echo -e "${YELLOW}⚠${NC} Mistral CLI (vibe-acp) not found (optional)"
     fi
 
     if command -v llama &> /dev/null; then
@@ -63,10 +63,10 @@ if [[ "$1" == "install" ]] || [[ "$1" == "setup" ]]; then
     fi
 
     if [ $CLI_COUNT -eq 0 ]; then
-        echo -e "${YELLOW}ℹ${NC} No AI CLI detected. TeamCLI supports: claude, mistral, llama, gemma, openai"
+        echo -e "${YELLOW}ℹ${NC} No AI CLI detected. TeamCLI supports: claude, vibe-acp, llama, gemma, openai"
         echo "   Install at least one from:"
         echo "   - Claude: https://claude.ai/code"
-        echo "   - Mistral: https://mistral.ai"
+        echo "   - Mistral: https://console.mistral.ai/ (vibe-acp CLI)"
         echo "   - Llama: https://github.com/ggerganov/llama.cpp"
         echo "   - Gemma: https://github.com/google/gemma.cpp"
     fi

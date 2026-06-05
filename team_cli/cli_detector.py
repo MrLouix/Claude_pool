@@ -10,7 +10,7 @@ from team_cli.models import CLIConfig
 
 KNOWN_CLIS = [
     {"name": "claude", "cli_type": "anthropic", "probe_args": ["--version"]},
-    {"name": "mistral", "cli_type": "mistral", "probe_args": ["--version"]},
+    {"name": "vibe-acp", "cli_type": "mistral", "probe_args": ["--version"]},
     {"name": "llama", "cli_type": "llama", "probe_args": ["--version"]},
     {"name": "gemma", "cli_type": "gemma", "probe_args": ["--version"]},
     {"name": "openai", "cli_type": "openai", "probe_args": ["--version"]},
