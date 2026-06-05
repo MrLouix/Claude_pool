@@ -30,6 +30,10 @@ _RATE_LIMIT_PATTERNS = (
 )
 
 
+class NoCLIAvailableError(Exception):
+    """Raised when no CLI executor is available (all rate-limited or excluded)."""
+
+
 class BaseCLIExecutor(ABC):
     """Abstract base class for CLI executors."""
 
@@ -399,6 +403,23 @@ class CLIManager:
     def available_executors(self) -> list[BaseCLIExecutor]:
         """Return list of executors that are not currently rate-limited."""
         return [e for e in self._executors if not e.check_rate_limit()]
+
+    def get_next_available_cli(self, exclude: list[str]) -> "BaseCLIExecutor | None":
+        """Return the first executor that is not excluded and not rate-limited.
+
+        Args:
+            exclude: List of CLI names to skip (e.g. already-tried CLIs).
+
+        Returns:
+            The first eligible BaseCLIExecutor, or None if none found.
+        """
+        for executor in self._executors:
+            if executor.config.name in exclude:
+                continue
+            if executor.check_rate_limit():
+                continue
+            return executor
+        return None
 
 def _meta_hash(state: "PoolState") -> str:
     """Stable string representation of pool-level metadata for change detection."""
