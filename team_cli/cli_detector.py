@@ -14,6 +14,7 @@ KNOWN_CLIS = [
     {"name": "llama", "cli_type": "llama", "probe_args": ["--version"]},
     {"name": "agy", "cli_type": "antigravity", "probe_args": ["--version"]},
     {"name": "openai", "cli_type": "openai", "probe_args": ["--version"]},
+    {"name": "opencode", "cli_type": "opencode", "probe_args": ["--version"]},
 ]
 
 # Common fallback paths to search

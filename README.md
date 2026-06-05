@@ -32,11 +32,12 @@ Avant de commencer, vous avez besoin de :
    python3 --version   # doit afficher 3.11.x ou supérieur
    ```
 
-2. **Au moins un CLI IA** installé (Claude, Mistral, Llama, Google, etc.)
+2. **Au moins un CLI IA** installé (Claude, Mistral, Llama, Google, OpenCode, etc.)
    - Claude : [claude.ai/code](https://claude.ai/code)
    - Mistral : [console.mistral.ai](https://console.mistral.ai/) (CLI: `vibe-acp`)
    - Llama : [llama.cpp](https://github.com/ggerganov/llama.cpp)
    - Google : [antigravity.dev](https://antigravity.dev/) (CLI: `agy`)
+   - OpenCode : [github.com/sourcegraph/sourcegraph](https://github.com/sourcegraph/sourcegraph) (CLI: `opencode`)
 
 3. **Git** (pour cloner le projet)
    ```bash
@@ -132,6 +133,7 @@ Au démarrage, TeamCLI recherche les CLIs suivants :
 - `llama` (Meta Llama)
 - `agy` (Google Antigravity)
 - `openai` (OpenAI)
+- `opencode` (Sourcegraph OpenCode)
 
 ### Configuration manuelle
 

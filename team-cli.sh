@@ -62,13 +62,21 @@ if [[ "$1" == "install" ]] || [[ "$1" == "setup" ]]; then
         echo -e "${YELLOW}⚠${NC} OpenAI CLI not found (optional)"
     fi
 
+    if command -v opencode &> /dev/null; then
+        echo -e "${GREEN}✓${NC} OpenCode CLI found: $(opencode --version 2>&1 | head -1)"
+        CLI_COUNT=$((CLI_COUNT + 1))
+    else
+        echo -e "${YELLOW}⚠${NC} OpenCode CLI not found (optional)"
+    fi
+
     if [ $CLI_COUNT -eq 0 ]; then
-        echo -e "${YELLOW}ℹ${NC} No AI CLI detected. TeamCLI supports: claude, vibe-acp, llama, agy, openai"
+        echo -e "${YELLOW}ℹ${NC} No AI CLI detected. TeamCLI supports: claude, vibe-acp, llama, agy, openai, opencode"
         echo "   Install at least one from:"
         echo "   - Claude: https://claude.ai/code"
         echo "   - Mistral: https://console.mistral.ai/ (vibe-acp CLI)"
         echo "   - Llama: https://github.com/ggerganov/llama.cpp"
         echo "   - Google: https://antigravity.dev/ (agy CLI)"
+        echo "   - OpenCode: https://github.com/sourcegraph/sourcegraph"
     fi
 
     # Create virtual environment
