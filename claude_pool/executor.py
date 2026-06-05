@@ -128,12 +128,244 @@ class ClaudeExecutor(BaseCLIExecutor):
         return False
 
 
+class MistralExecutor(BaseCLIExecutor):
+    """Executor for Mistral CLI."""
+
+    def __init__(self, config: CLIConfig):
+        super().__init__(config)
+        self._last_exit_code: int | None = None
+        self._last_stdout: str = ""
+        self._last_stderr: str = ""
+
+    def execute(
+        self,
+        prompt: str,
+        context: list[dict],
+        directory: str,
+        model: str,
+    ) -> dict:
+        """Run Mistral CLI and return parsed output dict."""
+        import json
+        import tempfile
+        import os
+
+        cmd = [self.config.path, "--prompt", prompt]
+        
+        # Serialize context to temp JSON file
+        ctx_file = None
+        if context:
+            try:
+                ctx_file = tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".json", dir=directory, delete=False
+                )
+                json.dump(context, ctx_file)
+                ctx_file.close()
+                cmd.extend(["--context", ctx_file.name])
+            except Exception:
+                if ctx_file:
+                    try:
+                        os.unlink(ctx_file.name)
+                    except OSError:
+                        pass
+                ctx_file = None
+
+        if model:
+            cmd.extend(["--model", model])
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30 * 60,
+                cwd=directory,
+            )
+            self._last_exit_code = result.returncode
+            self._last_stdout = result.stdout
+            self._last_stderr = result.stderr
+
+            # Parse and normalize output
+            if result.stdout:
+                try:
+                    parsed = json.loads(result.stdout)
+                    # Normalize to Claude-like shape
+                    normalized = {
+                        "result": parsed.get("result", ""),
+                        "model": parsed.get("model", model),
+                        "usage": parsed.get("usage", {}),
+                    }
+                    # Preserve any other keys
+                    for key, value in parsed.items():
+                        if key not in normalized:
+                            normalized[key] = value
+                    return normalized
+                except json.JSONDecodeError:
+                    return {
+                        "result": result.stdout,
+                        "parse_error": True,
+                    }
+            else:
+                return {
+                    "result": result.stderr or "No output",
+                    "parse_error": True,
+                }
+        finally:
+            # Clean up temp file
+            if ctx_file and os.path.exists(ctx_file.name):
+                try:
+                    os.unlink(ctx_file.name)
+                except OSError:
+                    pass
+
+    def check_rate_limit(self) -> bool:
+        """Check if the last execution hit a rate limit."""
+        if self._last_exit_code != 0:
+            output_text = (self._last_stdout + self._last_stderr).lower()
+            return "rate" in output_text or "429" in output_text
+        return False
+
+
+class GenericCLIExecutor(BaseCLIExecutor):
+    """Executor for custom CLIs configured via clis.json."""
+
+    def __init__(self, config: CLIConfig):
+        super().__init__(config)
+        self._last_exit_code: int | None = None
+
+    def execute(
+        self,
+        prompt: str,
+        context: list[dict],
+        directory: str,
+        model: str,
+    ) -> dict:
+        """Run custom CLI using args_template formatting."""
+        import json
+
+        # Format args_template with available variables
+        template = self.config.args_template or "{prompt}"
+        formatted = template.format(
+            prompt=prompt,
+            context=json.dumps(context) if context else "",
+            model=model,
+        )
+        
+        # Split into argv
+        import shlex
+        try:
+            cmd = [self.config.path] + shlex.split(formatted)
+        except ValueError:
+            # Fallback: split on whitespace
+            cmd = [self.config.path] + formatted.split()
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30 * 60,
+                cwd=directory,
+            )
+            self._last_exit_code = result.returncode
+
+            # Return raw output
+            if result.stdout:
+                try:
+                    return json.loads(result.stdout)
+                except json.JSONDecodeError:
+                    return {"result": result.stdout}
+            else:
+                return {"result": result.stderr or "No output"}
+        except subprocess.TimeoutExpired:
+            self._last_exit_code = -1
+            return {"result": "Task timed out after 30 minutes", "parse_error": True}
+        except Exception as e:
+            self._last_exit_code = -1
+            return {"result": f"Execution error: {str(e)}", "parse_error": True}
+
+    def check_rate_limit(self) -> bool:
+        """Custom CLIs are assumed not to rate-limit by default."""
+        return False
+
+
+class LlamaExecutor(GenericCLIExecutor):
+    """Executor for Llama CLI (uses GenericCLIExecutor logic)."""
+    pass
+
+
+class GemmaExecutor(GenericCLIExecutor):
+    """Executor for Gemma CLI (uses GenericCLIExecutor logic)."""
+    pass
+
+
 def create_executor(config: CLIConfig) -> BaseCLIExecutor:
     """Factory function to create a CLI executor based on config type."""
     if config.cli_type == "anthropic":
         return ClaudeExecutor(config)
-    # Future: MistralExecutor, LlamaExecutor, etc.
+    elif config.cli_type == "mistral":
+        return MistralExecutor(config)
+    elif config.cli_type == "llama":
+        return LlamaExecutor(config)
+    elif config.cli_type == "gemma":
+        return GemmaExecutor(config)
+    elif config.cli_type == "custom":
+        return GenericCLIExecutor(config)
+    # Future: other CLI types
     raise ValueError(f"Unsupported CLI type: {config.cli_type}")
+
+
+class CLIManager:
+    """Manages multiple CLI executors with fallback logic."""
+
+    def __init__(self, configs: list[CLIConfig]):
+        self._executors: list[BaseCLIExecutor] = [
+            create_executor(c) for c in configs if c.enabled
+        ]
+
+    def execute(
+        self,
+        prompt: str,
+        context: list[dict],
+        directory: str,
+        model: str = "",
+    ) -> dict:
+        """Try executors in order; skip any that are currently rate-limited.
+        
+        Raises:
+            RuntimeError: If all CLI executors are rate-limited or failed.
+        """
+        # Determine model to use
+        if not model:
+            for executor in self._executors:
+                if executor.config.default_model:
+                    model = executor.config.default_model
+                    break
+            else:
+                # Use first executor's first model if available
+                if self._executors and self._executors[0].config.models:
+                    model = self._executors[0].config.models[0]
+
+        # Get available executors (not rate-limited)
+        available = self.available_executors()
+        if not available:
+            raise RuntimeError("All CLI executors are rate-limited or failed")
+
+        # Try each available executor
+        for executor in available:
+            result = executor.execute(prompt, context, directory, model)
+            # Check if this executor is now rate-limited
+            if executor.check_rate_limit():
+                # Skip to next executor
+                continue
+            # Success
+            return result
+
+        # All available executors were tried but hit rate limits
+        raise RuntimeError("All CLI executors are rate-limited or failed")
+
+    def available_executors(self) -> list[BaseCLIExecutor]:
+        """Return list of executors that are not currently rate-limited."""
+        return [e for e in self._executors if not e.check_rate_limit()]
 
 def _meta_hash(state: "PoolState") -> str:
     """Stable string representation of pool-level metadata for change detection."""
