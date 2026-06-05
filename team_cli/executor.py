@@ -310,6 +310,9 @@ def create_executor(config: CLIConfig) -> BaseCLIExecutor:
         return GemmaExecutor(config)
     elif config.cli_type == "custom":
         return GenericCLIExecutor(config)
+    elif config.cli_type in ("antigravity", "hermes", "opencode", "openai"):
+        # These CLIs use GenericCLIExecutor with their args_template from config
+        return GenericCLIExecutor(config)
     # Future: other CLI types
     raise ValueError(f"Unsupported CLI type: {config.cli_type}")
 
