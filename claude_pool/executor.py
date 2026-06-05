@@ -3,23 +3,22 @@
 import asyncio
 import logging
 import signal
+import shutil
+import subprocess
 import time
+from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from .concurrency import TaskSemaphore
-from .models import PoolState, Task
+from .models import CLIConfig, PoolState, Task
 from .parser import parse_claude_output
 from .storage import cleanup_old_tasks, load_pool, save_pool
 
 logger = logging.getLogger(__name__)
 
-def _meta_hash(state: "PoolState") -> str:
-    """Stable string representation of pool-level metadata for change detection."""
-    return f"{state.retry_count}|{state.suspended_until}|{getattr(state, 'provider', 'claude')}"
-
-
+# Rate limit patterns (used by both TaskExecutor and CLI executors)
 _RATE_LIMIT_PATTERNS = (
     "rate limit",
     "session limit",
@@ -29,6 +28,117 @@ _RATE_LIMIT_PATTERNS = (
     "rate limited",
     "too many requests",
 )
+
+
+class BaseCLIExecutor(ABC):
+    """Abstract base class for CLI executors."""
+
+    def __init__(self, config: CLIConfig):
+        self.config = config
+
+    @abstractmethod
+    def execute(
+        self,
+        prompt: str,
+        context: list[dict],
+        directory: str,
+        model: str,
+    ) -> dict:
+        """Run the CLI and return parsed output dict. Raises on fatal error."""
+        ...
+
+    @abstractmethod
+    def check_rate_limit(self) -> bool:
+        """Return True if this CLI is currently rate-limited."""
+        ...
+
+    def get_model_list(self) -> list[str]:
+        """Return the list of available models from the config."""
+        return self.config.models
+
+
+class ClaudeExecutor(BaseCLIExecutor):
+    """Executor for Anthropic Claude CLI."""
+
+    def __init__(self, config: CLIConfig):
+        super().__init__(config)
+        self._last_exit_code: int | None = None
+        self._last_stderr: str = ""
+        self._last_stdout: str = ""
+
+    def execute(
+        self,
+        prompt: str,
+        context: list[dict],
+        directory: str,
+        model: str,
+    ) -> dict:
+        """Run Claude CLI and return parsed output dict."""
+        # Build command as specified
+        cmd = [
+            self.config.path,
+            "-p",
+            prompt,
+            "--output-format",
+            "json",
+            "--structured-output",
+            "--model",
+            model,
+        ]
+        # Add extra args from config if present
+        if self.config.args_template:
+            # For now, just append any extra template args
+            # This is a placeholder for future expansion
+            pass
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30 * 60,  # 30 minutes
+                cwd=directory,
+            )
+            self._last_exit_code = result.returncode
+            self._last_stdout = result.stdout
+            self._last_stderr = result.stderr
+
+            # Parse output
+            if result.stdout:
+                return parse_claude_output(result.stdout.encode("utf-8"))
+            else:
+                return {
+                    "result": result.stderr or "No output",
+                    "parse_error": True,
+                }
+        except subprocess.TimeoutExpired:
+            self._last_exit_code = -1
+            self._last_stderr = "Task timed out after 30 minutes"
+            return {"result": "Task timed out after 30 minutes", "parse_error": True}
+        except Exception as e:
+            self._last_exit_code = -1
+            self._last_stderr = str(e)
+            return {"result": f"Execution error: {str(e)}", "parse_error": True}
+
+    def check_rate_limit(self) -> bool:
+        """Check if the last execution hit a rate limit."""
+        if self._last_exit_code == 1 and self._last_stderr:
+            stderr_lower = self._last_stderr.lower()
+            return any(pattern in stderr_lower for pattern in _RATE_LIMIT_PATTERNS)
+        return False
+
+
+def create_executor(config: CLIConfig) -> BaseCLIExecutor:
+    """Factory function to create a CLI executor based on config type."""
+    if config.cli_type == "anthropic":
+        return ClaudeExecutor(config)
+    # Future: MistralExecutor, LlamaExecutor, etc.
+    raise ValueError(f"Unsupported CLI type: {config.cli_type}")
+
+def _meta_hash(state: "PoolState") -> str:
+    """Stable string representation of pool-level metadata for change detection."""
+    return f"{state.retry_count}|{state.suspended_until}|{getattr(state, 'provider', 'claude')}"
+
 
 
 class TaskExecutor:
