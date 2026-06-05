@@ -1,4 +1,4 @@
-# Refactor Plan — claude_pool
+# Refactor Plan — team_cli
 
 Generated from a full read of all source files on the `refactor` branch.
 No source files were modified to produce this document.
@@ -352,14 +352,14 @@ Safest to riskiest, based on test coverage and coupling:
 
 | File | Net change vs `main` |
 |------|----------------------|
-| `claude_pool/models.py` | Clearer field names, explicit type annotations, removed redundant `__str__` |
-| `claude_pool/parser.py` | Extracted `_strip_reasoning()`, `_compact_output()` helpers; structured JSON handling |
-| `claude_pool/storage.py` | Separated migration logic into `_migrate_v0()` / `_migrate_v1()`; isolated `_atomic_write()` |
-| `claude_pool/concurrency.py` | Removed dead `_lock` attribute; added `__repr__`; tightened type annotations |
-| `claude_pool/executor.py` | Extracted `_build_command()`, `_classify_exit()`, `_write_debug_log()`, `_do_save()`, `_merge_new_tasks()`, `_handle_initial_suspension()`; added public `reset_task_for_retry()` |
-| `claude_pool/api.py` | Moved all Pydantic models to `api_models.py`; extracted `_is_allowed_path()`, `_generate_task_id()`, `_compute_pool_status()`, `_validate_directory()`, `_task_to_message()`; eliminated ~40-line route duplication |
-| `claude_pool/api_models.py` | **New file** — all API Pydantic models + shared `_validate_priority()` |
-| `claude_pool/tui.py` | Moved in-method imports to top-level; converted module-level `get_exit_code_meaning()` to `JsonOutputWidget.exit_code_meaning()` static method; fixed throwaway `TaskExecutor` created in `compose()`; removed dead `task_map[task_id]` double-store; replaced inline task-reset mutation in `action_retry_task()` with `executor.reset_task_for_retry()` |
+| `team_cli/models.py` | Clearer field names, explicit type annotations, removed redundant `__str__` |
+| `team_cli/parser.py` | Extracted `_strip_reasoning()`, `_compact_output()` helpers; structured JSON handling |
+| `team_cli/storage.py` | Separated migration logic into `_migrate_v0()` / `_migrate_v1()`; isolated `_atomic_write()` |
+| `team_cli/concurrency.py` | Removed dead `_lock` attribute; added `__repr__`; tightened type annotations |
+| `team_cli/executor.py` | Extracted `_build_command()`, `_classify_exit()`, `_write_debug_log()`, `_do_save()`, `_merge_new_tasks()`, `_handle_initial_suspension()`; added public `reset_task_for_retry()` |
+| `team_cli/api.py` | Moved all Pydantic models to `api_models.py`; extracted `_is_allowed_path()`, `_generate_task_id()`, `_compute_pool_status()`, `_validate_directory()`, `_task_to_message()`; eliminated ~40-line route duplication |
+| `team_cli/api_models.py` | **New file** — all API Pydantic models + shared `_validate_priority()` |
+| `team_cli/tui.py` | Moved in-method imports to top-level; converted module-level `get_exit_code_meaning()` to `JsonOutputWidget.exit_code_meaning()` static method; fixed throwaway `TaskExecutor` created in `compose()`; removed dead `task_map[task_id]` double-store; replaced inline task-reset mutation in `action_retry_task()` with `executor.reset_task_for_retry()` |
 
 ### New test files / additions
 

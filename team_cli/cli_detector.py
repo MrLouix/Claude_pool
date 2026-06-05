@@ -4,8 +4,8 @@ import shutil
 import subprocess
 from typing import Any
 
-from claude_pool.config import load_cli_configs
-from claude_pool.models import CLIConfig
+from team_cli.config import load_cli_configs
+from team_cli.models import CLIConfig
 
 
 KNOWN_CLIS = [

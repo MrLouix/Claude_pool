@@ -1,6 +1,6 @@
-# n8n Workflows for Claude Pool
+# n8n Workflows for TeamCLI
 
-Four pre-built workflows for automating Claude Pool integrations with external services.
+Four pre-built workflows for automating TeamCLI integrations with external services.
 
 ## Workflows
 
@@ -32,9 +32,9 @@ Four pre-built workflows for automating Claude Pool integrations with external s
 
 1. **Install n8n**: https://n8n.io/download
 
-2. **Configure Claude Pool API**:
+2. **Configure TeamCLI API**:
    ```bash
-   python -m claude_pool --pool pool.json --serve --port 8000
+   python -m team_cli --pool pool.json --serve --port 8000
    ```
 
 3. **Import Workflows**:
@@ -114,7 +114,7 @@ python -m json.tool create_github_pr.json > /dev/null
 python -m json.tool notify_slack.json > /dev/null
 python -m json.tool trigger_ci.json > /dev/null
 
-# Test Claude Pool API
+# Test TeamCLI API
 curl http://localhost:8000/api/status | jq .
 
 # Test WebSocket

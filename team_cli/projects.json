@@ -3,7 +3,7 @@
     {
       "name": "claude-pool",
       "github_url": "https://github.com/MrLouix/Claude_pool.git",
-      "directory": "/home/ai_agent/projects/claude_pool"
+      "directory": "/home/ai_agent/projects/team_cli"
     },
     {
       "name": "review-analyzer",

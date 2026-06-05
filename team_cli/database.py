@@ -1,4 +1,4 @@
-"""SQLite persistence layer for Claude Pool."""
+"""SQLite persistence layer for TeamCLI."""
 
 import json
 from pathlib import Path

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from claude_pool.models import MAIN_BUCKET_LABEL, Task, _coerce_int, _coerce_optional_int
+from team_cli.models import MAIN_BUCKET_LABEL, Task, _coerce_int, _coerce_optional_int
 
 
 def test_task_creation():
@@ -155,7 +155,7 @@ def test_task_roundtrip_preserves_priority():
 
 def test_task_input_priority_validation():
     """Pydantic TaskInput rejects priority values outside [1, 2, 3]."""
-    from claude_pool.api import TaskInput
+    from team_cli.api import TaskInput
 
     assert TaskInput(prompt="p", priority=1).priority == 1
     assert TaskInput(prompt="p", priority=2).priority == 2
@@ -170,7 +170,7 @@ def test_task_input_priority_validation():
 
 def test_task_patch_input_priority_validation():
     """Pydantic TaskPatchInput rejects priority values outside [1, 2, 3]."""
-    from claude_pool.api import TaskPatchInput
+    from team_cli.api import TaskPatchInput
 
     assert TaskPatchInput(priority=None).priority is None  # optional
     assert TaskPatchInput(priority=1).priority == 1
@@ -181,7 +181,7 @@ def test_task_patch_input_priority_validation():
 
 def test_message_input_priority_validation():
     """Pydantic MessageInput rejects priority values outside [1, 2, 3]."""
-    from claude_pool.api import MessageInput
+    from team_cli.api import MessageInput
 
     assert MessageInput(prompt="p").priority == 2  # default
     assert MessageInput(prompt="p", priority=3).priority == 3

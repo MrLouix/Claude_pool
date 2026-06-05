@@ -1,6 +1,6 @@
 {
   "name": "Notify Slack on Task Completion",
-  "description": "Send Slack notification when Claude Pool tasks complete",
+  "description": "Send Slack notification when TeamCLI tasks complete",
   "nodes": [
     {
       "parameters": {
@@ -15,7 +15,7 @@
         250,
         300
       ],
-      "webhookId": "claude-pool-slack-webhook"
+      "webhookId": "team-cli-slack-webhook"
     },
     {
       "parameters": {

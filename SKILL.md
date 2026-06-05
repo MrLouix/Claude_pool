@@ -1,17 +1,17 @@
-# Claude Pool Integration Guide for AI Agents
+# TeamCLI Integration Guide for AI Agents
 
-This guide explains how AI agents (OpenClaw, Hermes, n8n workflows, etc.) can interact with Claude Pool by adding tasks and retrieving results.
+This guide explains how AI agents (OpenClaw, Hermes, n8n workflows, etc.) can interact with TeamCLI by adding tasks and retrieving results.
 
 ## Quick Start
 
-Claude Pool uses a simple JSON file (`pool.json`) for task management. AI agents can:
+TeamCLI uses a simple JSON file (`pool.json`) for task management. AI agents can:
 1. Add tasks by modifying the JSON file
 2. Monitor task status by reading the JSON file
 3. Retrieve results from completed tasks
 
 ## File Location
 
-Default: `pool.json` in the Claude Pool directory
+Default: `pool.json` in the TeamCLI directory
 
 Custom location can be specified when running:
 ```bash
@@ -342,7 +342,7 @@ else:
 
 ## Rate Limiting
 
-Claude Pool handles rate limits automatically:
+TeamCLI handles rate limits automatically:
 
 - Pool suspends when rate limits are hit
 - Exponential backoff (up to 5 hours)
@@ -439,7 +439,7 @@ Create a simple Flask/FastAPI wrapper around the ClaudePoolClient class.
 ## Troubleshooting
 
 ### Task stuck in "pending"
-- Check if Claude Pool TUI is running: `./claude-pool.sh --pool pool.json`
+- Check if TeamCLI TUI is running: `./claude-pool.sh --pool pool.json`
 - Check pool suspension: look at `pool_suspended_until`
 
 ### Task failed immediately

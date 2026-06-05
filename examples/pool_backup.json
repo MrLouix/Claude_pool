@@ -40,7 +40,7 @@
   },
   {
     "id": "test_004",
-    "prompt": "echo 'Hello from Claude Pool'",
+    "prompt": "echo 'Hello from TeamCLI'",
     "directory": "/tmp",
     "args": [],
     "status": "pending",

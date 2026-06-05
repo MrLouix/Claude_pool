@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from claude_pool.concurrency import GlobalRateLimitLock, TaskSemaphore
-from claude_pool.executor import TaskExecutor
-from claude_pool.models import PoolState, Task
+from team_cli.concurrency import GlobalRateLimitLock, TaskSemaphore
+from team_cli.executor import TaskExecutor
+from team_cli.models import PoolState, Task
 
 
 @pytest.fixture
@@ -190,7 +190,7 @@ class TestConcurrentExecution:
             nonlocal call_count
             call_count += 1
 
-        with patch("claude_pool.executor.save_pool", side_effect=mock_save):
+        with patch("team_cli.executor.save_pool", side_effect=mock_save):
             # Call save_state_async multiple times concurrently
             await asyncio.gather(
                 executor._save_state_async(),

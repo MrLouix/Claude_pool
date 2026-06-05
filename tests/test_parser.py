@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from claude_pool.parser import (
+from team_cli.parser import (
     _TOKEN_FIELDS,
     _extract_json,
     _extract_session_id,

@@ -13,19 +13,19 @@ install:
 	pip install -e ".[dev]"
 
 format:
-	black claude_pool/ tests/
-	isort claude_pool/ tests/
+	black team_cli/ tests/
+	isort team_cli/ tests/
 
 lint:
-	mypy claude_pool/
-	black --check claude_pool/ tests/
-	isort --check-only claude_pool/ tests/
+	mypy team_cli/
+	black --check team_cli/ tests/
+	isort --check-only team_cli/ tests/
 
 test:
-	pytest tests/ -v --cov=claude_pool
+	pytest tests/ -v --cov=team_cli
 
 run:
-	python -m claude_pool --pool pool.json
+	python -m team_cli --pool pool.json
 
 clean:
 	rm -rf __pycache__ .pytest_cache .mypy_cache .coverage build/ dist/ *.egg-info

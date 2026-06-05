@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from claude_pool.executor import TaskExecutor, _RATE_LIMIT_PATTERNS
-from claude_pool.models import Bucket, PoolState, Task
+from team_cli.executor import TaskExecutor, _RATE_LIMIT_PATTERNS
+from team_cli.models import Bucket, PoolState, Task
 
 
 @pytest.fixture
@@ -997,7 +997,7 @@ class TestStopTask:
         # communicate is AsyncMock so wait_for can actually await it
         fake_process.communicate = AsyncMock(return_value=(b'{"result":"ok"}', b""))
 
-        with patch("claude_pool.executor.asyncio.create_subprocess_exec", AsyncMock(return_value=fake_process)):
+        with patch("team_cli.executor.asyncio.create_subprocess_exec", AsyncMock(return_value=fake_process)):
             await ex.execute_task(task)
 
         assert task.id not in ex._running_processes

@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from claude_pool.database import DatabaseManager
-from claude_pool.models import Bucket, PoolState, Task
-from claude_pool.storage import (
+from team_cli.database import DatabaseManager
+from team_cli.models import Bucket, PoolState, Task
+from team_cli.storage import (
     _should_keep_task,
     cleanup_old_tasks,
     load_pool,

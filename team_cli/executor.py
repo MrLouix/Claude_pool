@@ -421,8 +421,8 @@ class TaskExecutor:
             self.cli_manager = cli_manager
         else:
             # Fallback: create a default Claude-only manager
-            from claude_pool.models import CLIConfig
-            from claude_pool.executor import CLIManager
+            from team_cli.models import CLIConfig
+            from team_cli.executor import CLIManager
             fallback_config = CLIConfig(
                 name="claude",
                 path="claude",

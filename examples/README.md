@@ -1,6 +1,6 @@
 # Examples
 
-This directory contains example pool files for Claude Pool TUI.
+This directory contains example pool files for TeamCLI TUI.
 
 ## Files
 

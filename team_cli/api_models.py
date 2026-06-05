@@ -1,4 +1,4 @@
-"""Pydantic request/response models for the Claude Pool REST API."""
+"""Pydantic request/response models for the TeamCLI REST API."""
 
 from typing import Optional
 

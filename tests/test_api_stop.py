@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from claude_pool.api import ApiServer
-from claude_pool.models import PoolState, Task
-from claude_pool.storage import save_pool
+from team_cli.api import ApiServer
+from team_cli.models import PoolState, Task
+from team_cli.storage import save_pool
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -25,8 +25,8 @@ def pool_file(tmp_path: Path) -> Path:
 def api(pool_file: Path):
     """ApiServer with run_pool and signal.signal stubbed."""
     with (
-        patch("claude_pool.executor.TaskExecutor.run_pool", new=AsyncMock(return_value=None)),
-        patch("claude_pool.executor.signal.signal"),
+        patch("team_cli.executor.TaskExecutor.run_pool", new=AsyncMock(return_value=None)),
+        patch("team_cli.executor.signal.signal"),
     ):
         server = ApiServer(pool_file)
         with TestClient(server.app, raise_server_exceptions=True) as client:
@@ -51,8 +51,8 @@ def _add_task(server: ApiServer, status: str = "pending") -> Task:
 def test_stop_task_503_no_executor(pool_file: Path):
     """Returns 503 when executor is not initialized."""
     with (
-        patch("claude_pool.executor.TaskExecutor.run_pool", new=AsyncMock(return_value=None)),
-        patch("claude_pool.executor.signal.signal"),
+        patch("team_cli.executor.TaskExecutor.run_pool", new=AsyncMock(return_value=None)),
+        patch("team_cli.executor.signal.signal"),
     ):
         server = ApiServer(pool_file)
         with TestClient(server.app, raise_server_exceptions=True) as client:

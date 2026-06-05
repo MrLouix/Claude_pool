@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
-    <title>Claude Pool Dashboard</title>
+    <title>TeamCLI Dashboard</title>
     <style>
 :root {
   /* Brand */
@@ -1314,7 +1314,7 @@
     <div class="container" id="dashboard-view" role="main">
         <header class="header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
             <div>
-                <h1>📦 Claude Pool Dashboard <span class="version" id="app-version">v1.2.7</span></h1>
+                <h1>📦 TeamCLI Dashboard <span class="version" id="app-version">v1.2.7</span></h1>
                 <div class="status-line">
                     WebSocket Status:
                     <span class="status-badge disconnected" id="ws-status">Disconnected</span>
@@ -1674,7 +1674,7 @@
                 </div>
                 <div class="plan-section">
                     <label for="plan-spec">Coding Specification</label>
-                    <textarea id="plan-spec" aria-label="Coding specification" placeholder="Describe what you want to build. Claude will analyze this, define sequential implementation steps, and enqueue each as a separate Claude Pool task."></textarea>
+                    <textarea id="plan-spec" aria-label="Coding specification" placeholder="Describe what you want to build. Claude will analyze this, define sequential implementation steps, and enqueue each as a separate TeamCLI task."></textarea>
                 </div>
                 <div class="plan-section">
                     <label>Options</label>
@@ -2239,7 +2239,7 @@
 
             return `You are a development planning orchestrator. Do NOT write any code yourself.
 
-Your task: analyze the specification below, break it into sequential implementation steps, and enqueue each step as a separate task via the Claude Pool API.
+Your task: analyze the specification below, break it into sequential implementation steps, and enqueue each step as a separate task via the TeamCLI API.
 
 API ENDPOINT: ${apiBase}/api/tasks
 WORKING DIRECTORY FOR ALL SUBTASKS: ${directory}
@@ -2734,7 +2734,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
 
             return `You are a development planning orchestrator. Do NOT write any code yourself.
 
-Your task: analyze the specification below, break it into sequential implementation steps, and enqueue each step as a separate task in this chat via the Claude Pool API.
+Your task: analyze the specification below, break it into sequential implementation steps, and enqueue each step as a separate task in this chat via the TeamCLI API.
 
 API ENDPOINT: ${apiOrigin}/api/chats/${bucketId}/messages
 WORKING DIRECTORY FOR ALL SUBTASKS: ${directory}

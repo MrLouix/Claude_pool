@@ -5,18 +5,18 @@ import os
 from pathlib import Path
 from typing import Any
 
-from claude_pool.models import CLIConfig
+from team_cli.models import CLIConfig
 
 
-DEFAULT_CLIS_PATH: Path = Path.home() / ".claude_pool" / "clis.json"
+DEFAULT_CLIS_PATH: Path = Path.home() / ".team_cli" / "clis.json"
 
 
 def get_clis_path() -> Path:
     """Get the path to the clis.json configuration file.
     
-    Respects the CLAUDE_POOL_CLIS_PATH environment variable override.
+    Respects the TEAM_CLI_CLIS_PATH environment variable override.
     """
-    env_path = os.environ.get("CLAUDE_POOL_CLIS_PATH")
+    env_path = os.environ.get("TEAM_CLI_CLIS_PATH")
     if env_path:
         return Path(env_path)
     return DEFAULT_CLIS_PATH

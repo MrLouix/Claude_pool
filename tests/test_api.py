@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from claude_pool.api import ApiServer
-from claude_pool.models import Bucket, PoolState, Task
-from claude_pool.storage import save_pool
+from team_cli.api import ApiServer
+from team_cli.models import Bucket, PoolState, Task
+from team_cli.storage import save_pool
 
 # ── Fixtures ──────────────────────────────────────────────────────
 
@@ -25,8 +25,8 @@ def pool_file(tmp_path: Path) -> Path:
 def api(pool_file: Path):
     """ApiServer with run_pool and signal.signal stubbed (TestClient runs in a thread)."""
     with (
-        patch("claude_pool.executor.TaskExecutor.run_pool", new=AsyncMock(return_value=None)),
-        patch("claude_pool.executor.signal.signal"),
+        patch("team_cli.executor.TaskExecutor.run_pool", new=AsyncMock(return_value=None)),
+        patch("team_cli.executor.signal.signal"),
     ):
         server = ApiServer(pool_file)
         with TestClient(server.app, raise_server_exceptions=True) as client:

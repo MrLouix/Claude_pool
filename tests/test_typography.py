@@ -2,7 +2,7 @@
 import re
 from pathlib import Path
 
-HTML_PATH = Path(__file__).parent.parent / "claude_pool" / "frontend" / "index.html"
+HTML_PATH = Path(__file__).parent.parent / "team_cli" / "frontend" / "index.html"
 
 
 def _content():

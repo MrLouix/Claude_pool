@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from claude_pool.executor import TaskExecutor
-from claude_pool.models import PoolState, Task
+from team_cli.executor import TaskExecutor
+from team_cli.models import PoolState, Task
 
 
 @pytest.fixture

@@ -78,7 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2024-01-XX
 
 ### Added
-- Initial release of Claude Pool TUI
+- Initial release of TeamCLI TUI
 - Sequential task execution with Claude Code CLI integration
 - Interactive TUI built with Textual framework
 - Rate-limit detection and exponential backoff retry logic

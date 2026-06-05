@@ -7,10 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from claude_pool.database import DatabaseManager
-from claude_pool.executor import TaskExecutor, _meta_hash
-from claude_pool.models import PoolState, Task
-from claude_pool.storage import save_pool
+from team_cli.database import DatabaseManager
+from team_cli.executor import TaskExecutor, _meta_hash
+from team_cli.models import PoolState, Task
+from team_cli.storage import save_pool
 
 
 # ---------------------------------------------------------------------------

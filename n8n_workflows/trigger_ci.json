@@ -1,6 +1,6 @@
 {
   "name": "Trigger CI on Task Completion",
-  "description": "Automatically trigger CI/CD pipeline when Claude Pool tasks generate code changes",
+  "description": "Automatically trigger CI/CD pipeline when TeamCLI tasks generate code changes",
   "nodes": [
     {
       "parameters": {
@@ -75,7 +75,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const task = $input.first().json;\nconst output = task.json_output || {};\nconst filesChanged = output.files_changed || [];\n\nreturn {\n  branch: `claude-pool/${task.id.substring(5)}`,\n  commit_message: `Apply changes from Claude Pool task ${task.id}`,\n  files: filesChanged,\n  task_id: task.id\n}"
+        "jsCode": "const task = $input.first().json;\nconst output = task.json_output || {};\nconst filesChanged = output.files_changed || [];\n\nreturn {\n  branch: `team-cli/${task.id.substring(5)}`,\n  commit_message: `Apply changes from TeamCLI task ${task.id}`,\n  files: filesChanged,\n  task_id: task.id\n}"
       },
       "id": "extract-ci-data",
       "name": "Extract CI Data",
@@ -116,7 +116,7 @@
             },
             {
               "name": "source",
-              "value": "claude-pool"
+              "value": "team-cli"
             }
           ]
         }

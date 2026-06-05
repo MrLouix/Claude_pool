@@ -1,4 +1,4 @@
-"""Main entry point for Claude Pool TUI."""
+"""Main entry point for TeamCLI TUI."""
 
 import argparse
 import asyncio
@@ -18,7 +18,7 @@ def check_claude_cli() -> bool:
     if shutil.which("claude") is None:
         print(
             "\n[WARNING] 'claude' command not found in PATH.\n"
-            "  Claude Pool requires the Claude CLI to be installed and authenticated.\n"
+            "  TeamCLI requires the Claude CLI to be installed and authenticated.\n"
             "  Install it from: https://claude.ai/code\n",
             file=sys.stderr,
         )
@@ -67,11 +67,11 @@ def setup_logging(verbose: bool = False, debug: bool = False, tui_mode: bool = F
                 level=level,
                 format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
                 datefmt="%H:%M:%S",
-                filename="claude_pool_debug.log",
+                filename="team_cli_debug.log",
                 filemode="w",
             )
             # Also print to stderr that debug log file is created
-            print("Debug logging enabled. Logs written to: claude_pool_debug.log", file=sys.stderr)
+            print("Debug logging enabled. Logs written to: team_cli_debug.log", file=sys.stderr)
         elif verbose:
             level = logging.WARNING
             logging.basicConfig(
@@ -211,7 +211,7 @@ def run_api_server(pool_file: Path, host: str = "0.0.0.0", port: int = 8000, log
 def main() -> None:
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Claude Pool - Manage sequential Claude Code task pools"
+        description="TeamCLI - Manage sequential Claude Code task pools"
     )
     parser.add_argument(
         "--pool",

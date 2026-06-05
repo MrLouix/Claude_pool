@@ -7,10 +7,10 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from claude_pool.api import ApiServer
-from claude_pool.database import DatabaseManager
-from claude_pool.models import PoolState, Task
-from claude_pool.storage import save_pool
+from team_cli.api import ApiServer
+from team_cli.database import DatabaseManager
+from team_cli.models import PoolState, Task
+from team_cli.storage import save_pool
 
 
 # ---------------------------------------------------------------------------
@@ -26,8 +26,8 @@ def _make_api(pool_file: Path):
     """Yield a (TestClient, ApiServer) pair with run_pool stubbed."""
     from unittest.mock import AsyncMock
     with (
-        patch("claude_pool.executor.TaskExecutor.run_pool", new=AsyncMock(return_value=None)),
-        patch("claude_pool.executor.signal.signal"),
+        patch("team_cli.executor.TaskExecutor.run_pool", new=AsyncMock(return_value=None)),
+        patch("team_cli.executor.signal.signal"),
     ):
         server = ApiServer(pool_file)
         with TestClient(server.app, raise_server_exceptions=True) as client:
@@ -108,7 +108,7 @@ def test_get_providers_available(tmp_path: Path) -> None:
     def _fake_which(cmd: str) -> str | None:
         return "/usr/bin/claude" if cmd == "claude" else None
 
-    with patch("claude_pool.api.shutil.which", side_effect=_fake_which):
+    with patch("team_cli.api.shutil.which", side_effect=_fake_which):
         with _make_api(pool_file) as (client, _):
             resp = client.get("/api/providers")
             assert resp.status_code == 200
@@ -132,8 +132,8 @@ def test_pool_file_coercion(tmp_path: Path) -> None:
 
     from unittest.mock import AsyncMock
     with (
-        patch("claude_pool.executor.TaskExecutor.run_pool", new=AsyncMock(return_value=None)),
-        patch("claude_pool.executor.signal.signal"),
+        patch("team_cli.executor.TaskExecutor.run_pool", new=AsyncMock(return_value=None)),
+        patch("team_cli.executor.signal.signal"),
     ):
         server = ApiServer(json_path)  # pass .json path
         # Internal pool_file must have been coerced to .db

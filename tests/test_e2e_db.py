@@ -8,10 +8,10 @@ from unittest.mock import patch
 
 import pytest
 
-from claude_pool.database import DatabaseManager
-from claude_pool.executor import TaskExecutor
-from claude_pool.models import PoolState, Task
-from claude_pool.storage import cleanup_old_tasks, load_pool, save_pool
+from team_cli.database import DatabaseManager
+from team_cli.executor import TaskExecutor
+from team_cli.models import PoolState, Task
+from team_cli.storage import cleanup_old_tasks, load_pool, save_pool
 
 
 # ---------------------------------------------------------------------------
@@ -29,8 +29,8 @@ def test_full_pool_lifecycle(tmp_path: Path) -> None:
 
     # 2. Instantiate executor, load tasks (empty pool — must not raise)
     with (
-        patch("claude_pool.executor.TaskExecutor.run_pool"),
-        patch("claude_pool.executor.signal.signal"),
+        patch("team_cli.executor.TaskExecutor.run_pool"),
+        patch("team_cli.executor.signal.signal"),
     ):
         ex = TaskExecutor(pool_file, install_signal_handlers=False)
         asyncio.run(ex.load_tasks())

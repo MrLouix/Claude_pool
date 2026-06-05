@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from claude_pool.executor import BaseCLIExecutor, ClaudeExecutor, create_executor
-from claude_pool.models import CLIConfig
+from team_cli.executor import BaseCLIExecutor, ClaudeExecutor, create_executor
+from team_cli.models import CLIConfig
 
 
 class TestClaudeExecutorGetModelList:
@@ -42,8 +42,8 @@ class TestClaudeExecutorExecute:
         mock_result.stdout = '{"result": "test"}'
         mock_result.stderr = ""
 
-        with patch("claude_pool.executor.subprocess.run", return_value=mock_result) as mock_run:
-            with patch("claude_pool.executor.parse_claude_output", return_value={"result": "parsed"}):
+        with patch("team_cli.executor.subprocess.run", return_value=mock_result) as mock_run:
+            with patch("team_cli.executor.parse_claude_output", return_value={"result": "parsed"}):
                 result = executor.execute(
                     prompt="test prompt",
                     context=[],
@@ -73,7 +73,7 @@ class TestClaudeExecutorExecute:
         )
         executor = ClaudeExecutor(config)
 
-        with patch("claude_pool.executor.subprocess.run", side_effect=subprocess.TimeoutExpired(30 * 60, "test")):
+        with patch("team_cli.executor.subprocess.run", side_effect=subprocess.TimeoutExpired(30 * 60, "test")):
             result = executor.execute(
                 prompt="test",
                 context=[],
@@ -103,8 +103,8 @@ class TestClaudeExecutorCheckRateLimit:
         mock_result.stdout = ""
         mock_result.stderr = "Error: rate limit exceeded"
 
-        with patch("claude_pool.executor.subprocess.run", return_value=mock_result):
-            with patch("claude_pool.executor.parse_claude_output", return_value={}):
+        with patch("team_cli.executor.subprocess.run", return_value=mock_result):
+            with patch("team_cli.executor.parse_claude_output", return_value={}):
                 executor.execute(
                     prompt="test",
                     context=[],
@@ -129,8 +129,8 @@ class TestClaudeExecutorCheckRateLimit:
         mock_result.stdout = '{"result": "ok"}'
         mock_result.stderr = ""
 
-        with patch("claude_pool.executor.subprocess.run", return_value=mock_result):
-            with patch("claude_pool.executor.parse_claude_output", return_value={"result": "ok"}):
+        with patch("team_cli.executor.subprocess.run", return_value=mock_result):
+            with patch("team_cli.executor.parse_claude_output", return_value={"result": "ok"}):
                 executor.execute(
                     prompt="test",
                     context=[],
@@ -155,8 +155,8 @@ class TestClaudeExecutorCheckRateLimit:
         mock_result.stdout = ""
         mock_result.stderr = "Error: some other error"
 
-        with patch("claude_pool.executor.subprocess.run", return_value=mock_result):
-            with patch("claude_pool.executor.parse_claude_output", return_value={}):
+        with patch("team_cli.executor.subprocess.run", return_value=mock_result):
+            with patch("team_cli.executor.parse_claude_output", return_value={}):
                 executor.execute(
                     prompt="test",
                     context=[],

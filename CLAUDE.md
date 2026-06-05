@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Claude Pool TUI is a Python TUI application (built with Textual) that manages a sequential pool of requests forwarded to the `claude -p` CLI. It loads tasks from a SQLite database (`pool.db`), executes them sequentially via `claude -p <prompt> --output-format json --structured-output`, parses results, and saves state back to `pool.db`.
+TeamCLI TUI is a Python TUI application (built with Textual) that manages a sequential pool of requests forwarded to the `claude -p` CLI. It loads tasks from a SQLite database (`pool.db`), executes them sequentially via `claude -p <prompt> --output-format json --structured-output`, parses results, and saves state back to `pool.db`.
 
 **Status:** Specification phase — the full spec is in `docs/spec.md`. No source code has been implemented yet.
 

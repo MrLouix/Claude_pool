@@ -1,4 +1,4 @@
-"""Text User Interface for Claude Pool."""
+"""Text User Interface for TeamCLI."""
 
 import asyncio
 import json
@@ -489,7 +489,7 @@ class LogWidget(Static):
 
 
 class PoolTUI(App):
-    """Main TUI application for Claude Pool."""
+    """Main TUI application for TeamCLI."""
 
     CSS = """
     Screen {

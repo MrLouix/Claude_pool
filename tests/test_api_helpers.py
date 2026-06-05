@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from claude_pool.api import _compute_pool_status, _generate_task_id, _is_allowed_path
-from claude_pool.api_models import (
+from team_cli.api import _compute_pool_status, _generate_task_id, _is_allowed_path
+from team_cli.api_models import (
     MessageInput,
     ProjectEntry,
     ProjectInput,
@@ -15,7 +15,7 @@ from claude_pool.api_models import (
     TaskPatchInput,
     _validate_priority,
 )
-from claude_pool.models import PoolState, Task
+from team_cli.models import PoolState, Task
 
 
 # ── _is_allowed_path ──────────────────────────────────────────────

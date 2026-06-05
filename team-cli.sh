@@ -1,5 +1,5 @@
 #!/bin/bash
-# Claude Pool TUI - Launcher Script
+# TeamCLI TUI - Launcher Script
 # This script handles installation and execution of claude-pool
 
 set -e
@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 
 # Check if we're in installation mode
 if [[ "$1" == "install" ]] || [[ "$1" == "setup" ]]; then
-    echo "=== Claude Pool TUI - Installation ==="
+    echo "=== TeamCLI TUI - Installation ==="
     echo ""
 
     # Check Python
@@ -45,7 +45,7 @@ if [[ "$1" == "install" ]] || [[ "$1" == "setup" ]]; then
 
     # Install package
     echo ""
-    echo "Installing Claude Pool TUI..."
+    echo "Installing TeamCLI TUI..."
     . venv/bin/activate
     pip install -e ".[dev]" -q
     echo -e "${GREEN}✓${NC} Installation complete!"

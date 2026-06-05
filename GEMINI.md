@@ -4,7 +4,7 @@ This file provides guidance to Gemini / Antigravity when working with code in th
 
 ## Project Overview
 
-Claude Pool TUI is a Python TUI application (built with Textual) that manages a sequential pool of requests forwarded to the `claude -p` CLI. It loads tasks from `pool.json`, executes them sequentially via `claude -p <prompt> --output-format json --structured-output`, parses results, and saves state back to `pool.json`.
+TeamCLI TUI is a Python TUI application (built with Textual) that manages a sequential pool of requests forwarded to the `claude -p` CLI. It loads tasks from `pool.json`, executes them sequentially via `claude -p <prompt> --output-format json --structured-output`, parses results, and saves state back to `pool.json`.
 
 **Status:** Specification phase — the full spec is in `docs/spec.md`. No source code has been implemented yet.
 
@@ -13,10 +13,10 @@ Claude Pool TUI is a Python TUI application (built with Textual) that manages a 
 Use the following commands to install, test, lint, and run the project. Since **RTK (Rust Token Killer)** is installed, you should prefix test and lint commands with `rtk` (e.g. `rtk make test`, `rtk make lint`) to filter/compress the terminal output and optimize token usage:
 
 - **Install dependencies:** `make install` or `pip install -e ".[dev]"`
-- **Run tests:** `rtk make test` or `rtk pytest tests/ -v --cov=claude_pool`
-- **Lint check:** `rtk make lint` or `rtk mypy claude_pool/ && rtk black --check claude_pool/ tests/ && rtk isort --check-only claude_pool/ tests/`
-- **Format code:** `make format` or `black claude_pool/ tests/ && isort claude_pool/ tests/`
-- **Run application:** `make run` or `python -m claude_pool --pool pool.json`
+- **Run tests:** `rtk make test` or `rtk pytest tests/ -v --cov=team_cli`
+- **Lint check:** `rtk make lint` or `rtk mypy team_cli/ && rtk black --check team_cli/ tests/ && rtk isort --check-only team_cli/ tests/`
+- **Format code:** `make format` or `black team_cli/ tests/ && isort team_cli/ tests/`
+- **Run application:** `make run` or `python -m team_cli --pool pool.json`
 - **Clean build artifacts:** `make clean`
 - **Check RTK stats:** `rtk gain`
 
@@ -51,9 +51,9 @@ The app follows a sequential execution model with rate-limit awareness:
 
 ## Key Files
 
-- [docs/spec.md](file:///home/ai_agent/projects/claude_pool/docs/spec.md) — Complete specification (JSON schema, TUI layout, class designs, retry logic, integration points)
-- [docs/chat_spec.md](file:///home/ai_agent/projects/claude_pool/docs/chat_spec.md) — Chat Tab feature specification (web dashboard chat interface, bucket-based routing, REST API, WebSocket events)
-- [pool.json](file:///home/ai_agent/projects/claude_pool/pool.json) — Runtime task data (JSON array of task objects)
+- [docs/spec.md](file:///home/ai_agent/projects/team_cli/docs/spec.md) — Complete specification (JSON schema, TUI layout, class designs, retry logic, integration points)
+- [docs/chat_spec.md](file:///home/ai_agent/projects/team_cli/docs/chat_spec.md) — Chat Tab feature specification (web dashboard chat interface, bucket-based routing, REST API, WebSocket events)
+- [pool.json](file:///home/ai_agent/projects/team_cli/pool.json) — Runtime task data (JSON array of task objects)
 
 ## Constraints
 

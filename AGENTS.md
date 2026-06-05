@@ -4,10 +4,10 @@
 
 ```
 make install      # pip install -e ".[dev]"
-make format       # black + isort on claude_pool/ tests/
+make format       # black + isort on team_cli/ tests/
 make lint         # mypy + black --check + isort --check-only
-make test         # pytest tests/ -v --cov=claude_pool
-make run          # python -m claude_pool --pool pool.json
+make test         # pytest tests/ -v --cov=team_cli
+make run          # python -m team_cli --pool pool.json
 make clean        # remove build artifacts
 ```
 
@@ -15,12 +15,12 @@ Run `make lint` before `make test`. Use `./claude-pool.sh install` if working fr
 
 ## Architecture
 
-Three execution modes from one entry point (`claude_pool/__main__.py`):
+Three execution modes from one entry point (`team_cli/__main__.py`):
 - **TUI** (default): `claude-pool --pool pool.json` — Textual interface
 - **CLI** (`--no-tui`): headless sequential execution
 - **API server** (`--serve`): FastAPI + Uvicorn on port 8000, serves web dashboard + REST API + WebSocket
 
-Core modules in `claude_pool/`:
+Core modules in `team_cli/`:
 - `models.py` — Task dataclass, PoolState
 - `executor.py` — TaskExecutor: loads, runs, retries tasks via `claude -p` CLI
 - `api.py` — FastAPI app: REST endpoints, WebSocket events, serves `frontend/index.html`

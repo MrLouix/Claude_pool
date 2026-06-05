@@ -1,6 +1,6 @@
 {
   "name": "Read Completed Tasks",
-  "description": "Read completed tasks from Claude Pool and filter for successful executions",
+  "description": "Read completed tasks from TeamCLI and filter for successful executions",
   "nodes": [
     {
       "parameters": {

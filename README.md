@@ -1,8 +1,8 @@
-# Claude Pool
+# TeamCLI
 
 **Un gestionnaire de tâches pour Claude Code CLI, avec tableau de bord web en temps réel.**
 
-Claude Pool vous permet de constituer une file d'attente de tâches de code et de les faire exécuter automatiquement par l'IA Claude, l'une après l'autre. Un tableau de bord web vous montre l'avancement en direct et vous permet d'ajouter de nouvelles tâches depuis votre navigateur.
+TeamCLI vous permet de constituer une file d'attente de tâches de code et de les faire exécuter automatiquement par l'IA Claude, l'une après l'autre. Un tableau de bord web vous montre l'avancement en direct et vous permet d'ajouter de nouvelles tâches depuis votre navigateur.
 
 ---
 
@@ -54,15 +54,15 @@ Avant de commencer, vous avez besoin de :
 3. Installez le package :
 
 ```powershell
-pip install --no-cache-dir claude_pool-1.2.6-py3-none-any.whl
+pip install --no-cache-dir team_cli-1.2.6-py3-none-any.whl
 ```
 
-> Si `pip` n'est pas reconnu, utilisez `python -m pip install --no-cache-dir claude_pool-1.2.6-py3-none-any.whl`
+> Si `pip` n'est pas reconnu, utilisez `python -m pip install --no-cache-dir team_cli-1.2.6-py3-none-any.whl`
 
 ### Linux / macOS — Installation depuis la release
 
 ```bash
-pip install claude_pool-1.2.6-py3-none-any.whl
+pip install team_cli-1.2.6-py3-none-any.whl
 ```
 
 ### Option B — Cloner le dépôt (contributeurs)
@@ -137,7 +137,7 @@ taskkill /PID <PID> /F
 
 # 2. Télécharger la nouvelle release depuis GitHub
 #    (ou utiliser pip si le package est sur PyPI)
-pip install --no-cache-dir --force-reinstall claude_pool-1.2.6-py3-none-any.whl
+pip install --no-cache-dir --force-reinstall team_cli-1.2.6-py3-none-any.whl
 
 # 3. Redémarrer le serveur
 claude-pool --pool $env:USERPROFILE\claude-pool-data\pool.db --serve --port 8000 --no-tui
@@ -149,7 +149,7 @@ claude-pool --pool $env:USERPROFILE\claude-pool-data\pool.db --serve --port 8000
 # 1. Arrêter le serveur (Ctrl+C)
 
 # 2. Réinstaller le package
-pip install --force-reinstall claude_pool-1.2.6-py3-none-any.whl
+pip install --force-reinstall team_cli-1.2.6-py3-none-any.whl
 
 # 3. Redémarrer
 claude-pool --pool ~/claude-pool-data/pool.db --serve --port 8000 --no-tui
@@ -201,7 +201,7 @@ Claude va analyser votre description, la découper en 3 à 8 étapes de code sé
 
 ## Chatter avec Claude depuis le navigateur
 
-Claude Pool inclut un mode **Chat** qui vous permet de converser directement avec Claude dans une interface de messagerie, sans quitter votre navigateur.
+TeamCLI inclut un mode **Chat** qui vous permet de converser directement avec Claude dans une interface de messagerie, sans quitter votre navigateur.
 
 ### Ouvrir un nouveau chat
 
@@ -369,7 +369,7 @@ curl -X POST http://localhost:8000/api/tasks \
 ## Structure du projet
 
 ```
-claude_pool/
+team_cli/
 ├── __main__.py      # Point d'entrée CLI
 ├── models.py        # Modèles de données (Task, PoolState)
 ├── executor.py      # Moteur d'exécution des tâches

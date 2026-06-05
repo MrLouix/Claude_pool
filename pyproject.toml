@@ -3,13 +3,13 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "claude-pool"
+name = "team-cli"
 version = "1.2.7"
-description = "TUI application for managing sequential Claude Code task pools"
+description = "TUI application for managing sequential AI CLI task pools"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
-    {name = "Claude Pool Contributors"}
+    {name = "TeamCLI Contributors"}
 ]
 dependencies = [
     "textual>=0.47.0",
@@ -20,10 +20,10 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["claude_pool*"]
+include = ["team_cli*"]
 
 [tool.setuptools.package-data]
-claude_pool = ["frontend/*.html", "n8n_workflows/*.json"]
+team_cli = ["frontend/*.html", "n8n_workflows/*.json"]
 
 [project.optional-dependencies]
 dev = [
@@ -36,7 +36,7 @@ dev = [
 ]
 
 [project.scripts]
-claude-pool = "claude_pool.__main__:main"
+team-cli = "team_cli.__main__:main"
 
 [tool.black]
 line-length = 100
@@ -53,7 +53,7 @@ warn_unused_configs = true
 disallow_untyped_defs = false
 
 [[tool.mypy.overrides]]
-module = "claude_pool.tui"
+module = "team_cli.tui"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
@@ -63,4 +63,4 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "-v --cov=claude_pool --cov-report=term-missing"
+addopts = "-v --cov=team_cli --cov-report=term-missing"

@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from claude_pool.api import create_app
-from claude_pool.models import CLIConfig
+from team_cli.api import create_app
+from team_cli.models import CLIConfig
 
 
 class TestAPIClisEndpoints:
@@ -18,8 +18,8 @@ class TestAPIClisEndpoints:
         pool_file = tmp_path / "test.db"
         return create_app(pool_file)
 
-    @patch("claude_pool.api.detect_clis")
-    @patch("claude_pool.api.load_cli_configs")
+    @patch("team_cli.api.detect_clis")
+    @patch("team_cli.api.load_cli_configs")
     async def test_get_clis_returns_200_with_configs(
         self, mock_load, mock_detect, app, client
     ):
@@ -50,7 +50,7 @@ class TestAPIClisEndpoints:
             assert data[0]["cli_type"] == "anthropic"
             assert data[0]["enabled"] is True
 
-    @patch("claude_pool.api.detect_clis")
+    @patch("team_cli.api.detect_clis")
     async def test_get_clis_detect_returns_200_with_detected(
         self, mock_detect, app, client
     ):
@@ -84,8 +84,8 @@ class TestAPIClisEndpoints:
             assert "mistral" in names
             assert "llama" in names
 
-    @patch("claude_pool.api.detect_clis")
-    @patch("claude_pool.api.load_cli_configs")
+    @patch("team_cli.api.detect_clis")
+    @patch("team_cli.api.load_cli_configs")
     async def test_get_clis_merges_custom_configs(
         self, mock_load, mock_detect, app, client
     ):
@@ -123,8 +123,8 @@ class TestAPIClisEndpoints:
             assert data[0]["models"] == ["haiku", "sonnet", "opus"]
             assert data[0]["default_model"] == "sonnet"
 
-    @patch("claude_pool.api.detect_clis")
-    @patch("claude_pool.api.load_cli_configs")
+    @patch("team_cli.api.detect_clis")
+    @patch("team_cli.api.load_cli_configs")
     async def test_get_clis_excludes_disabled(
         self, mock_load, mock_detect, app, client
     ):
@@ -155,8 +155,8 @@ class TestTaskExecutorFallback:
 
     def test_fallback_cli_manager_when_none_provided(self):
         """TaskExecutor creates fallback CLIManager when none is injected."""
-        from claude_pool.executor import TaskExecutor
-        from claude_pool.models import CLIConfig
+        from team_cli.executor import TaskExecutor
+        from team_cli.models import CLIConfig
         from pathlib import Path
         import tempfile
         
@@ -175,8 +175,8 @@ class TestTaskExecutorFallback:
 
     def test_uses_provided_cli_manager(self):
         """TaskExecutor uses provided CLIManager instead of creating fallback."""
-        from claude_pool.executor import TaskExecutor, CLIManager
-        from claude_pool.models import CLIConfig
+        from team_cli.executor import TaskExecutor, CLIManager
+        from team_cli.models import CLIConfig
         from pathlib import Path
         import tempfile
         

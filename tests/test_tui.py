@@ -7,8 +7,8 @@ import pytest
 from textual.containers import Container
 from textual.widgets import Button, DataTable, Input, Label
 
-from claude_pool.models import PoolState, Task
-from claude_pool.tui import AddTaskScreen, ConfirmDialog, JsonOutputWidget, LogWidget, PoolTUI
+from team_cli.models import PoolState, Task
+from team_cli.tui import AddTaskScreen, ConfirmDialog, JsonOutputWidget, LogWidget, PoolTUI
 
 
 class TestAppStartup:
@@ -17,7 +17,7 @@ class TestAppStartup:
     @pytest.mark.asyncio
     async def test_app_startup(self, pool_file_with_tasks: Path, mock_executor):
         """Test PoolTUI loads tasks from pool file on mount."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -41,7 +41,7 @@ class TestAppStartup:
     @pytest.mark.asyncio
     async def test_app_startup_empty_pool(self, empty_pool_file: Path, mock_executor_empty):
         """Test app startup with empty pool."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor_empty):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor_empty):
             app = PoolTUI(empty_pool_file)
 
             async with app.run_test() as pilot:
@@ -57,7 +57,7 @@ class TestAddTaskModal:
     @pytest.mark.asyncio
     async def test_add_task_button_exists(self, pool_file_with_tasks: Path, mock_executor):
         """Test that add task button exists in the UI."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -96,7 +96,7 @@ class TestDeleteTaskConfirmation:
     @pytest.mark.asyncio
     async def test_delete_button_exists(self, pool_file_with_tasks: Path, mock_executor):
         """Test that delete button exists in the UI."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -110,7 +110,7 @@ class TestDeleteTaskConfirmation:
     @pytest.mark.asyncio
     async def test_delete_task_no_selection(self, pool_file_with_tasks: Path, mock_executor):
         """Test delete action when no task is selected."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -145,7 +145,7 @@ class TestPauseResume:
     @pytest.mark.asyncio
     async def test_pause_resume_binding(self, pool_file_with_tasks: Path, mock_executor):
         """Test pressing 'P' key toggles paused state."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -174,7 +174,7 @@ class TestPauseResume:
     @pytest.mark.asyncio
     async def test_pause_button_exists(self, pool_file_with_tasks: Path, mock_executor):
         """Test that pause button exists in the UI."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -191,7 +191,7 @@ class TestQuitBinding:
     @pytest.mark.asyncio
     async def test_quit_button_exists(self, pool_file_with_tasks: Path, mock_executor):
         """Test that quit button exists in the UI."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -205,7 +205,7 @@ class TestQuitBinding:
     @pytest.mark.asyncio
     async def test_quit_binding_exists(self, pool_file_with_tasks: Path, mock_executor):
         """Test that quit action is bound to 'Q' key."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             # Check that quit binding exists
@@ -220,7 +220,7 @@ class TestDataTableSelection:
     @pytest.mark.asyncio
     async def test_datatable_exists_with_columns(self, pool_file_with_tasks: Path, mock_executor):
         """Test DataTable exists with correct columns."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -236,7 +236,7 @@ class TestDataTableSelection:
     @pytest.mark.asyncio
     async def test_datatable_has_rows(self, pool_file_with_tasks: Path, mock_executor):
         """Test DataTable displays rows from executor pool."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -251,7 +251,7 @@ class TestDataTableSelection:
     @pytest.mark.asyncio
     async def test_datatable_cursor_position(self, pool_file_with_tasks: Path, mock_executor):
         """Test DataTable cursor position can be read."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -271,7 +271,7 @@ class TestTaskDetailsPanel:
     @pytest.mark.asyncio
     async def test_task_details_panel_exists(self, pool_file_with_tasks: Path, mock_executor):
         """Test details panel exists in the app."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -336,7 +336,7 @@ class TestLogsPanel:
     @pytest.mark.asyncio
     async def test_logs_panel_exists(self, pool_file_with_tasks: Path, mock_executor):
         """Test logs panel exists and is queryable."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -372,7 +372,7 @@ class TestLogsPanel:
     @pytest.mark.asyncio
     async def test_logs_panel_respects_max_lines(self, pool_file_with_tasks: Path, mock_executor):
         """Test logs panel respects max_lines limit."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -397,7 +397,7 @@ class TestRetryTaskBinding:
     @pytest.mark.asyncio
     async def test_retry_button_exists(self, pool_file_with_tasks: Path, mock_executor):
         """Test that retry button exists in the UI."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -469,7 +469,7 @@ class TestRetryTaskBinding:
     @pytest.mark.asyncio
     async def test_retry_task_no_selection(self, pool_file_with_tasks: Path, mock_executor):
         """Test retry with no task selected."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -495,7 +495,7 @@ class TestSkipBinding:
     @pytest.mark.asyncio
     async def test_skip_button_exists(self, pool_file_with_tasks: Path, mock_executor):
         """Test that skip button exists in the UI."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -509,7 +509,7 @@ class TestSkipBinding:
     @pytest.mark.asyncio
     async def test_skip_binding_exists(self, pool_file_with_tasks: Path, mock_executor):
         """Test that skip action is bound to 'S' key."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             # Check that skip binding exists
@@ -520,7 +520,7 @@ class TestSkipBinding:
     @pytest.mark.asyncio
     async def test_skip_task_with_running_task(self, pool_file_with_tasks: Path, mock_executor):
         """Test skip action when there's a running task."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -546,7 +546,7 @@ class TestSkipBinding:
     @pytest.mark.asyncio
     async def test_skip_task_no_running_task(self, pool_file_with_tasks: Path, mock_executor):
         """Test skip action when there's no running task."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -569,7 +569,7 @@ class TestDetailedOutputScreen:
     @pytest.mark.asyncio
     async def test_detail_binding_exists(self, pool_file_with_tasks: Path, mock_executor):
         """Test that detail action is bound to Enter key."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             # Check that detail binding exists
@@ -580,7 +580,7 @@ class TestDetailedOutputScreen:
     @pytest.mark.asyncio
     async def test_detailed_output_screen_title(self, pool_file_with_tasks: Path, mock_executor):
         """Test DetailedOutputScreen displays task ID."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -595,7 +595,7 @@ class TestDetailedOutputScreen:
                 )
 
                 # Detailed output screen should work with task data
-                from claude_pool.tui import DetailedOutputScreen
+                from team_cli.tui import DetailedOutputScreen
 
                 # Just verify we can instantiate it within app context
                 assert task.id == "task_001"
@@ -604,7 +604,7 @@ class TestDetailedOutputScreen:
     @pytest.mark.asyncio
     async def test_action_show_detail_with_output(self, pool_file_with_tasks: Path, mock_executor):
         """Test show_detail action with task that has output."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -636,7 +636,7 @@ class TestDataTableRowSelection:
     @pytest.mark.asyncio
     async def test_select_row_updates_json_output(self, pool_file_with_tasks: Path, mock_executor):
         """Test that selecting a row updates the JSON output panel."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -656,7 +656,7 @@ class TestDataTableRowSelection:
     @pytest.mark.asyncio
     async def test_json_output_shows_exit_code(self, pool_file_with_tasks: Path, mock_executor):
         """Test that JSON output shows exit code correctly."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -676,7 +676,7 @@ class TestDataTableRowSelection:
     @pytest.mark.asyncio
     async def test_json_output_shows_tokens_used(self, pool_file_with_tasks: Path, mock_executor):
         """Test that JSON output shows tokens used."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -699,7 +699,7 @@ class TestAddTaskModalInteraction:
     @pytest.mark.asyncio
     async def test_add_task_button_press(self, pool_file_with_tasks: Path, mock_executor):
         """Test pressing add task button binding exists."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             # Check that 'a' binding exists for add task
@@ -726,7 +726,7 @@ class TestDeleteTaskWithConfirmation:
     @pytest.mark.asyncio
     async def test_delete_binding_exists(self, pool_file_with_tasks: Path, mock_executor):
         """Test that delete action is bound to 'D' key."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             # Check that delete binding exists
@@ -752,7 +752,7 @@ class TestAppWithMultipleTasks:
     @pytest.mark.asyncio
     async def test_app_displays_all_statuses(self, pool_file_with_tasks: Path, mock_executor):
         """Test that app displays tasks with all statuses correctly."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
             async with app.run_test() as pilot:
@@ -840,7 +840,7 @@ class TestStopTaskAction:
     @pytest.mark.asyncio
     async def test_stop_button_exists(self, pool_file_with_tasks: Path, mock_executor):
         """Stop button is present in the controls bar."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
             async with app.run_test() as pilot:
                 await pilot.pause()
@@ -851,7 +851,7 @@ class TestStopTaskAction:
     @pytest.mark.asyncio
     async def test_stop_binding_registered(self, pool_file_with_tasks: Path, mock_executor):
         """'x' key is bound to stop_task."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
             bindings = [b for b in app.BINDINGS if b[0] == "x"]
             assert len(bindings) == 1
@@ -860,7 +860,7 @@ class TestStopTaskAction:
     @pytest.mark.asyncio
     async def test_stop_task_no_selection(self, pool_file_with_tasks: Path, mock_executor):
         """action_stop_task with no selected task logs 'No task selected'."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
             async with app.run_test() as pilot:
                 await pilot.pause()
@@ -878,7 +878,7 @@ class TestStopTaskAction:
     @pytest.mark.asyncio
     async def test_stop_task_wrong_status(self, pool_file_with_tasks: Path, mock_executor):
         """action_stop_task on a non-running task logs 'cannot stop'."""
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
             async with app.run_test() as pilot:
                 await pilot.pause()
@@ -902,7 +902,7 @@ class TestStopTaskAction:
         """action_stop_task on a running task calls executor.stop_task with correct id."""
         mock_executor.stop_task = AsyncMock(return_value=True)
 
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
             async with app.run_test() as pilot:
                 await pilot.pause()
@@ -922,7 +922,7 @@ class TestStopTaskAction:
         """action_stop_task logs 'hard-stopped' after executor call."""
         mock_executor.stop_task = AsyncMock(return_value=True)
 
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
             async with app.run_test() as pilot:
                 await pilot.pause()
@@ -941,7 +941,7 @@ class TestStopTaskAction:
         """action_stop_task does NOT call executor.stop_task when user dismisses dialog."""
         mock_executor.stop_task = AsyncMock(return_value=True)
 
-        with patch("claude_pool.tui.TaskExecutor", return_value=mock_executor):
+        with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
             async with app.run_test() as pilot:
                 await pilot.pause()

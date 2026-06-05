@@ -1,11 +1,11 @@
-"""Unit tests for claude_pool/cli_detector.py."""
+"""Unit tests for team_cli/cli_detector.py."""
 
 import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from claude_pool.cli_detector import (
+from team_cli.cli_detector import (
     COMMON_PATHS,
     KNOWN_CLIS,
     MODEL_MAP,
@@ -13,7 +13,7 @@ from claude_pool.cli_detector import (
     find_binary,
     probe_cli,
 )
-from claude_pool.models import CLIConfig
+from team_cli.models import CLIConfig
 
 
 class TestFindBinary:
@@ -21,31 +21,31 @@ class TestFindBinary:
 
     def test_returns_none_for_nonexistent_binary(self):
         """find_binary returns None when binary is not found."""
-        with patch("claude_pool.cli_detector.shutil.which", return_value=None):
-            with patch("claude_pool.cli_detector.shutil.os.path.exists", return_value=False):
-                with patch("claude_pool.cli_detector.shutil.os.path.isfile", return_value=False):
-                    with patch("claude_pool.cli_detector.shutil.os.access", return_value=False):
+        with patch("team_cli.cli_detector.shutil.which", return_value=None):
+            with patch("team_cli.cli_detector.shutil.os.path.exists", return_value=False):
+                with patch("team_cli.cli_detector.shutil.os.path.isfile", return_value=False):
+                    with patch("team_cli.cli_detector.shutil.os.access", return_value=False):
                         result = find_binary("nonexistent-cli")
                         assert result is None
 
     def test_returns_path_when_shutil_which_finds_it(self):
         """find_binary returns path when shutil.which finds the binary."""
         expected_path = "/usr/bin/my-cli"
-        with patch("claude_pool.cli_detector.shutil.which", return_value=expected_path):
+        with patch("team_cli.cli_detector.shutil.which", return_value=expected_path):
             result = find_binary("my-cli")
             assert result == expected_path
 
     def test_fallback_to_common_paths(self):
         """find_binary tries common paths when shutil.which returns None."""
-        with patch("claude_pool.cli_detector.shutil.which", return_value=None):
-            with patch("claude_pool.cli_detector.shutil.os.path.exists", return_value=True):
-                with patch("claude_pool.cli_detector.shutil.os.path.isfile", return_value=True):
-                    with patch("claude_pool.cli_detector.shutil.os.access", return_value=True):
+        with patch("team_cli.cli_detector.shutil.which", return_value=None):
+            with patch("team_cli.cli_detector.shutil.os.path.exists", return_value=True):
+                with patch("team_cli.cli_detector.shutil.os.path.isfile", return_value=True):
+                    with patch("team_cli.cli_detector.shutil.os.access", return_value=True):
                         # Mock exists to return True only for our test path
                         def mock_exists(path):
                             return path == "/usr/local/bin/custom-cli"
                         
-                        with patch("claude_pool.cli_detector.shutil.os.path.exists", side_effect=mock_exists):
+                        with patch("team_cli.cli_detector.shutil.os.path.exists", side_effect=mock_exists):
                             result = find_binary("custom-cli")
                             assert result == "/usr/local/bin/custom-cli"
 
@@ -55,13 +55,13 @@ class TestProbeCli:
 
     def test_returns_none_on_timeout(self):
         """probe_cli returns None when subprocess times out."""
-        with patch("claude_pool.cli_detector.subprocess.run", side_effect=subprocess.TimeoutExpired("test", 5)):
+        with patch("team_cli.cli_detector.subprocess.run", side_effect=subprocess.TimeoutExpired("test", 5)):
             result = probe_cli("claude", "/usr/bin/claude", "anthropic")
             assert result is None
 
     def test_returns_none_on_file_not_found(self):
         """probe_cli returns None when binary is not found."""
-        with patch("claude_pool.cli_detector.subprocess.run", side_effect=FileNotFoundError()):
+        with patch("team_cli.cli_detector.subprocess.run", side_effect=FileNotFoundError()):
             result = probe_cli("claude", "/usr/bin/nonexistent", "anthropic")
             assert result is None
 
@@ -71,7 +71,7 @@ class TestProbeCli:
         mock_result.returncode = 0
         mock_result.stdout = "Claude CLI v1.0"
         
-        with patch("claude_pool.cli_detector.subprocess.run", return_value=mock_result):
+        with patch("team_cli.cli_detector.subprocess.run", return_value=mock_result):
             result = probe_cli("claude", "/usr/bin/claude", "anthropic")
             
             assert result is not None
@@ -87,7 +87,7 @@ class TestProbeCli:
         mock_result.returncode = 0
         mock_result.stdout = "Mistral CLI v1.0"
         
-        with patch("claude_pool.cli_detector.subprocess.run", return_value=mock_result):
+        with patch("team_cli.cli_detector.subprocess.run", return_value=mock_result):
             result = probe_cli("mistral", "/usr/bin/mistral", "mistral")
             
             assert result is not None
@@ -102,7 +102,7 @@ class TestProbeCli:
         mock_result.returncode = 0
         mock_result.stdout = "Custom CLI v1.0"
         
-        with patch("claude_pool.cli_detector.subprocess.run", return_value=mock_result):
+        with patch("team_cli.cli_detector.subprocess.run", return_value=mock_result):
             result = probe_cli("custom", "/usr/bin/custom", "custom")
             
             assert result is not None
@@ -115,7 +115,7 @@ class TestProbeCli:
         mock_result.returncode = 1
         mock_result.stdout = "Some output"
         
-        with patch("claude_pool.cli_detector.subprocess.run", return_value=mock_result):
+        with patch("team_cli.cli_detector.subprocess.run", return_value=mock_result):
             result = probe_cli("claude", "/usr/bin/claude", "anthropic")
             
             assert result is not None
@@ -131,9 +131,9 @@ class TestDetectClis:
         mock_result.returncode = 0
         mock_result.stdout = "v1.0"
         
-        with patch("claude_pool.cli_detector.shutil.which", return_value="/usr/bin/claude"):
-            with patch("claude_pool.cli_detector.subprocess.run", return_value=mock_result):
-                with patch("claude_pool.cli_detector.load_cli_configs", return_value=[]):
+        with patch("team_cli.cli_detector.shutil.which", return_value="/usr/bin/claude"):
+            with patch("team_cli.cli_detector.subprocess.run", return_value=mock_result):
+                with patch("team_cli.cli_detector.load_cli_configs", return_value=[]):
                     results = detect_clis()
                     
                     names = [c.name for c in results]
@@ -149,9 +149,9 @@ class TestDetectClis:
             enabled=True,
         )
         
-        with patch("claude_pool.cli_detector.shutil.which", return_value=None):
-            with patch("claude_pool.cli_detector.subprocess.run", return_value=None):
-                with patch("claude_pool.cli_detector.load_cli_configs", return_value=[custom_config]):
+        with patch("team_cli.cli_detector.shutil.which", return_value=None):
+            with patch("team_cli.cli_detector.subprocess.run", return_value=None):
+                with patch("team_cli.cli_detector.load_cli_configs", return_value=[custom_config]):
                     results = detect_clis()
                     
                     names = [c.name for c in results]
@@ -172,9 +172,9 @@ class TestDetectClis:
             enabled=True,
         )
         
-        with patch("claude_pool.cli_detector.shutil.which", return_value="/usr/bin/claude"):
-            with patch("claude_pool.cli_detector.subprocess.run", return_value=mock_result):
-                with patch("claude_pool.cli_detector.load_cli_configs", return_value=[custom_claude]):
+        with patch("team_cli.cli_detector.shutil.which", return_value="/usr/bin/claude"):
+            with patch("team_cli.cli_detector.subprocess.run", return_value=mock_result):
+                with patch("team_cli.cli_detector.load_cli_configs", return_value=[custom_claude]):
                     results = detect_clis()
                     
                     claude_configs = [c for c in results if c.name == "claude"]
@@ -193,9 +193,9 @@ class TestDetectClis:
             enabled=False,
         )
         
-        with patch("claude_pool.cli_detector.shutil.which", return_value=None):
-            with patch("claude_pool.cli_detector.subprocess.run", return_value=None):
-                with patch("claude_pool.cli_detector.load_cli_configs", return_value=[disabled_config]):
+        with patch("team_cli.cli_detector.shutil.which", return_value=None):
+            with patch("team_cli.cli_detector.subprocess.run", return_value=None):
+                with patch("team_cli.cli_detector.load_cli_configs", return_value=[disabled_config]):
                     results = detect_clis()
                     
                     names = [c.name for c in results]

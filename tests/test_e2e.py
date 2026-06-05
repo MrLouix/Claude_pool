@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from claude_pool.models import PoolState, Task
-from claude_pool.storage import load_pool, save_pool
+from team_cli.models import PoolState, Task
+from team_cli.storage import load_pool, save_pool
 
 
 @pytest.fixture

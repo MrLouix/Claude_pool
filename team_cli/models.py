@@ -1,4 +1,4 @@
-"""Data models for Claude Pool TUI."""
+"""Data models for TeamCLI TUI."""
 
 from dataclasses import dataclass, field
 from datetime import datetime

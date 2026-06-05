@@ -1,4 +1,4 @@
-# Contributing to Claude Pool TUI
+# Contributing to TeamCLI TUI
 
 ## Development Setup
 
@@ -23,7 +23,7 @@ make test
 pytest tests/test_models.py -v
 
 # Run with coverage
-pytest tests/ --cov=claude_pool --cov-report=html
+pytest tests/ --cov=team_cli --cov-report=html
 ```
 
 ## Code Quality
@@ -42,7 +42,7 @@ make format && make lint && make test
 ## Project Structure
 
 ```
-claude_pool/
+team_cli/
 ├── __init__.py         # Package initialization
 ├── __main__.py         # CLI entry point
 ├── models.py           # Task dataclass

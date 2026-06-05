@@ -1,4 +1,4 @@
-"""Unit tests for claude_pool/config.py."""
+"""Unit tests for team_cli/config.py."""
 
 import json
 import os
@@ -7,13 +7,13 @@ from unittest.mock import patch
 
 import pytest
 
-from claude_pool.config import (
+from team_cli.config import (
     DEFAULT_CLIS_PATH,
     get_clis_path,
     load_cli_configs,
     save_cli_configs,
 )
-from claude_pool.models import CLIConfig
+from team_cli.models import CLIConfig
 
 
 class TestGetClisPath:

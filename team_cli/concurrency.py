@@ -1,4 +1,4 @@
-"""Concurrency control for Claude Pool task execution."""
+"""Concurrency control for TeamCLI task execution."""
 
 import asyncio
 import logging

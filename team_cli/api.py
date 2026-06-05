@@ -1,4 +1,4 @@
-"""FastAPI web server for Claude Pool with WebSocket support."""
+"""FastAPI web server for TeamCLI with WebSocket support."""
 
 import asyncio
 import json
@@ -144,7 +144,7 @@ def _task_to_message(task: Task) -> MessageResponse:
 
 
 class ApiServer:
-    """FastAPI server for Claude Pool."""
+    """FastAPI server for TeamCLI."""
 
     def __init__(self, pool_file: Path):
         if pool_file.suffix == ".json":
@@ -176,8 +176,8 @@ class ApiServer:
                 self.executor.should_stop = True
 
         self.app = FastAPI(
-            title="Claude Pool API",
-            description="REST API for managing Claude Pool tasks",
+            title="TeamCLI API",
+            description="REST API for managing TeamCLI tasks",
             version="1.0.0",
             lifespan=lifespan,
         )
@@ -222,7 +222,7 @@ class ApiServer:
             frontend_path = Path(__file__).parent / "frontend" / "index.html"
             if frontend_path.exists():
                 return HTMLResponse(content=frontend_path.read_text(encoding="utf-8"))
-            return {"message": "Claude Pool API"}
+            return {"message": "TeamCLI API"}
 
         # ── Pool status ───────────────────────────────────────────
 
