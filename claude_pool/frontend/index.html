@@ -95,11 +95,14 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
+            overflow-x: hidden;
         }
 
         .container {
             max-width: 1200px;
             margin: 0 auto;
+            padding-left: max(20px, env(safe-area-inset-left));
+            padding-right: max(20px, env(safe-area-inset-right));
         }
 
         .header {
@@ -137,7 +140,7 @@
             border-radius: var(--radius-lg);
             font-size: 14px;
             font-weight: 600;
-            transition: all 0.3s ease;
+            transition: transform var(--transition-slow), background-color var(--transition-slow), box-shadow var(--transition-slow), color var(--transition-slow), border-color var(--transition-slow), opacity var(--transition-slow);
             box-shadow: var(--shadow-sm);
             flex-wrap: wrap;
             max-width: 400px;
@@ -296,7 +299,7 @@
             font-size: 14px;
             cursor: pointer;
             font-weight: 600;
-            transition: all 0.2s;
+            transition: transform var(--transition-base), background-color var(--transition-base), box-shadow var(--transition-base), color var(--transition-base), border-color var(--transition-base), opacity var(--transition-base);
         }
 
         button:hover {
@@ -1106,6 +1109,32 @@
             }
             .chat-item .task-actions button {
                 flex: 1;
+            }
+        }
+
+        /* ── Overscroll containment ── */
+        .message-thread,
+        .modal-body,
+        .log-container,
+        .task-list {
+            overscroll-behavior: contain;
+        }
+
+        /* ── Touch optimisation ── */
+        button,
+        .dir-item,
+        .message-bubble,
+        .task-item {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* ── Motion safety ── */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
             }
         }
     </style>
