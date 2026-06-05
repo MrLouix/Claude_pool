@@ -972,6 +972,19 @@
 
         .chat-item-count { font-size: 0.75rem; color: #aaa; flex-shrink: 0; }
 
+        /* ---- Project CLI badges ---- */
+        .cli-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: var(--radius-full);
+            font-size: 0.6875rem;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        .cli-badge-auto   { background: #dcfce7; color: #166534; }
+        .cli-badge-named  { background: #dbeafe; color: #1e40af; }
+        .cli-badge-manual { background: #f3f4f6; color: #6b7280; }
+
         .chat-usage-dot {
             width: 10px;
             height: 10px;
@@ -1352,6 +1365,18 @@
             </div>
         </div>
 
+        <div class="section" role="region" aria-labelledby="projects-heading">
+            <div class="section-header">
+                <span id="projects-heading">Projects</span>
+                <button type="button" class="btn-primary" id="btn-new-project" style="font-size:13px;padding:7px 14px;">+ New Project</button>
+            </div>
+            <div class="section-content">
+                <div class="chat-list" id="project-list">
+                    <div class="empty-state">No projects yet. Create a new project to get started.</div>
+                </div>
+            </div>
+        </div>
+
         <div class="section" role="region" aria-labelledby="add-task-heading">
             <div class="section-header">
                 <span id="add-task-heading">Add New Task</span>
@@ -1589,6 +1614,45 @@
             <div class="modal-footer">
                 <button style="background:#f3f4f6;padding:8px 16px;border-radius:5px;border:1px solid #ddd;font-size:14px;cursor:pointer;" id="new-chat-cancel">Cancel</button>
                 <button class="btn-modal-confirm" id="btn-new-chat-confirm">Create Chat</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Project modal -->
+    <div class="modal-overlay" id="new-project-modal" role="dialog" aria-modal="true" aria-labelledby="new-project-modal-title">
+        <div class="modal-box" style="max-width:500px;">
+            <div class="modal-header">
+                <h3 id="new-project-modal-title">New Project</h3>
+                <button class="modal-close" id="new-project-close" aria-label="Close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="plan-section">
+                    <label for="new-project-name" style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Project Name</label>
+                    <input type="text" id="new-project-name" placeholder="My Project" aria-label="Project name" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px;font-family:inherit;font-size:14px;box-sizing:border-box;">
+                </div>
+                <div class="plan-section">
+                    <label for="new-project-directory" style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Directory</label>
+                    <div class="plan-dir-row">
+                        <input type="text" id="new-project-directory" placeholder="/path/to/project" aria-label="Project directory" autocomplete="off" spellcheck="false" inputmode="url">
+                        <button type="button" class="btn-browse" id="btn-new-project-browse" title="Browse folders" aria-label="Browse directory">⋯</button>
+                    </div>
+                </div>
+                <div class="plan-section">
+                    <div class="plan-option-row" style="margin-top:4px;">
+                        <input type="checkbox" id="new-project-allow-cli-switch" checked>
+                        <label for="new-project-allow-cli-switch" style="font-size:14px;font-weight:500;color:#333;">Allow automatic CLI switch on rate limit</label>
+                    </div>
+                </div>
+                <div class="plan-section" id="new-project-default-cli-section" style="display:none;">
+                    <label for="new-project-default-cli" style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Default CLI</label>
+                    <select id="new-project-default-cli" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px;font-family:inherit;font-size:14px;background:#fff;box-sizing:border-box;">
+                        <option value="">— Loading CLIs… —</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button style="background:#f3f4f6;padding:8px 16px;border-radius:5px;border:1px solid #ddd;font-size:14px;cursor:pointer;" id="new-project-cancel">Cancel</button>
+                <button class="btn-modal-confirm" id="btn-new-project-confirm">Create Project</button>
             </div>
         </div>
     </div>
@@ -2190,7 +2254,7 @@
         btnDirModalClose.addEventListener('click', closeDirModal);
         btnDirModalCancel.addEventListener('click', closeDirModal);
         btnDirModalConfirm.addEventListener('click', () => {
-            const targetMap = { 'plan': 'plan-directory', 'new-chat': 'new-chat-directory' };
+            const targetMap = { 'plan': 'plan-directory', 'new-chat': 'new-chat-directory', 'new-project': 'new-project-directory' };
             const targetId = targetMap[dirModalTarget] || 'directory';
             document.getElementById(targetId).value = selectedPath;
             closeDirModal();
@@ -2846,6 +2910,120 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 btn.textContent = 'Enqueue Dev Plan';
             }
         });
+
+        /* ---- Projects ---- */
+
+        async function fetchProjects() {
+            try {
+                const res = await fetch('/api/projects');
+                if (!res.ok) return;
+                const projects = await res.json();
+                renderProjectList(projects);
+            } catch (e) { /* ignore */ }
+        }
+
+        function renderProjectList(projects) {
+            const el = document.getElementById('project-list');
+            if (!projects.length) {
+                el.innerHTML = '<div class="empty-state">No projects yet. Create a new project to get started.</div>';
+                return;
+            }
+            el.innerHTML = projects.map(p => {
+                let badge;
+                if (p.allow_cli_switch) {
+                    badge = '<span class="cli-badge cli-badge-auto" title="Automatic CLI switch enabled">Auto Switch</span>';
+                } else if (p.default_cli) {
+                    badge = `<span class="cli-badge cli-badge-named" title="Fixed CLI">${escapeHtml(p.default_cli)}</span>`;
+                } else {
+                    badge = '<span class="cli-badge cli-badge-manual">Manual</span>';
+                }
+                return `
+                <div class="chat-item">
+                    <span style="font-size:20px;flex-shrink:0;">📁</span>
+                    <div class="chat-item-info" style="cursor:pointer;" onclick="alert('Project view coming soon')">
+                        <div class="chat-item-label" style="display:flex;align-items:center;gap:6px;">
+                            ${escapeHtml(p.name)}${badge}
+                        </div>
+                        <div class="chat-item-dir">${escapeHtml(p.directory || '')}</div>
+                    </div>
+                    <span class="chat-item-count">${p.message_count} msg${p.message_count !== 1 ? 's' : ''}</span>
+                </div>`;
+            }).join('');
+        }
+
+        /* ---- New Project modal ---- */
+        const newProjectModal = document.getElementById('new-project-modal');
+
+        async function openNewProjectModal() {
+            newProjectModal._openerElement = document.activeElement;
+            document.getElementById('new-project-name').value = '';
+            document.getElementById('new-project-directory').value = '';
+            document.getElementById('new-project-allow-cli-switch').checked = true;
+            document.getElementById('new-project-default-cli-section').style.display = 'none';
+            newProjectModal.classList.add('active');
+            trapFocus(newProjectModal);
+            // Populate CLI dropdown
+            try {
+                const res = await fetch('/api/clis');
+                if (res.ok) {
+                    const clis = await res.json();
+                    const sel = document.getElementById('new-project-default-cli');
+                    sel.innerHTML = clis.length
+                        ? clis.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('')
+                        : '<option value="">— No CLIs detected —</option>';
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        function closeNewProjectModal() {
+            newProjectModal.classList.remove('active');
+            newProjectModal._removeTrapFocus?.();
+            newProjectModal._openerElement?.focus();
+        }
+
+        document.getElementById('btn-new-project').addEventListener('click', openNewProjectModal);
+        document.getElementById('new-project-close').addEventListener('click', closeNewProjectModal);
+        document.getElementById('new-project-cancel').addEventListener('click', closeNewProjectModal);
+        newProjectModal.addEventListener('click', e => { if (e.target === newProjectModal) closeNewProjectModal(); });
+
+        document.getElementById('btn-new-project-browse').addEventListener('click', () => {
+            dirModalTarget = 'new-project';
+            openDirModal(defaultBrowsePath || '/');
+        });
+
+        document.getElementById('new-project-allow-cli-switch').addEventListener('change', function () {
+            document.getElementById('new-project-default-cli-section').style.display = this.checked ? 'none' : '';
+        });
+
+        document.getElementById('btn-new-project-confirm').addEventListener('click', async () => {
+            const name = document.getElementById('new-project-name').value.trim();
+            const directory = document.getElementById('new-project-directory').value.trim();
+            const allowCliSwitch = document.getElementById('new-project-allow-cli-switch').checked;
+            const defaultCli = allowCliSwitch ? null : (document.getElementById('new-project-default-cli').value || null);
+
+            if (!name) { alert('Please enter a project name.'); return; }
+            if (!directory) { alert('Please specify a directory.'); return; }
+
+            try {
+                const res = await fetch('/api/projects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, directory, allow_cli_switch: allowCliSwitch, default_cli: defaultCli }),
+                });
+                if (res.ok) {
+                    closeNewProjectModal();
+                    fetchProjects();
+                } else {
+                    const err = await res.json();
+                    logEvent(`Error creating project: ${err.detail || JSON.stringify(err)}`, 'error');
+                }
+            } catch (e) {
+                logEvent(`Error creating project: ${e}`, 'error');
+            }
+        });
+
+        // Load projects on startup
+        fetchProjects();
 
         /* ---- Task View ---- */
         let tdEditMode = false;
