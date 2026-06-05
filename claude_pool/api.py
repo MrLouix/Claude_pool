@@ -20,6 +20,7 @@ from fastapi.responses import HTMLResponse
 from .api_models import (
     ChatCreateInput,
     ChatResponse,
+    CLIConfigResponse,
     MessageInput,
     MessageResponse,
     PoolStatusResponse,
@@ -32,6 +33,8 @@ from .api_models import (
 )
 from .executor import TaskExecutor
 from .models import Bucket, PoolState, Task
+from .cli_detector import detect_clis
+from .config import load_cli_configs
 
 logger = logging.getLogger(__name__)
 
@@ -151,8 +154,19 @@ class ApiServer:
 
         @asynccontextmanager
         async def lifespan(app: FastAPI):
+            # Bootstrap CLIManager
+            detected = detect_clis()
+            custom = load_cli_configs()
+            all_configs = {c.name: c for c in detected}
+            all_configs.update({c.name: c for c in custom})
+            cli_manager = CLIManager(list(all_configs.values()))
+            
+            if not cli_manager._executors:
+                logger.warning("No CLI executors detected or configured. Tasks will fail until a valid CLI is available.")
+            
             self.executor = TaskExecutor(
-                self.pool_file, on_task_update=self._on_task_update, install_signal_handlers=False
+                self.pool_file, on_task_update=self._on_task_update, install_signal_handlers=False,
+                cli_manager=cli_manager
             )
             await self.executor.load_tasks()
             asyncio.create_task(self.executor.run_pool())
@@ -614,6 +628,46 @@ class ApiServer:
             if not directory:
                 return {"github_url": github_url, "directory": None, "found": False}
             return {"github_url": github_url, "directory": directory, "found": True}
+
+        # ── CLI Config ────────────────────────────────────────────
+
+        @self.app.get("/api/clis")
+        async def list_clis() -> list[CLIConfigResponse]:
+            """Get list of configured CLIs (detected + custom)."""
+            detected = detect_clis()
+            custom = load_cli_configs()
+            
+            # Merge: custom overrides detected
+            all_configs = {c.name: c for c in detected}
+            all_configs.update({c.name: c for c in custom if c.enabled})
+            
+            return [
+                CLIConfigResponse(
+                    name=c.name,
+                    path=c.path,
+                    models=c.models,
+                    cli_type=c.cli_type,
+                    enabled=c.enabled,
+                    default_model=c.default_model,
+                )
+                for c in all_configs.values()
+            ]
+
+        @self.app.get("/api/clis/detect")
+        async def detect_clis_endpoint() -> list[CLIConfigResponse]:
+            """Trigger fresh CLI detection and return results."""
+            detected = detect_clis()
+            return [
+                CLIConfigResponse(
+                    name=c.name,
+                    path=c.path,
+                    models=c.models,
+                    cli_type=c.cli_type,
+                    enabled=c.enabled,
+                    default_model=c.default_model,
+                )
+                for c in detected
+            ]
 
         # ── Chats ─────────────────────────────────────────────────
 

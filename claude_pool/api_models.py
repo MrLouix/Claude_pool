@@ -137,3 +137,14 @@ class MessageResponse(BaseModel):
     assistant_response: Optional[str] = None
     exit_code: Optional[int] = None
     duration_ms: Optional[int] = None
+
+
+class CLIConfigResponse(BaseModel):
+    """Response model for CLI configuration."""
+
+    name: str
+    path: str
+    models: list[str]
+    cli_type: str
+    enabled: bool
+    default_model: str = ""

@@ -8,7 +8,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .executor import TaskExecutor
+from .executor import CLIManager, TaskExecutor
+from .cli_detector import detect_clis
+from .config import load_cli_configs
 
 
 def check_claude_cli() -> bool:
@@ -118,7 +120,21 @@ async def run_cli(pool_file: Path, max_concurrent: int = 1) -> int:
     Returns:
         Exit code
     """
-    executor = TaskExecutor(pool_file, max_concurrent=max_concurrent)
+    # Bootstrap CLIManager
+    detected = detect_clis()
+    custom = load_cli_configs()
+    all_configs = {c.name: c for c in detected}
+    all_configs.update({c.name: c for c in custom})
+    cli_manager = CLIManager(list(all_configs.values()))
+    
+    if not cli_manager._executors:
+        print(
+            "[WARNING] No CLI executors detected or configured. "
+            "Tasks will fail until a valid CLI is available.",
+            file=sys.stderr,
+        )
+
+    executor = TaskExecutor(pool_file, max_concurrent=max_concurrent, cli_manager=cli_manager)
 
     try:
         await executor.load_tasks()
@@ -141,8 +157,22 @@ async def run_tui_mode(pool_file: Path, max_concurrent: int = 1) -> int:
     """
     from .tui import run_tui
 
+    # Bootstrap CLIManager
+    detected = detect_clis()
+    custom = load_cli_configs()
+    all_configs = {c.name: c for c in detected}
+    all_configs.update({c.name: c for c in custom})
+    cli_manager = CLIManager(list(all_configs.values()))
+    
+    if not cli_manager._executors:
+        print(
+            "[WARNING] No CLI executors detected or configured. "
+            "Tasks will fail until a valid CLI is available.",
+            file=sys.stderr,
+        )
+
     try:
-        await run_tui(pool_file, max_concurrent=max_concurrent)
+        await run_tui(pool_file, max_concurrent=max_concurrent, cli_manager=cli_manager)
         return 0
     except Exception as e:
         logging.error(f"Error: {e}")

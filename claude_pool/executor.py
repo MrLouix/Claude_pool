@@ -382,6 +382,7 @@ class TaskExecutor:
         on_task_update: Callable[[Task], None] | None = None,
         max_concurrent: int = 1,
         install_signal_handlers: bool = True,
+        cli_manager: "CLIManager | None" = None,
     ):
         """Initialize the executor.
 
@@ -392,6 +393,8 @@ class TaskExecutor:
             install_signal_handlers: Whether to install SIGINT/SIGTERM handlers.
                 Set to False when running inside a server (e.g. uvicorn) that
                 manages its own signal handling.
+            cli_manager: Optional CLIManager for multi-CLI support.
+                If None, creates a fallback Claude-only manager.
         """
         self.pool_file = pool_file
         self.pool = PoolState(pool_file=pool_file)
@@ -412,6 +415,21 @@ class TaskExecutor:
         # Registry of running subprocesses, keyed by task_id.
         # Populated by execute_task(); consulted by stop_task().
         self._running_processes: dict[str, asyncio.subprocess.Process] = {}
+
+        # CLI Manager setup
+        if cli_manager is not None:
+            self.cli_manager = cli_manager
+        else:
+            # Fallback: create a default Claude-only manager
+            from claude_pool.models import CLIConfig
+            from claude_pool.executor import CLIManager
+            fallback_config = CLIConfig(
+                name="claude",
+                path="claude",
+                models=[],
+                cli_type="anthropic",
+            )
+            self.cli_manager = CLIManager([fallback_config])
 
         # Setup signal handlers (skip when embedded in a server like uvicorn)
         if install_signal_handlers:
@@ -515,6 +533,21 @@ class TaskExecutor:
             _f.write("--- stderr ---\n")
             _f.write(stderr.decode("utf-8", errors="replace") if stderr else "(empty)\n")
 
+    def _write_debug_log_with_result(
+        self,
+        task_id: str,
+        exit_code: int,
+        duration_ms: int,
+        result: dict,
+    ) -> None:
+        """Write CLIManager result to last_claude_output.log for inspection."""
+        import json
+        log_path = self.pool_file.parent / "last_claude_output.log"
+        with open(log_path, "w", encoding="utf-8") as _f:
+            _f.write(f"=== task {task_id} | exit_code {exit_code} | {duration_ms} ms ===\n")
+            _f.write("--- result ---\n")
+            _f.write(json.dumps(result, indent=2, default=str))
+
     def _build_command(self, task: "Task", session_id: str | None) -> list[str]:
         """Assemble the claude CLI command for *task*, optionally resuming *session_id*."""
         cmd = [
@@ -577,78 +610,58 @@ class TaskExecutor:
         logger.info(f"Executing task {task.id}: {task.prompt[:50]}...")
         logger.info(f"Working directory: {task.directory}")
 
-        # Check for existing session in the same directory
-        session_id = self._find_session_for_directory(task.directory, task.bucket_id)
-        cmd = self._build_command(task, session_id)
-
+        # Use CLIManager for multi-CLI support
         try:
-            # Execute with timeout (30 minutes)
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(task.directory),
+            # Get model from task or use default
+            effective_model = task.model if task.model else ""
+            
+            # Execute via CLIManager (runs in thread pool to avoid blocking)
+            result = await asyncio.to_thread(
+                self.cli_manager.execute,
+                prompt=task.prompt,
+                context=[],  # TODO: Add context support if needed
+                directory=str(task.directory),
+                model=effective_model,
             )
-            self._running_processes[task.id] = process
-
-            try:
-                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30 * 60)
-            except asyncio.TimeoutError:
-                logger.error(f"Task {task.id} timed out after 30 minutes")
-                process.kill()
-                await process.wait()
-                task.status = "failed"
-                task.exit_code = -1
-                task.json_output = {"result": "Task timed out after 30 minutes"}
-                task.duration_ms = int((time.time() - start_time) * 1000)
-                self._notify_update(task)
-                self._save_state()
-                return
-
-            task.exit_code = process.returncode
+            
+            task.exit_code = 0  # CLIManager doesn't return exit code directly
             task.duration_ms = int((time.time() - start_time) * 1000)
-
-            self._write_debug_log(task.id, task.exit_code, task.duration_ms, stdout, stderr)
-
-            # Parse output
-            responded_at = datetime.now().isoformat()
-            if stdout:
-                task.json_output = parse_claude_output(stdout)
-            else:
-                task.json_output = {
-                    "result": stderr.decode("utf-8", errors="replace")[:1000],
-                    "parse_error": True,
-                }
-            task.json_output["responded_at"] = responded_at
-
-            if task.status == "stopped":
-                # Hard-stopped externally — do not reclassify; preserve "stopped" status
-                logger.info(f"Task {task.id} was hard-stopped; skipping status reclassification")
-            else:
-                # Determine status based on exit code
-                new_status, is_rate_limit = self._classify_exit(
-                    task.exit_code, stdout, stderr, task.json_output
-                )
-                task.status = new_status
-
-                if new_status == "success":
+            task.json_output = result
+            
+            # Write debug log with result
+            self._write_debug_log_with_result(task.id, task.exit_code, task.duration_ms, result)
+            
+            # Determine status based on result
+            if task.json_output and isinstance(task.json_output, dict):
+                if task.json_output.get("parse_error"):
+                    task.status = "failed"
+                    logger.error(f"Task {task.id} failed with parse error")
+                else:
+                    task.status = "success"
                     logger.info(f"Task {task.id} completed successfully")
-                    if task.json_output:
-                        sid = task.json_output.get("session_id")
-                        if sid:
-                            task.session_id = sid
-                            logger.info(f"Persisted session_id for task {task.id}: {sid}")
+                    # Extract session_id if available
+                    sid = task.json_output.get("session_id")
+                    if sid:
+                        task.session_id = sid
+                        logger.info(f"Persisted session_id for task {task.id}: {sid}")
                     usage = task.json_output.get("session_usage_percent", 0)
                     if usage >= 80:
                         logger.warning(
                             f"Task {task.id} succeeded but session usage is {usage}% — "
                             f"next rate limit will use shorter initial backoff"
                         )
-                elif is_rate_limit:
-                    self._on_rate_limit_detected(task)
-                else:
-                    logger.error(f"Task {task.id} failed with exit code {task.exit_code}")
-
+            else:
+                task.status = "success"
+                
+        except RuntimeError as e:
+            # All executors rate-limited or failed
+            logger.error(f"Task {task.id} failed: all CLI executors are rate-limited or failed")
+            task.status = "rate_limit_retry"
+            task.exit_code = -1
+            task.duration_ms = int((time.time() - start_time) * 1000)
+            task.json_output = {"result": str(e)}
+            self._on_rate_limit_detected(task)
+            
         except Exception as e:
             logger.error(f"Error executing task {task.id}: {e}")
             task.status = "failed"

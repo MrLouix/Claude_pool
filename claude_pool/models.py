@@ -111,6 +111,7 @@ class Task:
     session_id: str | None = None
     bucket_id: str = "main"
     priority: int = 2
+    model: str = ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Task":
@@ -138,6 +139,7 @@ class Task:
             session_id=session_id,
             bucket_id=str(data.get("bucket_id", "main")),
             priority=_coerce_int(data.get("priority"), 2),
+            model=str(data.get("model", "")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -156,4 +158,5 @@ class Task:
             "session_id": self.session_id,
             "bucket_id": self.bucket_id,
             "priority": self.priority,
+            "model": self.model,
         }

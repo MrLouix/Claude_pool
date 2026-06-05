@@ -13,7 +13,7 @@ from textual.containers import Container, ScrollableContainer, Vertical, Vertica
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, Select, Static
 
-from .executor import TaskExecutor
+from .executor import CLIManager, TaskExecutor
 from .models import Task
 from .storage import cleanup_old_tasks
 
@@ -563,11 +563,12 @@ class PoolTUI(App):
         ("a", "add_task", "Add Task"),
     ]
 
-    def __init__(self, pool_file: Path, max_concurrent: int = 1) -> None:
+    def __init__(self, pool_file: Path, max_concurrent: int = 1, cli_manager: "CLIManager | None" = None) -> None:
         """Initialize the TUI application."""
         super().__init__()
         self.pool_file = pool_file
         self.max_concurrent = max_concurrent
+        self.cli_manager = cli_manager
         self.executor: TaskExecutor | None = None
         self.selected_task: Task | None = None
 
@@ -616,7 +617,8 @@ class PoolTUI(App):
         """Called when app is mounted."""
         # Initialize executor
         self.executor = TaskExecutor(
-            self.pool_file, on_task_update=self._on_task_update, max_concurrent=self.max_concurrent
+            self.pool_file, on_task_update=self._on_task_update, max_concurrent=self.max_concurrent,
+            cli_manager=self.cli_manager
         )
 
         # Update task list widget with executor
@@ -852,7 +854,7 @@ class PoolTUI(App):
         self.exit()
 
 
-async def run_tui(pool_file: Path, max_concurrent: int = 1) -> None:
+async def run_tui(pool_file: Path, max_concurrent: int = 1, cli_manager: CLIManager | None = None) -> None:
     """Run the TUI application."""
-    app = PoolTUI(pool_file, max_concurrent=max_concurrent)
+    app = PoolTUI(pool_file, max_concurrent=max_concurrent, cli_manager=cli_manager)
     await app.run_async()
