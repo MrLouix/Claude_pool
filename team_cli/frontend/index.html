@@ -836,6 +836,58 @@
             min-height: 58px;
         }
 
+        /* ---- Project message thread ---- */
+        .project-msg {
+            padding: 10px 14px;
+            border-radius: var(--radius-lg);
+            margin-bottom: 10px;
+            border: 1px solid var(--color-border);
+        }
+        .project-msg-user {
+            background: #eff6ff;
+            border-color: var(--color-info-border);
+            margin-left: 15%;
+        }
+        .project-msg-assistant {
+            background: var(--color-surface-alt);
+            border-color: var(--color-border);
+            margin-right: 15%;
+        }
+        .project-msg-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 5px;
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+        }
+        .project-msg-role { font-weight: 700; color: var(--color-text-secondary); }
+        .project-msg-time { margin-left: auto; font-size: 0.6875rem; }
+        .project-msg-content { font-size: 0.875rem; color: var(--color-text-primary); line-height: 1.6; }
+
+        /* CLI badge shown on assistant messages */
+        .msg-cli-badge {
+            display: inline-block;
+            padding: 1px 7px;
+            border-radius: var(--radius-full);
+            font-size: 0.6875rem;
+            font-weight: 600;
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        /* CLI override select in project compose area */
+        #project-cli-select {
+            padding: 6px 8px;
+            border: 1px solid var(--color-border-dark);
+            border-radius: var(--radius-md);
+            font-family: inherit;
+            font-size: 0.8125rem;
+            background: var(--color-surface);
+            min-width: 140px;
+            flex-shrink: 0;
+        }
+
         /* ---- Task Detail Modal ---- */
         .task-detail-box { max-width: 640px; max-height: 85vh; overflow-y: auto; }
         .task-detail-body { display: grid; gap: 12px; padding: 20px; }
@@ -1588,6 +1640,27 @@
         <div class="chat-input-row">
             <textarea id="chat-input" rows="2" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" aria-label="Chat message"></textarea>
             <button class="btn-primary" id="btn-send-message" style="padding:8px 12px;font-size:18px;line-height:1;min-width:0;" aria-label="Send message">⬆</button>
+        </div>
+    </div>
+
+    <!-- PROJECT VIEW (hidden until hash = #project/<id>) -->
+    <div class="container" id="project-view" style="display:none;">
+        <div class="chat-header">
+            <button class="btn-back" id="btn-project-back">← Back</button>
+            <div class="chat-header-info">
+                <div class="chat-header-label" id="project-header-label">Project</div>
+                <div class="chat-header-dir" id="project-header-dir"></div>
+            </div>
+        </div>
+        <div class="message-thread" id="project-message-thread">
+            <div class="empty-state">No messages yet. Send one below to get started.</div>
+        </div>
+        <div class="chat-input-row" style="align-items:flex-end;gap:6px;">
+            <textarea id="project-input" rows="2" placeholder="Type a message… (Ctrl+Enter to send)" aria-label="Project message"></textarea>
+            <select id="project-cli-select" aria-label="CLI override">
+                <option value="">Auto (project default)</option>
+            </select>
+            <button class="btn-primary" id="btn-send-project-message" style="padding:8px 12px;font-size:18px;line-height:1;min-width:0;" aria-label="Send message">⬆</button>
         </div>
     </div>
 
@@ -2346,9 +2419,11 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         let currentTaskId = null;
         let taskSourceChatId = null;
         let lastTasks = [];
+        let currentProjectId = null;
         const dashboardView = document.getElementById('dashboard-view');
         const chatView = document.getElementById('chat-view');
         const taskView = document.getElementById('task-view');
+        const projectView = document.getElementById('project-view');
 
         function escapeHtml(s) {
             return String(s)
@@ -2388,6 +2463,8 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 showChatView(parts[1]);
             } else if (parts[0] === 'task') {
                 showTaskView(parts[1]);
+            } else if (parts[0] === 'project') {
+                showProjectView(parts[1]);
             } else {
                 showDashboardView();
             }
@@ -2396,18 +2473,22 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         function showDashboardView() {
             currentChatId = null;
             currentTaskId = null;
+            currentProjectId = null;
             dashboardView.style.display = '';
             chatView.style.display = 'none';
             taskView.style.display = 'none';
+            projectView.style.display = 'none';
             fetchChats();
         }
 
         function showChatView(chatId) {
             currentChatId = chatId;
             currentTaskId = null;
+            currentProjectId = null;
             dashboardView.style.display = 'none';
             chatView.style.display = '';
             taskView.style.display = 'none';
+            projectView.style.display = 'none';
             loadChatMeta(chatId);
             fetchMessages(chatId);
         }
@@ -2416,10 +2497,24 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             taskSourceChatId = currentChatId;
             currentTaskId = taskId;
             currentChatId = null;
+            currentProjectId = null;
             dashboardView.style.display = 'none';
             chatView.style.display = 'none';
             taskView.style.display = '';
+            projectView.style.display = 'none';
             loadTaskView(taskId);
+        }
+
+        function showProjectView(projectId) {
+            currentProjectId = projectId;
+            currentChatId = null;
+            currentTaskId = null;
+            dashboardView.style.display = 'none';
+            chatView.style.display = 'none';
+            taskView.style.display = 'none';
+            projectView.style.display = '';
+            loadProjectMeta(projectId);
+            fetchProjectMessages(projectId);
         }
 
         async function loadTaskView(taskId) {
@@ -2940,7 +3035,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 return `
                 <div class="chat-item">
                     <span style="font-size:20px;flex-shrink:0;">📁</span>
-                    <div class="chat-item-info" style="cursor:pointer;" onclick="alert('Project view coming soon')">
+                    <div class="chat-item-info" style="cursor:pointer;" onclick="navigate('project/${p.id}')">
                         <div class="chat-item-label" style="display:flex;align-items:center;gap:6px;">
                             ${escapeHtml(p.name)}${badge}
                         </div>
@@ -3024,6 +3119,101 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
 
         // Load projects on startup
         fetchProjects();
+
+        /* ---- Project view ---- */
+
+        async function loadProjectMeta(projectId) {
+            try {
+                const res = await fetch(`/api/projects/${projectId}`);
+                if (!res.ok) { navigate(''); return; }
+                const p = await res.json();
+                document.getElementById('project-header-label').textContent = p.name || 'Project';
+                document.getElementById('project-header-dir').textContent = p.directory || '';
+            } catch (e) { navigate(''); }
+        }
+
+        async function fetchProjectMessages(projectId) {
+            try {
+                const res = await fetch(`/api/projects/${projectId}/messages`);
+                if (!res.ok) return;
+                const msgs = await res.json();
+                renderProjectMessages(msgs);
+            } catch (e) { /* ignore */ }
+        }
+
+        function renderProjectMessages(messages) {
+            const el = document.getElementById('project-message-thread');
+            if (!messages.length) {
+                el.innerHTML = '<div class="empty-state">No messages yet. Send one below to get started.</div>';
+                return;
+            }
+            el.innerHTML = messages.map(m => {
+                const cls = m.role === 'user' ? 'project-msg project-msg-user' : 'project-msg project-msg-assistant';
+                const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+                const cliBadge = (m.role === 'assistant' && m.cli_used)
+                    ? `<span class="msg-cli-badge">${escapeHtml(m.cli_used)}</span>`
+                    : '';
+                return `<div class="${cls}">
+                    <div class="project-msg-header">
+                        <span class="project-msg-role">${m.role === 'user' ? 'You' : 'Assistant'}</span>
+                        ${cliBadge}
+                        <span class="project-msg-time">${escapeHtml(time)}</span>
+                    </div>
+                    <div class="project-msg-content">${renderText(m.content)}</div>
+                </div>`;
+            }).join('');
+            el.scrollTop = el.scrollHeight;
+        }
+
+        async function populateProjectCliSelect() {
+            try {
+                const res = await fetch('/api/clis');
+                if (!res.ok) return;
+                const clis = await res.json();
+                const sel = document.getElementById('project-cli-select');
+                sel.innerHTML = '<option value="">Auto (project default)</option>'
+                    + clis.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
+            } catch (e) { /* ignore */ }
+        }
+        populateProjectCliSelect();
+
+        document.getElementById('btn-project-back').addEventListener('click', () => navigate(''));
+
+        async function sendProjectMessage() {
+            if (!currentProjectId) return;
+            const input = document.getElementById('project-input');
+            const content = input.value.trim();
+            if (!content) return;
+            const cliOverride = document.getElementById('project-cli-select').value || null;
+            input.value = '';
+            input.disabled = true;
+            document.getElementById('btn-send-project-message').disabled = true;
+            try {
+                const body = { content, role: 'user' };
+                if (cliOverride) body.cli_used = cliOverride;
+                const res = await fetch(`/api/projects/${currentProjectId}/messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    logEvent(`Error sending message: ${(err.detail && err.detail.message) || JSON.stringify(err)}`, 'error');
+                }
+            } catch (e) {
+                logEvent(`Error sending message: ${e}`, 'error');
+            } finally {
+                input.disabled = false;
+                document.getElementById('btn-send-project-message').disabled = false;
+                input.focus();
+                fetchProjectMessages(currentProjectId);
+            }
+        }
+
+        document.getElementById('btn-send-project-message').addEventListener('click', sendProjectMessage);
+        document.getElementById('project-input').addEventListener('keydown', e => {
+            if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); sendProjectMessage(); }
+        });
 
         /* ---- Task View ---- */
         let tdEditMode = false;
