@@ -74,6 +74,10 @@ class ClaudeExecutor(BaseCLIExecutor):
         model: str,
     ) -> dict:
         """Run Claude CLI and return parsed output dict."""
+        import json
+        import tempfile
+        import os
+
         # Build command as specified
         cmd = [
             self.config.path,
@@ -85,6 +89,25 @@ class ClaudeExecutor(BaseCLIExecutor):
             "--model",
             model,
         ]
+        
+        # Add context if available (for multi-turn conversations)
+        ctx_file = None
+        if context:
+            try:
+                ctx_file = tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".json", dir=directory, delete=False
+                )
+                json.dump(context, ctx_file)
+                ctx_file.close()
+                cmd.extend(["--context", ctx_file.name])
+            except Exception:
+                if ctx_file:
+                    try:
+                        os.unlink(ctx_file.name)
+                    except OSError:
+                        pass
+                ctx_file = None
+        
         # Add extra args from config if present
         if self.config.args_template:
             # For now, just append any extra template args
@@ -119,6 +142,13 @@ class ClaudeExecutor(BaseCLIExecutor):
             self._last_exit_code = -1
             self._last_stderr = str(e)
             return {"result": f"Execution error: {str(e)}", "parse_error": True}
+        finally:
+            # Clean up temp context file
+            if ctx_file:
+                try:
+                    os.unlink(ctx_file.name)
+                except OSError:
+                    pass
 
     def check_rate_limit(self) -> bool:
         """Check if the last execution hit a rate limit."""
@@ -618,11 +648,16 @@ class TaskExecutor:
             # Get model from task or use default
             effective_model = task.model if task.model else ""
             
+            # Get context from task if available (for project messages)
+            context = []
+            if task.json_output and isinstance(task.json_output, dict):
+                context = task.json_output.get("context", [])
+            
             # Execute via CLIManager (runs in thread pool to avoid blocking)
             result = await asyncio.to_thread(
                 self.cli_manager.execute,
                 prompt=task.prompt,
-                context=[],  # TODO: Add context support if needed
+                context=context,
                 directory=str(task.directory),
                 model=effective_model,
             )

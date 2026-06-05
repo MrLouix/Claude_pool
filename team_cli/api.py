@@ -26,13 +26,15 @@ from .api_models import (
     PoolStatusResponse,
     ProjectEntry,
     ProjectInput,
+    ProjectMessageInput,
+    ProjectMessageResponse,
     TaskDetailResponse,
     TaskInput,
     TaskPatchInput,
     TaskResponse,
 )
 from .executor import CLIManager, TaskExecutor
-from .models import Bucket, PoolState, Task
+from .models import Bucket, PoolState, Project, ProjectMessage, Task
 from .cli_detector import detect_clis
 from .config import load_cli_configs
 
@@ -801,6 +803,241 @@ class ApiServer:
             )
             await self._broadcast_pool_status()
             return msg
+
+        # ── Projects ──────────────────────────────────────────────
+
+        @self.app.get("/api/projects")
+        async def list_projects() -> list[ProjectEntry]:
+            """List all projects."""
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+            
+            from .storage import load_projects, load_project_messages
+            
+            db_path = self.executor.pool.pool_file.with_suffix(".db")
+            projects = load_projects(db_path)
+            
+            result = []
+            for project in projects:
+                messages = load_project_messages(db_path, project.id)
+                result.append(
+                    ProjectEntry(
+                        id=project.id,
+                        name=project.name,
+                        directory=project.directory,
+                        created_at=project.created_at.isoformat(),
+                        default_cli=project.default_cli,
+                        allow_cli_switch=project.allow_cli_switch,
+                        message_count=len(messages),
+                    )
+                )
+            result.sort(key=lambda p: p.created_at, reverse=True)
+            return result
+
+        @self.app.post("/api/projects", status_code=201)
+        async def create_project(project_input: ProjectInput) -> ProjectEntry:
+            """Create a new project."""
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+            
+            _validate_directory(project_input.directory)
+            
+            from .storage import save_project
+            
+            db_path = self.executor.pool.pool_file.with_suffix(".db")
+            
+            project = Project(
+                id=f"proj_{_uuid.uuid4().hex[:8]}",
+                name=project_input.name,
+                directory=project_input.directory,
+                created_at=datetime.now(),
+                default_cli=project_input.default_cli,
+                allow_cli_switch=project_input.allow_cli_switch,
+            )
+            save_project(db_path, project)
+            
+            await self._broadcast_event({
+                "event": "project_created",
+                "project": {
+                    "id": project.id,
+                    "name": project.name,
+                    "directory": project.directory,
+                    "created_at": project.created_at.isoformat(),
+                }
+            })
+            
+            return ProjectEntry(
+                id=project.id,
+                name=project.name,
+                directory=project.directory,
+                created_at=project.created_at.isoformat(),
+                default_cli=project.default_cli,
+                allow_cli_switch=project.allow_cli_switch,
+                message_count=0,
+            )
+
+        @self.app.get("/api/projects/{project_id}")
+        async def get_project(project_id: str) -> ProjectEntry:
+            """Get a single project by ID."""
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+            
+            from .storage import load_project, load_project_messages
+            
+            db_path = self.executor.pool.pool_file.with_suffix(".db")
+            project = load_project(db_path, project_id)
+            
+            if project is None:
+                raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
+            
+            messages = load_project_messages(db_path, project_id)
+            
+            return ProjectEntry(
+                id=project.id,
+                name=project.name,
+                directory=project.directory,
+                created_at=project.created_at.isoformat(),
+                default_cli=project.default_cli,
+                allow_cli_switch=project.allow_cli_switch,
+                message_count=len(messages),
+            )
+
+        @self.app.delete("/api/projects/{project_id}")
+        async def delete_project_endpoint(project_id: str) -> dict:
+            """Delete a project and all its messages."""
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+            
+            from .storage import delete_project as delete_project_db, load_project
+            
+            db_path = self.executor.pool.pool_file.with_suffix(".db")
+            project = load_project(db_path, project_id)
+            
+            if project is None:
+                raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
+            
+            delete_project_db(db_path, project_id)
+            
+            await self._broadcast_event({
+                "event": "project_deleted",
+                "project_id": project_id,
+            })
+            
+            return {"deleted": True, "project_id": project_id}
+
+        @self.app.get("/api/projects/{project_id}/messages")
+        async def list_project_messages(project_id: str) -> list[ProjectMessageResponse]:
+            """List all messages for a project."""
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+            
+            from .storage import load_project, load_project_messages
+            
+            db_path = self.executor.pool.pool_file.with_suffix(".db")
+            project = load_project(db_path, project_id)
+            
+            if project is None:
+                raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
+            
+            messages = load_project_messages(db_path, project_id)
+            
+            return [
+                ProjectMessageResponse(
+                    id=m.id,
+                    project_id=m.project_id,
+                    content=m.content,
+                    role=m.role,
+                    cli_used=m.cli_used,
+                    linked_message_id=m.linked_message_id,
+                    metadata=m.metadata,
+                    created_at=m.created_at.isoformat(),
+                )
+                for m in messages
+            ]
+
+        @self.app.post("/api/projects/{project_id}/messages", status_code=201)
+        async def create_project_message(
+            project_id: str, message_input: ProjectMessageInput
+        ) -> ProjectMessageResponse:
+            """Create a new message in a project."""
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+            
+            from .storage import load_project, save_project_message, build_context
+            
+            db_path = self.executor.pool.pool_file.with_suffix(".db")
+            project = load_project(db_path, project_id)
+            
+            if project is None:
+                raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
+            
+            message = ProjectMessage(
+                id=f"msg_{_uuid.uuid4().hex[:8]}",
+                project_id=project_id,
+                content=message_input.content,
+                role=message_input.role,
+                cli_used=message_input.cli_used,
+                linked_message_id=message_input.linked_message_id,
+                metadata={},
+                created_at=datetime.now(),
+            )
+            
+            save_project_message(db_path, message)
+            
+            # Build context for this message
+            context = build_context(message, db_path)
+            
+            # If this is a user message, create and queue a Task to execute it
+            if message.role == "user":
+                task_id = _generate_task_id()
+                directory = Path(project.directory)
+                
+                # Build args from message input
+                args: list[str] = []
+                if message_input.cli_used:
+                    args.extend(["--cli", message_input.cli_used])
+                
+                # Create task with context embedded in prompt or as separate field
+                # The executor will use the context when executing
+                new_task = Task(
+                    id=task_id,
+                    prompt=message.content,
+                    directory=directory,
+                    args=args,
+                    bucket_id=f"proj_{project_id}",  # Use project-based bucket
+                    priority=2,
+                    model=message_input.cli_used or "",
+                )
+                # Store context in task for executor to use
+                new_task.json_output = {"context": context} if context else None
+                self.executor.pool.tasks.append(new_task)
+                self.executor._save_state()
+                
+                await self._broadcast_pool_status()
+            
+            await self._broadcast_event({
+                "event": "project_message_created",
+                "project_id": project_id,
+                "message": {
+                    "id": message.id,
+                    "content": message.content,
+                    "role": message.role,
+                    "linked_message_id": message.linked_message_id,
+                    "created_at": message.created_at.isoformat(),
+                },
+                "context": context,
+            })
+            
+            return ProjectMessageResponse(
+                id=message.id,
+                project_id=message.project_id,
+                content=message.content,
+                role=message.role,
+                cli_used=message.cli_used,
+                linked_message_id=message.linked_message_id,
+                metadata=message.metadata,
+                created_at=message.created_at.isoformat(),
+            )
 
         # ── WebSocket ─────────────────────────────────────────────
 

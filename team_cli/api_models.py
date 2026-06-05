@@ -13,13 +13,42 @@ def _validate_priority(v: int) -> int:
 
 
 class ProjectInput(BaseModel):
+    """Input model for creating a project."""
     name: str
-    github_url: str
     directory: str
+    default_cli: Optional[str] = None
+    allow_cli_switch: bool = True
 
 
-# ProjectEntry has identical fields to ProjectInput; alias for response readability.
-ProjectEntry = ProjectInput
+class ProjectEntry(BaseModel):
+    """Response model for a project."""
+    id: str
+    name: str
+    directory: str
+    created_at: str
+    default_cli: Optional[str] = None
+    allow_cli_switch: bool = True
+    message_count: int = 0
+
+
+class ProjectMessageInput(BaseModel):
+    """Input model for creating a project message."""
+    content: str
+    role: str = "user"  # "user" or "assistant"
+    cli_used: Optional[str] = None
+    linked_message_id: Optional[str] = None  # ID of parent message for thread continuation
+
+
+class ProjectMessageResponse(BaseModel):
+    """Response model for a project message."""
+    id: str
+    project_id: str
+    content: str
+    role: str
+    cli_used: Optional[str] = None
+    linked_message_id: Optional[str] = None
+    metadata: dict = {}
+    created_at: str
 
 
 class TaskInput(BaseModel):

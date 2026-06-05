@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .database import DatabaseManager
-from .models import MAIN_BUCKET_LABEL, Bucket, PoolState, Task
+from .models import MAIN_BUCKET_LABEL, Bucket, PoolState, Project, ProjectMessage, Task
 
 logger = logging.getLogger(__name__)
 
@@ -231,3 +231,209 @@ def cleanup_old_tasks(state: PoolState, max_age_hours: int = _DEFAULT_CLEANUP_AG
         save_pool(state)
 
     return removed_count
+
+
+# ---------------------------------------------------------------------------
+# Projects
+# ---------------------------------------------------------------------------
+
+def load_projects(db_path: Path) -> list[Project]:
+    """Load all projects from the database."""
+    async def _load() -> list[Project]:
+        db = DatabaseManager(db_path)
+        await db.init()
+        rows = await db.get_all_projects()
+        return [Project.from_dict(row) for row in rows]
+
+    return _run_async(_load())
+
+
+def load_project(db_path: Path, project_id: str) -> Project | None:
+    """Load a single project by ID from the database."""
+    async def _load() -> Project | None:
+        db = DatabaseManager(db_path)
+        await db.init()
+        row = await db.get_project(project_id)
+        if row is None:
+            return None
+        return Project.from_dict(row)
+
+    return _run_async(_load())
+
+
+def save_project(db_path: Path, project: Project) -> None:
+    """Save a project to the database."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    async def _save() -> None:
+        db = DatabaseManager(db_path)
+        await db.init()
+        await db.upsert_project(project.to_dict())
+
+    _run_async(_save())
+
+
+def delete_project(db_path: Path, project_id: str) -> None:
+    """Delete a project and all its messages from the database."""
+    async def _delete() -> None:
+        db = DatabaseManager(db_path)
+        await db.init()
+        await db.delete_project(project_id)
+
+    _run_async(_delete())
+
+
+# ---------------------------------------------------------------------------
+# Project Messages
+# ---------------------------------------------------------------------------
+
+def load_project_messages(db_path: Path, project_id: str) -> list[ProjectMessage]:
+    """Load all messages for a project from the database."""
+    async def _load() -> list[ProjectMessage]:
+        db = DatabaseManager(db_path)
+        await db.init()
+        rows = await db.get_project_messages(project_id)
+        return [ProjectMessage.from_dict(row) for row in rows]
+
+    return _run_async(_load())
+
+
+def save_project_message(db_path: Path, message: ProjectMessage) -> None:
+    """Save a project message to the database."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    async def _save() -> None:
+        db = DatabaseManager(db_path)
+        await db.init()
+        await db.upsert_project_message(message.to_dict())
+
+    _run_async(_save())
+
+
+def delete_project_message(db_path: Path, message_id: str) -> None:
+    """Delete a project message from the database."""
+    async def _delete() -> None:
+        db = DatabaseManager(db_path)
+        await db.init()
+        await db.delete_project_message(message_id)
+
+    _run_async(_delete())
+
+
+def get_message_history(db_path: Path, message_id: str, limit: int = 3) -> list[ProjectMessage]:
+    """Load message history following linked_message_id chain.
+    
+    Returns up to `limit` messages from the chain, ordered from oldest to newest.
+    """
+    async def _load() -> list[ProjectMessage]:
+        db = DatabaseManager(db_path)
+        await db.init()
+        rows = await db.get_message_history(message_id, limit)
+        return [ProjectMessage.from_dict(row) for row in rows]
+
+    return _run_async(_load())
+
+
+def build_context(message: ProjectMessage, db_path: Path) -> list[dict[str, str]]:
+    """Build context for a message from its linked history.
+    
+    If linked_message_id is set, retrieves up to 3 previous messages from the thread.
+    Otherwise returns empty list (new thread).
+    
+    Returns:
+        List of context messages as {"role": "user"|"assistant", "content": str} dicts,
+        ordered from oldest to newest.
+    """
+    if message.linked_message_id:
+        history = get_message_history(db_path, message.linked_message_id, limit=3)
+        return [{"role": m.role, "content": m.content} for m in history]
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Migration: Chats (buckets) → Projects
+# ---------------------------------------------------------------------------
+
+def migrate_chats_to_projects(db_path: Path) -> int:
+    """Migrate chat buckets to projects.
+
+    For each bucket of type 'chat':
+    - Creates a Project with allow_cli_switch=False
+    - Migrates all tasks in that bucket to ProjectMessage
+
+    Returns the number of projects created.
+    """
+    async def _migrate() -> int:
+        db = DatabaseManager(db_path)
+        await db.init()
+
+        # Get all buckets of type 'chat'
+        buckets = await db.get_all_buckets()
+        chat_buckets = [b for b in buckets if b.get("type") == "chat"]
+
+        if not chat_buckets:
+            logger.info("No chat buckets to migrate.")
+            return 0
+
+        logger.info(f"Found {len(chat_buckets)} chat buckets to migrate to projects.")
+
+        # Get all tasks once
+        all_tasks = await db.get_all_tasks()
+
+        migrated_count = 0
+
+        for bucket in chat_buckets:
+            bucket_id = bucket["id"]
+            bucket_label = bucket.get("label", bucket_id)
+            bucket_directory = bucket.get("directory", "/")
+            bucket_created_at = bucket.get("created_at", datetime.now().isoformat())
+
+            # Create project
+            project = {
+                "id": bucket_id,
+                "name": bucket_label,
+                "directory": bucket_directory,
+                "created_at": bucket_created_at,
+                "default_cli": None,
+                "allow_cli_switch": False,
+            }
+            await db.upsert_project(project)
+
+            # Migrate tasks to project messages
+            bucket_tasks = [t for t in all_tasks if t.get("bucket_id") == bucket_id]
+
+            for task in bucket_tasks:
+                # Determine role: user for prompts, assistant for responses
+                # Tasks in chat buckets: user messages have status='success' typically
+                # This is a simplification - adjust based on actual data structure
+                role = "user"  # Default to user, can be refined
+
+                # Check if this looks like an assistant response
+                if task.get("json_output") and task.get("status") == "success":
+                    role = "assistant"
+
+                message = {
+                    "id": task["id"],
+                    "project_id": bucket_id,
+                    "content": task.get("prompt", ""),
+                    "role": role,
+                    "cli_used": task.get("provider"),
+                    "linked_message_id": None,  # No linking for initial migration
+                    "metadata": {
+                        "original_status": task.get("status"),
+                        "exit_code": task.get("exit_code"),
+                        "duration_ms": task.get("duration_ms"),
+                        "tokens_used": task.get("json_output", {}).get("usage", {}).get("total_tokens") if isinstance(task.get("json_output"), dict) else None,
+                        "model": task.get("model"),
+                        "created_at": task.get("created_at"),
+                    },
+                    "created_at": task.get("created_at", datetime.now().isoformat()),
+                }
+                await db.upsert_project_message(message)
+
+            migrated_count += 1
+            logger.info(f"Migrated chat bucket '{bucket_label}' ({bucket_id}) to project with {len(bucket_tasks)} messages.")
+
+        return migrated_count
+
+    return _run_async(_migrate())

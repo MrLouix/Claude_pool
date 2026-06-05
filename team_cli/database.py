@@ -43,7 +43,33 @@ CREATE TABLE IF NOT EXISTS tasks (
     provider         TEXT,
     context_messages TEXT DEFAULT '[]',
     rerouted_from    TEXT,
-    rerouted_to      TEXT
+    rerouted_to      TEXT,
+    model            TEXT DEFAULT ''
+)
+"""
+
+_CREATE_PROJECTS = """
+CREATE TABLE IF NOT EXISTS projects (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    directory       TEXT NOT NULL,
+    created_at      TEXT NOT NULL,
+    default_cli     TEXT,
+    allow_cli_switch INTEGER NOT NULL DEFAULT 1
+)
+"""
+
+_CREATE_PROJECT_MESSAGES = """
+CREATE TABLE IF NOT EXISTS project_messages (
+    id              TEXT PRIMARY KEY,
+    project_id      TEXT NOT NULL,
+    content         TEXT NOT NULL,
+    role            TEXT NOT NULL,
+    cli_used        TEXT,
+    linked_message_id TEXT,
+    metadata        TEXT NOT NULL DEFAULT '{}',
+    created_at      TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 )
 """
 
@@ -69,6 +95,8 @@ class DatabaseManager:
             await db.execute(_CREATE_POOL_META)
             await db.execute(_CREATE_BUCKETS)
             await db.execute(_CREATE_TASKS)
+            await db.execute(_CREATE_PROJECTS)
+            await db.execute(_CREATE_PROJECT_MESSAGES)
             await db.execute(_INSERT_DEFAULT_META)
             await db.commit()
 
@@ -196,6 +224,146 @@ class DatabaseManager:
                 rows = await cur.fetchall()
         return [dict(row) for row in rows]
 
+    # ------------------------------------------------------------------
+    # Projects
+    # ------------------------------------------------------------------
+
+    async def upsert_project(self, project_dict: dict[str, Any]) -> None:
+        """Insert or replace a project row."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT OR REPLACE INTO projects
+                    (id, name, directory, created_at, default_cli, allow_cli_switch)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    project_dict["id"],
+                    project_dict["name"],
+                    project_dict["directory"],
+                    project_dict["created_at"],
+                    project_dict.get("default_cli"),
+                    1 if project_dict.get("allow_cli_switch", True) else 0,
+                ),
+            )
+            await db.commit()
+
+    async def get_all_projects(self) -> list[dict[str, Any]]:
+        """Return all projects ordered by created_at ASC."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM projects ORDER BY created_at ASC") as cur:
+                rows = await cur.fetchall()
+        return [dict(row) for row in rows]
+
+    async def get_project(self, project_id: str) -> dict[str, Any] | None:
+        """Get a single project by ID."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM projects WHERE id = ?", (project_id,)
+            ) as cur:
+                row = await cur.fetchone()
+        if row is None:
+            return None
+        return dict(row)
+
+    async def delete_project(self, project_id: str) -> None:
+        """Delete a project and all its messages (cascade)."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+            await db.commit()
+
+    # ------------------------------------------------------------------
+    # Project Messages
+    # ------------------------------------------------------------------
+
+    async def upsert_project_message(self, message_dict: dict[str, Any]) -> None:
+        """Insert or replace a project message row. Metadata is JSON-serialized."""
+        metadata = message_dict.get("metadata", {})
+        
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT OR REPLACE INTO project_messages
+                    (id, project_id, content, role, cli_used, linked_message_id, metadata, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    message_dict["id"],
+                    message_dict["project_id"],
+                    message_dict["content"],
+                    message_dict["role"],
+                    message_dict.get("cli_used"),
+                    message_dict.get("linked_message_id"),
+                    json.dumps(metadata) if not isinstance(metadata, str) else metadata,
+                    message_dict["created_at"],
+                ),
+            )
+            await db.commit()
+
+    async def get_project_messages(self, project_id: str) -> list[dict[str, Any]]:
+        """Return all messages for a project ordered by created_at ASC."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM project_messages WHERE project_id = ? ORDER BY created_at ASC",
+                (project_id,),
+            ) as cur:
+                rows = await cur.fetchall()
+        return [_deserialize_project_message(dict(row)) for row in rows]
+
+    async def get_project_message(self, message_id: str) -> dict[str, Any] | None:
+        """Get a single project message by ID."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM project_messages WHERE id = ?", (message_id,)
+            ) as cur:
+                row = await cur.fetchone()
+        if row is None:
+            return None
+        return _deserialize_project_message(dict(row))
+
+    async def delete_project_message(self, message_id: str) -> None:
+        """Delete a single project message."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM project_messages WHERE id = ?", (message_id,))
+            await db.commit()
+
+    async def get_message_history(self, message_id: str, limit: int = 3) -> list[dict[str, Any]]:
+        """Get message history by following linked_message_id chain.
+        
+        Returns up to `limit` messages from the chain, INCLUDING the given message_id
+        and going backwards through linked_message_id.
+        Results are ordered from oldest to newest.
+        
+        Example: If msg3 has linked_message_id=msg2, and msg2 has linked_message_id=msg1:
+        - get_message_history('msg3', limit=3) returns [msg1, msg2, msg3]
+        - get_message_history('msg3', limit=2) returns [msg2, msg3]
+        """
+        history: list[dict[str, Any]] = []
+        current_id = message_id
+        
+        async with aiosqlite.connect(self.db_path) as db:
+            for _ in range(limit):
+                db.row_factory = aiosqlite.Row
+                async with db.execute(
+                    "SELECT * FROM project_messages WHERE id = ?", (current_id,)
+                ) as cur:
+                    row = await cur.fetchone()
+                if row is None:
+                    break
+                message = _deserialize_project_message(dict(row))
+                # Prepend to maintain chronological order (oldest first)
+                history.insert(0, message)
+                # Move to parent
+                current_id = message.get("linked_message_id") or ""
+                if not current_id:
+                    break
+        
+        return history
+
     async def close(self) -> None:
         """No-op: connections are opened/closed per operation."""
 
@@ -221,4 +389,15 @@ def _deserialize_task(row: dict[str, Any]) -> dict[str, Any]:
         except (json.JSONDecodeError, ValueError):
             row["json_output"] = None
 
+    return row
+
+
+def _deserialize_project_message(row: dict[str, Any]) -> dict[str, Any]:
+    """Parse JSON-encoded metadata field back to Python dict."""
+    metadata_raw = row.get("metadata")
+    if isinstance(metadata_raw, str):
+        try:
+            row["metadata"] = json.loads(metadata_raw)
+        except (json.JSONDecodeError, ValueError):
+            row["metadata"] = {}
     return row
