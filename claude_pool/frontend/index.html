@@ -84,6 +84,37 @@
 .text-2xl  { font-size: 1.5rem; }
 .text-3xl  { font-size: 2rem; }
 
+        /* ── Focus visible (keyboard accessibility) ── */
+        :focus-visible {
+            outline: 2px solid var(--color-brand-primary);
+            outline-offset: 2px;
+        }
+
+        button:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.4);
+        }
+
+        input:focus-visible,
+        textarea:focus-visible,
+        select:focus-visible {
+            outline: none;
+            border-color: var(--color-brand-primary);
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+        }
+
+        .dir-item:focus-visible {
+            background: var(--color-surface-hover);
+            outline: 2px solid var(--color-brand-primary);
+            outline-offset: -2px;
+        }
+
+        .task-item:focus-visible,
+        .message-bubble:focus-visible {
+            outline: 2px solid var(--color-brand-primary);
+            outline-offset: 2px;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -1110,6 +1141,13 @@
             .chat-item .task-actions button {
                 flex: 1;
             }
+        }
+
+        /* ── Minimum touch target size (WCAG 2.5.5) ── */
+        button,
+        .task-actions button,
+        .btn-instant-retry {
+            min-height: 2.75rem;
         }
 
         /* ── Overscroll containment ── */
