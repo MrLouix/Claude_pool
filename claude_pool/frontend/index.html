@@ -1274,7 +1274,7 @@
                     <div class="form-group">
                         <label for="directory">Directory (required)</label>
                         <div class="directory-input-row">
-                            <input type="text" id="directory" name="directory" placeholder="/path/to/directory" required>
+                            <input type="text" id="directory" name="directory" placeholder="/path/to/directory" required autocomplete="off" spellcheck="false" inputmode="url">
                             <button type="button" class="btn-browse" id="btn-browse-dir" title="Browse folders" aria-label="Browse directory">⋯</button>
                         </div>
                     </div>
@@ -1484,13 +1484,13 @@
             </div>
             <div class="modal-body">
                 <div class="plan-section">
-                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Chat name</label>
+                    <label for="new-chat-label" style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Chat name</label>
                     <input type="text" id="new-chat-label" placeholder="My Feature" aria-label="Chat name" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px;font-family:inherit;font-size:14px;box-sizing:border-box;">
                 </div>
                 <div class="plan-section">
-                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Working Directory</label>
+                    <label for="new-chat-directory" style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Working Directory</label>
                     <div class="plan-dir-row">
-                        <input type="text" id="new-chat-directory" placeholder="/path/to/project" aria-label="Working directory">
+                        <input type="text" id="new-chat-directory" placeholder="/path/to/project" aria-label="Working directory" autocomplete="off" spellcheck="false" inputmode="url">
                         <button type="button" class="btn-browse" id="btn-new-chat-browse" title="Browse folders" aria-label="Browse directory">⋯</button>
                     </div>
                 </div>
@@ -1515,7 +1515,7 @@
                     <div id="chat-plan-dir-display" style="padding:8px 10px;border:1px solid #eee;border-radius:5px;font-family:monospace;font-size:13px;color:#666;background:#f9f9f9;"></div>
                 </div>
                 <div class="plan-section">
-                    <label style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Coding Specification</label>
+                    <label for="chat-plan-spec" style="display:block;font-weight:600;color:#333;margin-bottom:5px;font-size:14px;">Coding Specification</label>
                     <textarea id="chat-plan-spec" aria-label="Coding specification" rows="7" placeholder="Describe the feature or task in as much detail as possible…"
                         style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px;font-family:inherit;font-size:14px;resize:vertical;box-sizing:border-box;"></textarea>
                 </div>
@@ -1575,14 +1575,14 @@
             </div>
             <div class="modal-body">
                 <div class="plan-section">
-                    <label>Working Directory</label>
+                    <label for="plan-directory">Working Directory</label>
                     <div class="plan-dir-row">
-                        <input type="text" id="plan-directory" placeholder="/path/to/project" aria-label="Working directory">
+                        <input type="text" id="plan-directory" placeholder="/path/to/project" aria-label="Working directory" autocomplete="off" spellcheck="false" inputmode="url">
                         <button type="button" class="btn-browse" id="btn-run-plan-browse" title="Browse folders" aria-label="Browse directory">⋯</button>
                     </div>
                 </div>
                 <div class="plan-section">
-                    <label>Coding Specification</label>
+                    <label for="plan-spec">Coding Specification</label>
                     <textarea id="plan-spec" aria-label="Coding specification" placeholder="Describe what you want to build. Claude will analyze this, define sequential implementation steps, and enqueue each as a separate Claude Pool task."></textarea>
                 </div>
                 <div class="plan-section">
@@ -1643,6 +1643,37 @@
     </div>
 
     <script>
+        /* ---- Keyboard Utilities ---- */
+        function trapFocus(modal) {
+            const focusable = modal.querySelectorAll(
+                'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
+            );
+            if (!focusable.length) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            first.focus();
+            function onKeyDown(e) {
+                if (e.key !== 'Tab') return;
+                if (e.shiftKey) {
+                    if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+                } else {
+                    if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+                }
+            }
+            modal.addEventListener('keydown', onKeyDown);
+            modal._removeTrapFocus = () => modal.removeEventListener('keydown', onKeyDown);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                const t = e.target;
+                if (t.matches('.dir-item, .task-item, .message-bubble')) {
+                    e.preventDefault();
+                    t.click();
+                }
+            }
+        });
+
         let ws = null;
         const wsStatus = document.getElementById('ws-status');
         const eventLog = document.getElementById('event-log');
@@ -1854,7 +1885,7 @@
 
         function taskItemHtml(task) {
             return `
-                <div class="task-item" data-task-id="${task.id}" onclick="navigate('task/${task.id}')" style="cursor:pointer;">
+                <div class="task-item" data-task-id="${task.id}" onclick="navigate('task/${task.id}')" style="cursor:pointer;" tabindex="0">
                     <div class="task-info">
                         <div class="task-id">${task.id}</div>
                         <div class="task-prompt">${escapeHtml(task.prompt.substring(0, 100))}${task.prompt.length > 100 ? '…' : ''}</div>
@@ -1974,12 +2005,16 @@
         function openDirModal(startPath) {
             currentModalPath = startPath || '/home/ai_agent';
             selectedPath = currentModalPath;
+            dirModal._openerElement = document.activeElement;
             dirModal.classList.add('active');
             loadDir(currentModalPath);
+            trapFocus(dirModal);
         }
 
         function closeDirModal() {
             dirModal.classList.remove('active');
+            dirModal._removeTrapFocus?.();
+            dirModal._openerElement?.focus();
         }
 
         async function loadDir(path) {
@@ -2018,7 +2053,7 @@
             for (const entry of entries) {
                 const fullPath = basePath + '/' + entry.name;
                 const escaped = fullPath.replace(/'/g, "\\'");
-                html += `<div class="dir-item" onclick="navigateDir('${escaped}')">
+                html += `<div class="dir-item" onclick="navigateDir('${escaped}')" tabindex="0">
                     <span class="dir-icon">📁</span>
                     <span class="dir-name">${entry.name}</span>
                     <span class="dir-arrow">›</span>
@@ -2077,8 +2112,16 @@
         /* ---- Run Dev Plan ---- */
         const runPlanModal = document.getElementById('run-plan-modal');
 
-        function openRunPlanModal() { runPlanModal.classList.add('active'); }
-        function closeRunPlanModal() { runPlanModal.classList.remove('active'); }
+        function openRunPlanModal() {
+            runPlanModal._openerElement = document.activeElement;
+            runPlanModal.classList.add('active');
+            trapFocus(runPlanModal);
+        }
+        function closeRunPlanModal() {
+            runPlanModal.classList.remove('active');
+            runPlanModal._removeTrapFocus?.();
+            runPlanModal._openerElement?.focus();
+        }
 
         document.getElementById('btn-run-plan').addEventListener('click', openRunPlanModal);
         document.getElementById('run-plan-close').addEventListener('click', closeRunPlanModal);
@@ -2314,8 +2357,16 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
 
         /* ---- New Chat modal ---- */
         const newChatModal = document.getElementById('new-chat-modal');
-        function openNewChatModal() { newChatModal.classList.add('active'); }
-        function closeNewChatModal() { newChatModal.classList.remove('active'); }
+        function openNewChatModal() {
+            newChatModal._openerElement = document.activeElement;
+            newChatModal.classList.add('active');
+            trapFocus(newChatModal);
+        }
+        function closeNewChatModal() {
+            newChatModal.classList.remove('active');
+            newChatModal._removeTrapFocus?.();
+            newChatModal._openerElement?.focus();
+        }
 
         document.getElementById('btn-new-chat').addEventListener('click', openNewChatModal);
         document.getElementById('new-chat-close').addEventListener('click', closeNewChatModal);
@@ -2409,7 +2460,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 const retryBtn = m.status === 'failed'
                     ? `<button class="btn-success" style="font-size:12px;padding:5px 10px;" onclick="event.stopPropagation();retryMessage('${m.id}')">Retry</button>` : '';
                 return `
-                    <div class="message-bubble ${m.status}" data-msg-id="${m.id}" style="cursor:pointer;" onclick="navigate('task/${m.id}')">
+                    <div class="message-bubble ${m.status}" data-msg-id="${m.id}" style="cursor:pointer;" tabindex="0" onclick="navigate('task/${m.id}')">
                         <div class="message-prompt">${escapeHtml(content.substring(0, 200))}${content.length > 200 ? '…' : ''}</div>
                         <div class="message-meta">
                             <span class="task-status ${m.status}">${m.status}</span>
@@ -2430,6 +2481,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             if (emptyState) emptyState.remove();
             const div = document.createElement('div');
             div.className = 'message-bubble pending';
+            div.tabIndex = 0;
             div.dataset.msgId = tempId;
             div.innerHTML = `
                 <div class="message-prompt">${escapeHtml(content.substring(0, 200))}${content.length > 200 ? '…' : ''}</div>
@@ -2544,9 +2596,15 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         const chatPlanSpecInput = document.getElementById('chat-plan-spec');
         const btnChatRunPlanConfirm = document.getElementById('btn-chat-run-plan-confirm');
 
-        function openChatRunPlanModal() { chatRunPlanModal.classList.add('active'); }
+        function openChatRunPlanModal() {
+            chatRunPlanModal._openerElement = document.activeElement;
+            chatRunPlanModal.classList.add('active');
+            trapFocus(chatRunPlanModal);
+        }
         function closeChatRunPlanModal() {
             chatRunPlanModal.classList.remove('active');
+            chatRunPlanModal._removeTrapFocus?.();
+            chatRunPlanModal._openerElement?.focus();
             chatPlanSpecInput.value = '';
             btnChatRunPlanConfirm.disabled = true;
         }
@@ -2555,6 +2613,15 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         document.getElementById('chat-run-plan-close').addEventListener('click', closeChatRunPlanModal);
         document.getElementById('chat-run-plan-cancel').addEventListener('click', closeChatRunPlanModal);
         chatRunPlanModal.addEventListener('click', e => { if (e.target === chatRunPlanModal) closeChatRunPlanModal(); });
+
+        /* ---- Global Escape handler ---- */
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            if (dirModal.classList.contains('active')) { closeDirModal(); return; }
+            if (runPlanModal.classList.contains('active')) { closeRunPlanModal(); return; }
+            if (newChatModal.classList.contains('active')) { closeNewChatModal(); return; }
+            if (chatRunPlanModal.classList.contains('active')) { closeChatRunPlanModal(); return; }
+        });
 
         chatPlanSpecInput.addEventListener('input', () => {
             btnChatRunPlanConfirm.disabled = !chatPlanSpecInput.value.trim();
