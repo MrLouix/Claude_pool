@@ -11,6 +11,19 @@ BucketType = Literal["cli", "chat"]
 MAIN_BUCKET_LABEL: str = "CLI / Dashboard"
 
 
+@dataclass
+class CLIConfig:
+    """Configuration for an AI CLI tool."""
+
+    name: str  # e.g. "claude", "mistral"
+    path: str  # absolute path to binary
+    models: list[str]  # available model names
+    cli_type: str  # e.g. "anthropic", "mistral", "custom"
+    default_model: str = ""
+    args_template: str = ""  # for custom CLIs: "{prompt}", "{context}", "{model}"
+    enabled: bool = True
+
+
 def _coerce_int(value: Any, default: int) -> int:
     """Coerce value to int, returning default if value is None."""
     return int(value) if value is not None else default
