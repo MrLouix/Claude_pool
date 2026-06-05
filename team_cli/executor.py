@@ -12,11 +12,13 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from .concurrency import TaskSemaphore
-from .models import CLIConfig, PoolState, Task
+from .models import CLIConfig, PoolState, Project, ProjectMessage, Task
 from .parser import parse_claude_output
-from .storage import cleanup_old_tasks, load_pool, save_pool
+from .storage import build_context, cleanup_old_tasks, load_pool, save_pool
 
 logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 5
 
 # Rate limit patterns (used by both TaskExecutor and CLI executors)
 _RATE_LIMIT_PATTERNS = (
@@ -420,6 +422,89 @@ class CLIManager:
                 continue
             return executor
         return None
+
+    def get_executor_by_name(self, name: str) -> "BaseCLIExecutor | None":
+        """Return the executor whose config.name matches *name*, or None."""
+        for executor in self._executors:
+            if executor.config.name == name:
+                return executor
+        return None
+
+
+async def execute_message(
+    message: ProjectMessage,
+    project: Project,
+    cli_manager: CLIManager,
+    db_path: str,
+    model: str | None = None,
+) -> dict:
+    """Execute a project message with automatic CLI switching on rate limit.
+
+    Builds conversation context from the last 3 linked messages, then attempts
+    execution up to MAX_RETRIES times. On rate limit, switches CLI when the
+    project permits it (allow_cli_switch=True).
+
+    Args:
+        message: The user message to execute.
+        project: The project owning the message (controls default_cli / switching).
+        cli_manager: Manages all available CLI executors.
+        db_path: Path to the SQLite database (for context retrieval).
+        model: Optional model override; executor default is used when None.
+
+    Returns:
+        Result dict from the executor merged with {"cli_used": <cli_name>}.
+
+    Raises:
+        NoCLIAvailableError: When no CLI is available or all retries are exhausted.
+        RuntimeError: When rate-limited and allow_cli_switch is False.
+    """
+    context = await asyncio.to_thread(build_context, message, Path(db_path))
+
+    # Resolve starting executor
+    if project.default_cli:
+        cli = cli_manager.get_executor_by_name(project.default_cli)
+        if cli is None or cli.check_rate_limit():
+            if project.allow_cli_switch:
+                cli = cli_manager.get_next_available_cli(exclude=[])
+            else:
+                raise NoCLIAvailableError(
+                    f"Default CLI '{project.default_cli}' is unavailable"
+                )
+    else:
+        cli = cli_manager.get_next_available_cli(exclude=[])
+
+    if cli is None:
+        raise NoCLIAvailableError("No CLI available")
+
+    tried_clis: list[str] = []
+
+    for _ in range(MAX_RETRIES):
+        result = await asyncio.to_thread(
+            cli.execute,
+            prompt=message.content,
+            context=context,
+            directory=project.directory,
+            model=model or "",
+        )
+
+        if not cli.check_rate_limit():
+            result["cli_used"] = cli.config.name
+            return result
+
+        # Rate-limited — record and optionally switch
+        tried_clis.append(cli.config.name)
+        if not project.allow_cli_switch:
+            raise RuntimeError(
+                f"CLI '{cli.config.name}' is rate-limited and switching is disabled"
+            )
+
+        next_cli = cli_manager.get_next_available_cli(exclude=tried_clis)
+        if next_cli is None:
+            raise NoCLIAvailableError("All CLIs are rate-limited")
+        cli = next_cli
+
+    raise NoCLIAvailableError("Max retries exceeded")
+
 
 def _meta_hash(state: "PoolState") -> str:
     """Stable string representation of pool-level metadata for change detection."""
