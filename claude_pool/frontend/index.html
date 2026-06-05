@@ -150,6 +150,12 @@
             margin-bottom: 10px;
         }
 
+        .version {
+            color: var(--color-text-muted);
+            font-size: 0.875rem;
+            font-weight: normal;
+        }
+
         .status-line {
             color: var(--color-text-secondary);
             font-size: 0.875rem;
@@ -1308,7 +1314,7 @@
     <div class="container" id="dashboard-view" role="main">
         <header class="header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
             <div>
-                <h1>📦 Claude Pool Dashboard</h1>
+                <h1>📦 Claude Pool Dashboard <span class="version" id="app-version">v1.2.7</span></h1>
                 <div class="status-line">
                     WebSocket Status:
                     <span class="status-badge disconnected" id="ws-status">Disconnected</span>
