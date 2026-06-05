@@ -24,8 +24,8 @@ def _root_block(style):
 
 
 def _non_root_css(style):
-    """Return style text with the :root block removed."""
-    return re.sub(r":root\s*\{[^}]+\}", "", style, count=1, flags=re.DOTALL)
+    """Return style text with all :root blocks removed (including dark-mode overrides)."""
+    return re.sub(r":root\s*\{[^}]+\}", "", style, flags=re.DOTALL)
 
 
 # ── :root block presence and variables ────────────────────────────────────────

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
     <title>Claude Pool Dashboard</title>
     <style>
 :root {
@@ -1215,6 +1216,90 @@
                 animation-duration: 0.01ms !important;
                 animation-iteration-count: 1 !important;
                 transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* ── Dark mode ── */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --color-surface:          #1e1e2f;
+                --color-surface-alt:      #252540;
+                --color-surface-hover:    #2d2d4a;
+                --color-text-primary:     #e5e7eb;
+                --color-text-secondary:   #9ca3af;
+                --color-text-muted:       #6b7280;
+                --color-border:           #374151;
+                --color-border-dark:      #4b5563;
+                --color-code-bg:          #0f0f1a;
+                --color-code-text:        #e5e7eb;
+                --color-inline-code-bg:   #2d2d4a;
+
+                --shadow-md:   0 4px 6px rgba(0, 0, 0, 0.3);
+                --shadow-lg:   0 12px 40px rgba(0, 0, 0, 0.4);
+
+                /* Status colors adjusted for dark mode contrast */
+                --color-success-bg:     #064e3b;
+                --color-success-text:   #a7f3d0;
+                --color-success-border: #059669;
+
+                --color-info-bg:    #1e3a5f;
+                --color-info-text:  #93c5fd;
+                --color-info-border: #3b82f6;
+
+                --color-warning-bg:     #78350f;
+                --color-warning-text:   #fbbf24;
+                --color-warning-border: #f59e0b;
+
+                --color-danger-bg:  #7f1d1d;
+                --color-danger-text: #fca5a5;
+
+                --color-purple-bg:   #3b0764;
+                --color-purple-text: #c084fc;
+            }
+
+            html {
+                color-scheme: dark;
+            }
+
+            body {
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            }
+
+            /* Ensure native selects are readable */
+            select {
+                background-color: var(--color-surface);
+                color: var(--color-text-primary);
+            }
+
+            /* Modal backgrounds */
+            .modal-box,
+            .modal-content {
+                background: var(--color-surface);
+                color: var(--color-text-primary);
+            }
+
+            /* Input backgrounds */
+            input,
+            textarea {
+                background-color: var(--color-surface-alt);
+                color: var(--color-text-primary);
+                border-color: var(--color-border);
+            }
+
+            /* Scrollbar styling for dark mode */
+            ::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
+            }
+            ::-webkit-scrollbar-track {
+                background: var(--color-surface-alt);
+            }
+            ::-webkit-scrollbar-thumb {
+                background: var(--color-border-dark);
+                border-radius: var(--radius-full);
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                background: var(--color-text-muted);
             }
         }
     </style>
