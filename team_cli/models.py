@@ -73,6 +73,7 @@ class ProjectMessage:
     linked_message_id: str | None = None  # ID of parent message (for follow-ups)
     metadata: dict[str, Any] = field(default_factory=dict)  # Tokens used, duration, model, etc.
     created_at: datetime = field(default_factory=datetime.now)
+    priority: int = 2
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ProjectMessage":
@@ -85,6 +86,7 @@ class ProjectMessage:
             linked_message_id=str(data["linked_message_id"]) if data.get("linked_message_id") else None,
             metadata=dict(data.get("metadata", {})) if isinstance(data.get("metadata"), dict) else {},
             created_at=datetime.fromisoformat(data["created_at"]) if isinstance(data.get("created_at"), str) else datetime.now(),
+            priority=_coerce_int(data.get("priority"), 2),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -97,6 +99,7 @@ class ProjectMessage:
             "linked_message_id": self.linked_message_id,
             "metadata": self.metadata,
             "created_at": self.created_at.isoformat(),
+            "priority": self.priority,
         }
 
 

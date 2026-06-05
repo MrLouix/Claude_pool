@@ -951,6 +951,7 @@ class ApiServer:
                     linked_message_id=m.linked_message_id,
                     metadata=m.metadata,
                     created_at=m.created_at.isoformat(),
+                    priority=m.priority,
                 )
                 for m in messages
             ]
@@ -983,6 +984,7 @@ class ApiServer:
                 linked_message_id=message_input.linked_message_id,
                 metadata={},
                 created_at=datetime.now(),
+                priority=message_input.priority,
             )
             save_project_message(db_path, message)
 
@@ -1064,6 +1066,7 @@ class ApiServer:
                 linked_message_id=message.linked_message_id,
                 metadata=message.metadata,
                 created_at=message.created_at.isoformat(),
+                priority=message.priority,
             )
 
         # ── WebSocket ─────────────────────────────────────────────

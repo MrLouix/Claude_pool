@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS project_messages (
     linked_message_id TEXT,
     metadata        TEXT NOT NULL DEFAULT '{}',
     created_at      TEXT NOT NULL,
+    priority        INTEGER NOT NULL DEFAULT 2,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 )
 """
@@ -98,6 +99,13 @@ class DatabaseManager:
             await db.execute(_CREATE_PROJECTS)
             await db.execute(_CREATE_PROJECT_MESSAGES)
             await db.execute(_INSERT_DEFAULT_META)
+            # Migration: add priority column if it does not exist yet
+            try:
+                await db.execute(
+                    "ALTER TABLE project_messages ADD COLUMN priority INTEGER NOT NULL DEFAULT 2"
+                )
+            except Exception:
+                pass  # Column already exists
             await db.commit()
 
     # ------------------------------------------------------------------
@@ -286,8 +294,8 @@ class DatabaseManager:
             await db.execute(
                 """
                 INSERT OR REPLACE INTO project_messages
-                    (id, project_id, content, role, cli_used, linked_message_id, metadata, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, project_id, content, role, cli_used, linked_message_id, metadata, created_at, priority)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     message_dict["id"],
@@ -298,6 +306,7 @@ class DatabaseManager:
                     message_dict.get("linked_message_id"),
                     json.dumps(metadata) if not isinstance(metadata, str) else metadata,
                     message_dict["created_at"],
+                    message_dict.get("priority", 2),
                 ),
             )
             await db.commit()

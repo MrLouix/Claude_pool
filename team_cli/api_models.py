@@ -37,6 +37,12 @@ class ProjectMessageInput(BaseModel):
     role: str = "user"  # "user" or "assistant"
     cli_used: Optional[str] = None
     linked_message_id: Optional[str] = None  # ID of parent message for thread continuation
+    priority: int = 2
+
+    @field_validator("priority")
+    @classmethod
+    def priority_must_be_valid(cls, v: int) -> int:
+        return _validate_priority(v)
 
 
 class ProjectMessageResponse(BaseModel):
@@ -49,6 +55,7 @@ class ProjectMessageResponse(BaseModel):
     linked_message_id: Optional[str] = None
     metadata: dict = {}
     created_at: str
+    priority: int = 2
 
 
 class TaskInput(BaseModel):
