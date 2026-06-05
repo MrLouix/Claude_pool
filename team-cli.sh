@@ -48,11 +48,11 @@ if [[ "$1" == "install" ]] || [[ "$1" == "setup" ]]; then
         echo -e "${YELLOW}⚠${NC} Llama CLI not found (optional)"
     fi
 
-    if command -v gemma &> /dev/null; then
-        echo -e "${GREEN}✓${NC} Gemma CLI found: $(gemma --version 2>&1 | head -1)"
+    if command -v agy &> /dev/null; then
+        echo -e "${GREEN}✓${NC} Google CLI (agy/antigravity) found: $(agy --version 2>&1 | head -1)"
         CLI_COUNT=$((CLI_COUNT + 1))
     else
-        echo -e "${YELLOW}⚠${NC} Gemma CLI not found (optional)"
+        echo -e "${YELLOW}⚠${NC} Google CLI (agy/antigravity) not found (optional)"
     fi
 
     if command -v openai &> /dev/null; then
@@ -63,12 +63,12 @@ if [[ "$1" == "install" ]] || [[ "$1" == "setup" ]]; then
     fi
 
     if [ $CLI_COUNT -eq 0 ]; then
-        echo -e "${YELLOW}ℹ${NC} No AI CLI detected. TeamCLI supports: claude, vibe-acp, llama, gemma, openai"
+        echo -e "${YELLOW}ℹ${NC} No AI CLI detected. TeamCLI supports: claude, vibe-acp, llama, agy, openai"
         echo "   Install at least one from:"
         echo "   - Claude: https://claude.ai/code"
         echo "   - Mistral: https://console.mistral.ai/ (vibe-acp CLI)"
         echo "   - Llama: https://github.com/ggerganov/llama.cpp"
-        echo "   - Gemma: https://github.com/google/gemma.cpp"
+        echo "   - Google: https://antigravity.dev/ (agy CLI)"
     fi
 
     # Create virtual environment
