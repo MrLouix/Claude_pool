@@ -1,6 +1,6 @@
 #!/bin/bash
-# TeamCLI TUI - Launcher Script
-# This script handles installation and execution of claude-pool
+# TeamCLI - Launcher Script
+# This script handles installation and execution of TeamCLI multi-CLI task manager
 
 set -e
 
@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 
 # Check if we're in installation mode
 if [[ "$1" == "install" ]] || [[ "$1" == "setup" ]]; then
-    echo "=== TeamCLI TUI - Installation ==="
+    echo "=== TeamCLI - Installation ==="
     echo ""
 
     # Check Python
@@ -25,12 +25,50 @@ if [[ "$1" == "install" ]] || [[ "$1" == "setup" ]]; then
     fi
     echo -e "${GREEN}✓${NC} Python found: $(python3 --version)"
 
-    # Check Claude CLI
-    if ! command -v claude &> /dev/null; then
-        echo -e "${YELLOW}⚠${NC}  Claude CLI not found (optional for testing)"
-        echo "   Install from: https://claude.ai/code"
-    else
+    # Check for at least one AI CLI
+    CLI_COUNT=0
+    if command -v claude &> /dev/null; then
         echo -e "${GREEN}✓${NC} Claude CLI found: $(claude --version 2>&1 | head -1)"
+        CLI_COUNT=$((CLI_COUNT + 1))
+    else
+        echo -e "${YELLOW}⚠${NC} Claude CLI not found (optional)"
+    fi
+
+    if command -v mistral &> /dev/null; then
+        echo -e "${GREEN}✓${NC} Mistral CLI found: $(mistral --version 2>&1 | head -1)"
+        CLI_COUNT=$((CLI_COUNT + 1))
+    else
+        echo -e "${YELLOW}⚠${NC} Mistral CLI not found (optional)"
+    fi
+
+    if command -v llama &> /dev/null; then
+        echo -e "${GREEN}✓${NC} Llama CLI found: $(llama --version 2>&1 | head -1)"
+        CLI_COUNT=$((CLI_COUNT + 1))
+    else
+        echo -e "${YELLOW}⚠${NC} Llama CLI not found (optional)"
+    fi
+
+    if command -v gemma &> /dev/null; then
+        echo -e "${GREEN}✓${NC} Gemma CLI found: $(gemma --version 2>&1 | head -1)"
+        CLI_COUNT=$((CLI_COUNT + 1))
+    else
+        echo -e "${YELLOW}⚠${NC} Gemma CLI not found (optional)"
+    fi
+
+    if command -v openai &> /dev/null; then
+        echo -e "${GREEN}✓${NC} OpenAI CLI found: $(openai --version 2>&1 | head -1)"
+        CLI_COUNT=$((CLI_COUNT + 1))
+    else
+        echo -e "${YELLOW}⚠${NC} OpenAI CLI not found (optional)"
+    fi
+
+    if [ $CLI_COUNT -eq 0 ]; then
+        echo -e "${YELLOW}ℹ${NC} No AI CLI detected. TeamCLI supports: claude, mistral, llama, gemma, openai"
+        echo "   Install at least one from:"
+        echo "   - Claude: https://claude.ai/code"
+        echo "   - Mistral: https://mistral.ai"
+        echo "   - Llama: https://github.com/ggerganov/llama.cpp"
+        echo "   - Gemma: https://github.com/google/gemma.cpp"
     fi
 
     # Create virtual environment
@@ -45,15 +83,16 @@ if [[ "$1" == "install" ]] || [[ "$1" == "setup" ]]; then
 
     # Install package
     echo ""
-    echo "Installing TeamCLI TUI..."
+    echo "Installing TeamCLI..."
     . venv/bin/activate
     pip install -e ".[dev]" -q
     echo -e "${GREEN}✓${NC} Installation complete!"
 
     echo ""
     echo "Usage:"
-    echo "  ./claude-pool.sh --pool examples/pool.json"
-    echo "  ./claude-pool.sh --help"
+    echo "  ./team-cli.sh --pool examples/pool.json"
+    echo "  ./team-cli.sh --serve --port 8000"
+    echo "  ./team-cli.sh --help"
     echo ""
     exit 0
 fi
@@ -63,19 +102,19 @@ fi
 # Check if venv exists
 if [ ! -d "venv" ]; then
     echo -e "${RED}❌ Virtual environment not found${NC}"
-    echo "Run installation first: ./claude-pool.sh install"
+    echo "Run installation first: ./team-cli.sh install"
     exit 1
 fi
 
-# Activate venv and run claude-pool
+# Activate venv and run team-cli
 . venv/bin/activate
 
-# Check if claude-pool is installed
-if ! command -v claude-pool &> /dev/null; then
-    echo -e "${RED}❌ claude-pool not installed in virtual environment${NC}"
-    echo "Run installation: ./claude-pool.sh install"
+# Check if team-cli is installed
+if ! command -v team-cli &> /dev/null; then
+    echo -e "${RED}❌ team-cli not installed in virtual environment${NC}"
+    echo "Run installation: ./team-cli.sh install"
     exit 1
 fi
 
-# Execute claude-pool with all arguments
-exec claude-pool "$@"
+# Execute team-cli with all arguments
+exec team-cli "$@"
