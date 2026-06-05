@@ -24,6 +24,82 @@ class CLIConfig:
     enabled: bool = True
 
 
+# Project and Message types
+MessageRole = Literal["user", "assistant"]
+
+
+@dataclass
+class Project:
+    """Represents a project with its directory and history."""
+
+    id: str
+    name: str
+    directory: str  # Absolute path to the directory
+    created_at: datetime = field(default_factory=datetime.now)
+    default_cli: str | None = None  # Default CLI to use (or None for dynamic selection)
+    allow_cli_switch: bool = True  # Allow switching CLI on rate limit
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Project":
+        return cls(
+            id=str(data["id"]),
+            name=str(data["name"]),
+            directory=str(data["directory"]),
+            created_at=datetime.fromisoformat(data["created_at"]) if isinstance(data.get("created_at"), str) else datetime.now(),
+            default_cli=str(data["default_cli"]) if data.get("default_cli") else None,
+            allow_cli_switch=bool(data.get("allow_cli_switch", True)),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "directory": self.directory,
+            "created_at": self.created_at.isoformat(),
+            "default_cli": self.default_cli,
+            "allow_cli_switch": self.allow_cli_switch,
+        }
+
+
+@dataclass
+class ProjectMessage:
+    """Represents a message within a project's history."""
+
+    id: str
+    project_id: str
+    content: str  # Prompt or AI response
+    role: MessageRole  # "user" or "assistant"
+    cli_used: str | None = None  # CLI that generated this response
+    linked_message_id: str | None = None  # ID of parent message (for follow-ups)
+    metadata: dict[str, Any] = field(default_factory=dict)  # Tokens used, duration, model, etc.
+    created_at: datetime = field(default_factory=datetime.now)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ProjectMessage":
+        return cls(
+            id=str(data["id"]),
+            project_id=str(data["project_id"]),
+            content=str(data["content"]),
+            role=data.get("role", "user"),  # type: ignore[arg-type]
+            cli_used=str(data["cli_used"]) if data.get("cli_used") else None,
+            linked_message_id=str(data["linked_message_id"]) if data.get("linked_message_id") else None,
+            metadata=dict(data.get("metadata", {})) if isinstance(data.get("metadata"), dict) else {},
+            created_at=datetime.fromisoformat(data["created_at"]) if isinstance(data.get("created_at"), str) else datetime.now(),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "content": self.content,
+            "role": self.role,
+            "cli_used": self.cli_used,
+            "linked_message_id": self.linked_message_id,
+            "metadata": self.metadata,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
 def _coerce_int(value: Any, default: int) -> int:
     """Coerce value to int, returning default if value is None."""
     return int(value) if value is not None else default
