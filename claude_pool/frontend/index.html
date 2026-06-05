@@ -151,7 +151,7 @@
 
         .status-line {
             color: var(--color-text-secondary);
-            font-size: 14px;
+            font-size: 0.875rem;
         }
 
         .status-badge {
@@ -159,7 +159,7 @@
             padding: 4px 12px;
             border-radius: var(--radius-full);
             margin: 0 5px 0 0;
-            font-size: 12px;
+            font-size: 0.75rem;
             font-weight: 600;
         }
 
@@ -169,7 +169,7 @@
             align-items: center;
             padding: 12px 20px;
             border-radius: var(--radius-lg);
-            font-size: 14px;
+            font-size: 0.875rem;
             font-weight: 600;
             transition: transform var(--transition-slow), background-color var(--transition-slow), box-shadow var(--transition-slow), color var(--transition-slow), border-color var(--transition-slow), opacity var(--transition-slow);
             box-shadow: var(--shadow-sm);
@@ -229,7 +229,7 @@
             background: var(--color-warning);
             color: white;
             padding: 6px 12px;
-            font-size: 12px;
+            font-size: 0.75rem;
             border-radius: 4px;
             border: none;
             cursor: pointer;
@@ -269,13 +269,13 @@
 
         .stat-card h3 {
             color: var(--color-text-secondary);
-            font-size: 12px;
+            font-size: 0.75rem;
             text-transform: uppercase;
             margin-bottom: 10px;
         }
 
         .stat-card .number {
-            font-size: 32px;
+            font-size: 2rem;
             font-weight: bold;
             color: var(--color-brand-primary);
         }
@@ -287,7 +287,7 @@
 
     .priority-badge {
         display: inline-block;
-        font-size: 11px; padding: 2px 7px; border-radius: var(--radius-xl);
+        font-size: 0.6875rem; padding: 2px 7px; border-radius: var(--radius-xl);
         margin-left: 6px; font-weight: 600; vertical-align: middle;
     }
     .priority-badge.p1 { background: var(--color-danger-bg); color: #b91c1c; }
@@ -311,7 +311,7 @@
 
     .task-actions button {
         padding: 5px 10px;
-        font-size: 12px;
+        font-size: 0.75rem;
         white-space: nowrap;
     }
 
@@ -327,7 +327,7 @@
             padding: 10px 20px;
             border: none;
             border-radius: var(--radius-md);
-            font-size: 14px;
+            font-size: 0.875rem;
             cursor: pointer;
             font-weight: 600;
             transition: transform var(--transition-base), background-color var(--transition-base), box-shadow var(--transition-base), color var(--transition-base), border-color var(--transition-base), opacity var(--transition-base);
@@ -367,7 +367,7 @@
         .section-header {
             padding: 20px;
             border-bottom: 1px solid var(--color-border);
-            font-size: 18px;
+            font-size: 1.125rem;
             font-weight: 600;
             color: var(--color-text-primary);
             display: flex;
@@ -403,7 +403,7 @@
             border: 1px solid var(--color-border-dark);
             border-radius: var(--radius-md);
             font-family: inherit;
-            font-size: 14px;
+            font-size: 0.875rem;
         }
 
         .form-group select {
@@ -440,7 +440,7 @@
 
         .task-id {
             font-family: monospace;
-            font-size: 12px;
+            font-size: 0.75rem;
             color: var(--color-text-secondary);
             margin-bottom: 5px;
         }
@@ -455,7 +455,7 @@
             display: inline-block;
             padding: 4px 8px;
             border-radius: var(--radius-sm);
-            font-size: 12px;
+            font-size: 0.75rem;
             font-weight: 600;
         }
 
@@ -472,13 +472,15 @@
 
         .task-actions button {
             padding: 5px 10px;
-            font-size: 12px;
+            font-size: 0.75rem;
         }
 
         .empty-state {
             text-align: center;
             color: var(--color-text-muted);
-            padding: 40px 20px;
+            padding: var(--space-12) var(--space-5);
+            font-size: 0.875rem;
+            line-height: 1.6;
         }
 
         .empty-state svg {
@@ -494,7 +496,7 @@
             padding: 15px;
             border-radius: var(--radius-md);
             font-family: 'Courier New', monospace;
-            font-size: 12px;
+            font-size: 0.75rem;
             max-height: 300px;
             overflow-y: auto;
         }
@@ -522,7 +524,7 @@
 
         .btn-browse {
             padding: 10px 6px;
-            font-size: 16px;
+            font-size: 1rem;
             line-height: 1;
             background: var(--color-inline-code-bg);
             color: var(--color-text-primary);
@@ -575,14 +577,14 @@
         }
 
         .modal-header h3 {
-            font-size: 16px;
+            font-size: 1rem;
             margin: 0;
         }
 
         .modal-close {
             background: none;
             border: none;
-            font-size: 22px;
+            font-size: 1.375rem;
             cursor: pointer;
             color: var(--color-text-secondary);
             padding: 0 4px;
@@ -603,7 +605,7 @@
         }
 
         .dir-breadcrumb {
-            font-size: 13px;
+            font-size: 0.8125rem;
             color: var(--color-text-secondary);
             padding: 8px 0 12px;
             display: flex;
@@ -636,7 +638,7 @@
             border-radius: var(--radius-md);
             cursor: pointer;
             gap: 8px;
-            font-size: 14px;
+            font-size: 0.875rem;
         }
 
         .dir-item:hover {
@@ -644,7 +646,7 @@
         }
 
         .dir-item .dir-icon {
-            font-size: 16px;
+            font-size: 1rem;
             flex-shrink: 0;
             width: 20px;
             text-align: center;
@@ -659,7 +661,7 @@
 
         .dir-item .dir-arrow {
             color: #aaa;
-            font-size: 14px;
+            font-size: 0.875rem;
             flex-shrink: 0;
         }
 
@@ -667,7 +669,7 @@
             color: var(--color-text-muted);
             text-align: center;
             padding: 20px;
-            font-size: 14px;
+            font-size: 0.875rem;
         }
 
         .modal-footer {
@@ -684,7 +686,7 @@
             border: none;
             padding: 8px 20px;
             border-radius: var(--radius-md);
-            font-size: 14px;
+            font-size: 0.875rem;
             font-weight: 600;
             cursor: pointer;
             min-width: auto;
@@ -710,7 +712,7 @@
         .chat-header-info { flex: 1; overflow: hidden; }
 
         .chat-header-label {
-            font-size: 17px;
+            font-size: 1.0625rem;
             font-weight: 700;
             color: var(--color-text-primary);
             white-space: nowrap;
@@ -719,7 +721,7 @@
         }
 
         .chat-header-dir {
-            font-size: 12px;
+            font-size: 0.75rem;
             color: #888;
             font-family: monospace;
             white-space: nowrap;
@@ -733,14 +735,14 @@
             background: var(--color-inline-code-bg);
             color: var(--color-text-primary);
             border: 1px solid var(--color-border-dark);
-            font-size: 13px;
+            font-size: 0.8125rem;
             padding: 7px 12px;
             flex-shrink: 0;
         }
 
         .btn-back:hover { background: var(--color-code-text); transform: none; box-shadow: none; }
 
-        .btn-danger { background: var(--color-danger); color: white; font-size: 13px; padding: 7px 12px; }
+        .btn-danger { background: var(--color-danger); color: white; font-size: 0.8125rem; padding: 7px 12px; }
         .btn-danger:hover { background: var(--color-danger-dark); }
 
         .message-thread {
@@ -772,11 +774,11 @@
         .message-bubble.skipped       { border-left-color: var(--color-purple); background: #faf5ff; }
         .message-bubble.rate_limit_retry { border-left-color: var(--color-warning); background: #fffbeb; }
 
-        .message-prompt { font-size: 14px; color: var(--color-text-primary); font-weight: 500; margin-bottom: 4px; }
-        .message-meta { font-size: 11px; color: var(--color-text-muted); margin-bottom: 8px; display: flex; gap: 10px; }
+        .message-prompt { font-size: 0.875rem; color: var(--color-text-primary); font-weight: 500; margin-bottom: 4px; }
+        .message-meta { font-size: 0.6875rem; color: var(--color-text-muted); margin-bottom: 8px; display: flex; gap: 10px; }
 
         .message-result {
-            font-size: 13px;
+            font-size: 0.8125rem;
             color: #444;
             line-height: 1.55;
             white-space: pre-wrap;
@@ -790,7 +792,7 @@
             border-radius: 6px;
             overflow-x: auto;
             margin: 8px 0;
-            font-size: 12px;
+            font-size: 0.75rem;
             white-space: pre;
         }
 
@@ -799,7 +801,7 @@
             padding: 1px 5px;
             border-radius: var(--radius-sm);
             font-family: 'Courier New', monospace;
-            font-size: 12px;
+            font-size: 0.75rem;
         }
 
         .message-result pre code { background: none; padding: 0; }
@@ -822,7 +824,7 @@
             border-radius: var(--radius-md);
             padding: 10px;
             font-family: inherit;
-            font-size: 14px;
+            font-size: 0.875rem;
             resize: none;
             min-height: 58px;
         }
@@ -831,39 +833,39 @@
         .task-detail-box { max-width: 640px; max-height: 85vh; overflow-y: auto; }
         .task-detail-body { display: grid; gap: 12px; padding: 20px; }
         .td-field { display: flex; flex-direction: column; gap: 4px; }
-        .td-field label { font-weight: 600; font-size: 12px; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
-        .td-value { font-size: 14px; color: var(--color-text-primary); word-break: break-word; }
-        .td-id { font-family: monospace; font-size: 13px; color: #555; }
-        .td-dir { font-family: monospace; font-size: 13px; color: #888; background: #f9f9f9; padding: 6px 8px; border-radius: 4px; }
+        .td-field label { font-weight: 600; font-size: 0.75rem; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+        .td-value { font-size: 0.875rem; color: var(--color-text-primary); word-break: break-word; }
+        .td-id { font-family: monospace; font-size: 0.8125rem; color: #555; }
+        .td-dir { font-family: monospace; font-size: 0.8125rem; color: #888; background: #f9f9f9; padding: 6px 8px; border-radius: 4px; }
         .td-prompt-field { min-height: 80px; }
         .td-prompt-textarea {
             width: 100%; min-height: 80px; max-height: 250px; overflow-y: auto;
             padding: 10px; border: 1px solid var(--color-border-dark); border-radius: 6px;
-            font-family: inherit; font-size: 14px; resize: vertical;
+            font-family: inherit; font-size: 0.875rem; resize: vertical;
             background: var(--color-surface-alt); color: var(--color-text-primary); line-height: 1.5;
             box-sizing: border-box;
         }
         .td-prompt-textarea:not([readonly]) { background: var(--color-surface); border-color: #6366f1; }
-        .td-args { font-family: monospace; font-size: 13px; color: #555; }
+        .td-args { font-family: monospace; font-size: 0.8125rem; color: #555; }
         .td-result-field { min-height: 60px; }
         .td-result-textarea {
             width: 100%; min-height: 60px; max-height: 300px; overflow-y: auto;
             padding: 10px; border: 1px solid var(--color-border-dark); border-radius: 6px;
-            font-family: monospace; font-size: 13px; white-space: pre-wrap;
+            font-family: monospace; font-size: 0.8125rem; white-space: pre-wrap;
             word-break: break-word; background: #f5f5f5; color: var(--color-text-primary); line-height: 1.4;
             box-sizing: border-box; margin: 0;
         }
         .td-result-md {
-            font-family: inherit; font-size: 14px; white-space: normal; line-height: 1.6;
+            font-family: inherit; font-size: 0.875rem; white-space: normal; line-height: 1.6;
         }
         .td-result-md pre { background: #1e1e1e; color: #d4d4d4; padding: 10px 12px; border-radius: var(--radius-md); overflow-x: auto; margin: 6px 0; }
-        .td-result-md code { background: #f0f0f0; color: #c7254e; padding: 1px 4px; border-radius: var(--radius-sm); font-size: 13px; }
+        .td-result-md code { background: #f0f0f0; color: #c7254e; padding: 1px 4px; border-radius: var(--radius-sm); font-size: 0.8125rem; }
         .td-result-md pre code { background: none; color: inherit; padding: 0; }
         .td-result-md strong { font-weight: 700; }
         .td-edit-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding-top: 8px; border-top: 1px solid var(--color-border); }
         .td-edit-row select {
             padding: 8px; border: 1px solid var(--color-border-dark); border-radius: var(--radius-md);
-            font-family: inherit; font-size: 14px; background: var(--color-surface);
+            font-family: inherit; font-size: 0.875rem; background: var(--color-surface);
         }
         .task-detail-footer {
             display: flex; justify-content: space-between; align-items: center;
@@ -872,7 +874,7 @@
         .td-actions-left, .td-actions-right { display: flex; gap: 8px; flex-wrap: wrap; }
         .td-btn {
             padding: 7px 14px; border-radius: var(--radius-md); border: 1px solid var(--color-border-dark);
-            font-size: 13px; cursor: pointer; background: #f8f8f8; color: var(--color-text-primary);
+            font-size: 0.8125rem; cursor: pointer; background: #f8f8f8; color: var(--color-text-primary);
             font-family: inherit; transition: background 0.15s;
         }
         .td-btn:hover { background: var(--color-border); }
@@ -899,7 +901,7 @@
             flex-shrink: 0;
         }
         .task-view-header-info { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; overflow: hidden; }
-        .task-view-title { font-size: 15px; font-weight: 700; color: #222; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .task-view-title { font-size: 0.9375rem; font-weight: 700; color: #222; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .task-view-body {
             flex: 1; overflow-y: auto; background: var(--color-surface); display: grid; gap: 14px;
             padding: 20px; border-radius: var(--radius-xl);
@@ -912,7 +914,7 @@
         .tv-json {
             width: 100%; max-height: 200px; overflow-y: auto;
             padding: 10px; border: 1px solid var(--color-border-dark); border-radius: 6px;
-            font-family: monospace; font-size: 12px; white-space: pre-wrap;
+            font-family: monospace; font-size: 0.75rem; white-space: pre-wrap;
             word-break: break-word; background: #f5f5f5; color: #555; line-height: 1.4;
             box-sizing: border-box; margin: 0;
         }
@@ -920,7 +922,7 @@
         /* ---- Task filter pills ---- */
         .task-filter-pill {
             padding: 3px 10px; border-radius: var(--radius-2xl); border: 1px solid var(--color-border-dark);
-            font-size: 12px; font-family: inherit; cursor: pointer;
+            font-size: 0.75rem; font-family: inherit; cursor: pointer;
             background: var(--color-inline-code-bg); color: #555; transition: background 0.15s, color 0.15s;
         }
         .task-filter-pill:hover { background: var(--color-code-text); }
@@ -945,7 +947,7 @@
 
         .chat-item-label {
             font-weight: 600;
-            font-size: 14px;
+            font-size: 0.875rem;
             color: var(--color-text-primary);
             white-space: nowrap;
             overflow: hidden;
@@ -953,7 +955,7 @@
         }
 
         .chat-item-dir {
-            font-size: 11px;
+            font-size: 0.6875rem;
             color: var(--color-text-muted);
             font-family: monospace;
             white-space: nowrap;
@@ -961,7 +963,7 @@
             text-overflow: ellipsis;
         }
 
-        .chat-item-count { font-size: 12px; color: #aaa; flex-shrink: 0; }
+        .chat-item-count { font-size: 0.75rem; color: #aaa; flex-shrink: 0; }
 
         .chat-usage-dot {
             width: 10px;
@@ -979,7 +981,7 @@
             border-radius: var(--radius-lg);
             padding: 10px 16px;
             margin-bottom: 10px;
-            font-size: 13px;
+            font-size: 0.8125rem;
         }
         .chat-session-banner.warn  { background: var(--color-warning-bg); border: 1px solid var(--color-warning); color: var(--color-warning-text); }
         .chat-session-banner.alert { background: var(--color-danger-bg); border: 1px solid var(--color-danger); color: var(--color-danger-text); }
@@ -988,7 +990,7 @@
         .btn-run-plan {
             background: var(--color-brand-deep);
             color: white;
-            font-size: 13px;
+            font-size: 0.8125rem;
             padding: 7px 14px;
         }
 
@@ -1005,7 +1007,7 @@
             font-weight: 600;
             color: var(--color-text-primary);
             margin-bottom: 5px;
-            font-size: 14px;
+            font-size: 0.875rem;
         }
 
         #plan-spec {
@@ -1016,7 +1018,7 @@
             border: 1px solid var(--color-border-dark);
             border-radius: var(--radius-md);
             font-family: inherit;
-            font-size: 14px;
+            font-size: 0.875rem;
             box-sizing: border-box;
         }
 
@@ -1032,14 +1034,14 @@
             border: 1px solid var(--color-border-dark);
             border-radius: var(--radius-md);
             font-family: inherit;
-            font-size: 14px;
+            font-size: 0.875rem;
         }
 
         .plan-option-row {
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 14px;
+            font-size: 0.875rem;
             color: var(--color-text-primary);
             margin-bottom: 6px;
             cursor: pointer;
@@ -1058,6 +1060,46 @@
             margin: 0;
         }
 
+        /* ── Tabular numbers for aligned numeric columns ── */
+        .stat-card .number,
+        .stat-card h2,
+        .message-meta span,
+        .task-duration,
+        #td-duration,
+        #td-exit-code,
+        #td-retry-count,
+        .log-line,
+        .countdown-timer,
+        .retry-countdown {
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ── Prevent widows/orphans in short headings ── */
+        .header h1,
+        .section-header h2,
+        .section-header h3,
+        .chat-header-label,
+        .stat-card h3,
+        .modal-box h3 {
+            text-wrap: balance;
+        }
+
+        /* ── Prevent text overflow in task / message lists ── */
+        .task-prompt,
+        .message-prompt,
+        .task-id {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        /* Ensure flex children can shrink */
+        .message-info {
+            min-width: 0;
+            overflow: hidden;
+        }
+
         @media (max-width: 768px) {
             body { padding: 10px; }
 
@@ -1069,7 +1111,7 @@
             }
 
             .stat-card { padding: 15px; }
-            .stat-card .number { font-size: 24px; }
+            .stat-card .number { font-size: 1.5rem; }
 
             /* Stacked Model/Effort row */
             .form-row {
@@ -1123,7 +1165,7 @@
                 grid-template-columns: 1fr;
             }
 
-            .stat-card .number { font-size: 28px; }
+            .stat-card .number { font-size: 1.75rem; }
 
             .task-actions {
                 width: 100%;
@@ -1214,7 +1256,7 @@
             </div>
             <div class="section-content">
                 <div class="chat-list" id="chat-list">
-                    <div class="empty-state">No chats yet.</div>
+                    <div class="empty-state">No chats yet. Create a new chat to get started.</div>
                 </div>
             </div>
         </div>
@@ -1275,7 +1317,7 @@
             <div class="section-header">Running List</div>
             <div class="section-content">
                 <div class="task-list" id="task-list">
-                    <div class="empty-state">No tasks yet</div>
+                    <div class="empty-state">No tasks yet. Submit your first task below to get started.</div>
                 </div>
             </div>
         </div>
@@ -1293,7 +1335,7 @@
             <div class="section-header">Completed</div>
             <div class="section-content">
                 <div class="task-list" id="success-list">
-                    <div class="empty-state">No completed tasks</div>
+                    <div class="empty-state">No completed tasks yet. Completed tasks will appear here.</div>
                 </div>
             </div>
         </div>
@@ -1425,7 +1467,7 @@
         </div>
         <div id="chat-session-banner" class="chat-session-banner" style="display:none;"></div>
         <div class="message-thread" id="message-thread">
-            <div class="empty-state">No messages yet.</div>
+            <div class="empty-state">No messages yet. Send one below to get started.</div>
         </div>
         <div class="chat-input-row">
             <textarea id="chat-input" rows="2" placeholder="Type a message… (Enter to send, Shift+Enter for newline)"></textarea>
@@ -1834,7 +1876,7 @@
 
             taskList.innerHTML = running.length
                 ? running.map(taskItemHtml).join('')
-                : '<div class="empty-state">No tasks yet</div>';
+                : '<div class="empty-state">No tasks yet. Submit your first task below to get started.</div>';
 
             // Completed list: success tasks only, most recent first
             const completed = tasks
@@ -1847,7 +1889,7 @@
 
             successList.innerHTML = completed.length
                 ? completed.map(taskItemHtml).join('')
-                : '<div class="empty-state">No completed tasks</div>';
+                : '<div class="empty-state">No completed tasks yet. Completed tasks will appear here.</div>';
         }
 
         async function retryTask(taskId) {
@@ -2226,7 +2268,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         function renderChatList(chats) {
             const el = document.getElementById('chat-list');
             if (!chats.length) {
-                el.innerHTML = '<div class="empty-state">No chats yet.</div>';
+                el.innerHTML = '<div class="empty-state">No chats yet. Create a new chat to get started.</div>';
                 return;
             }
             el.innerHTML = chats.map(c => {
