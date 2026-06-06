@@ -76,6 +76,8 @@ class ProjectMessage:
     metadata: dict[str, Any] = field(default_factory=dict)  # Tokens used, duration, model, etc.
     created_at: datetime = field(default_factory=datetime.now)
     priority: int = 2
+    is_step_task: bool = False  # True when this message is a StepTask result
+    step_task_id: str | None = None  # ID of the associated StepTask
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ProjectMessage":
@@ -90,6 +92,8 @@ class ProjectMessage:
             metadata=dict(data.get("metadata", {})) if isinstance(data.get("metadata"), dict) else {},
             created_at=datetime.fromisoformat(data["created_at"]) if isinstance(data.get("created_at"), str) else datetime.now(),
             priority=_coerce_int(data.get("priority"), 2),
+            is_step_task=bool(data.get("is_step_task", False)),
+            step_task_id=str(data["step_task_id"]) if data.get("step_task_id") else None,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -104,6 +108,8 @@ class ProjectMessage:
             "metadata": self.metadata,
             "created_at": self.created_at.isoformat(),
             "priority": self.priority,
+            "is_step_task": self.is_step_task,
+            "step_task_id": self.step_task_id,
         }
 
 
