@@ -370,6 +370,15 @@
             background: var(--color-success-dark);
         }
 
+        .btn-promote {
+            font-size: 10px; padding: 1px 6px; border-radius: 8px;
+            border: 1px solid var(--color-border-dark); background: transparent;
+            color: var(--color-text-muted); cursor: pointer; font-weight: 600;
+            margin-left: 4px; vertical-align: middle; line-height: 1.4;
+        }
+        .btn-promote:hover { background: var(--color-surface-alt); color: var(--color-text-secondary); }
+        .btn-promote:disabled { opacity: 0.35; cursor: default; }
+
         .section {
             background: var(--color-surface);
             border-radius: var(--radius-xl);
@@ -3164,11 +3173,15 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 const cliBadge = (m.role === 'assistant' && m.cli_used)
                     ? `<span class="msg-cli-badge">${escapeHtml(m.cli_used)}</span>`
                     : '';
-                const priorityBadgeHtml = m.role === 'user' ? getPriorityBadgeHtml(m.priority || 2) : '';
+                const priority = m.priority || 2;
+                const priorityBadgeHtml = m.role === 'user' ? getPriorityBadgeHtml(priority) : '';
+                const promoteBtn = m.role === 'user' && priority < 5
+                    ? `<button class="btn-promote" data-msg-id="${escapeHtml(m.id)}" title="Increase priority" onclick="promoteMessage('${escapeHtml(currentProjectId)}','${escapeHtml(m.id)}',this,this.previousElementSibling)">↑ Promote</button>`
+                    : '';
                 return `<div class="${cls}">
                     <div class="project-msg-header">
                         <span class="project-msg-role">${m.role === 'user' ? 'You' : 'Assistant'}</span>
-                        ${priorityBadgeHtml}
+                        ${priorityBadgeHtml}${promoteBtn}
                         ${cliBadge}
                         <span class="project-msg-time">${escapeHtml(time)}</span>
                     </div>
@@ -3176,6 +3189,35 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 </div>`;
             }).join('');
             el.scrollTop = el.scrollHeight;
+        }
+
+        async function promoteMessage(projectId, messageId, buttonEl, badgeEl) {
+            const origText = buttonEl.textContent;
+            buttonEl.disabled = true;
+            try {
+                const res = await fetch(
+                    `/api/projects/${projectId}/messages/${messageId}/promote`,
+                    { method: 'POST' }
+                );
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const updated = await res.json();
+                const newPriority = updated.priority || 2;
+                // Update badge in-place
+                if (badgeEl && badgeEl.classList.contains('priority-badge')) {
+                    const labels = { 1: 'Low', 2: 'Normal', 3: 'Feature', 4: 'Follow-up', 5: 'Urgent' };
+                    badgeEl.className = `priority-badge priority-${newPriority}`;
+                    badgeEl.textContent = labels[newPriority] || String(newPriority);
+                }
+                // Hide button when max priority reached
+                if (newPriority >= 5) {
+                    buttonEl.remove();
+                } else {
+                    buttonEl.disabled = false;
+                }
+            } catch (e) {
+                buttonEl.textContent = '✗ Error';
+                setTimeout(() => { buttonEl.textContent = origText; buttonEl.disabled = false; }, 2000);
+            }
         }
 
         async function populateProjectCliSelect() {
