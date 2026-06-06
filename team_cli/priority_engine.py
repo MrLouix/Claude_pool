@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .embedding_classifier import EmbeddingClassifier
+
 if TYPE_CHECKING:
     from .models import Project, ProjectMessage
 
@@ -29,6 +31,9 @@ PRIORITY_COLORS: dict[int, str] = {
 _URGENT_KEYWORDS = {"bug", "erreur", "error", "fix", "corriger", "crash", "broken", "urgent"}
 _FEATURE_KEYWORDS = {"nouvelle fonctionnalité", "new feature", "feature", "feat:", "ajout", "ajouter"}
 
+_embedding_classifier = EmbeddingClassifier()
+EMBEDDING_AVAILABLE: bool = _embedding_classifier.is_available()
+
 
 def calculate_priority(message: "ProjectMessage", project: "Project | None" = None) -> int:
     """Return a priority 1–5 for *message* based on content heuristics.
@@ -37,7 +42,8 @@ def calculate_priority(message: "ProjectMessage", project: "Project | None" = No
     1. Urgent keywords (bug/error/fix/crash…) → 5
     2. Linked follow-up message            → 4
     3. Feature keywords                    → 3
-    4. Default                             → 2
+    4. Embedding classifier (if available) → 2–5
+    5. Default                             → 2
     """
     text = message.content.lower()
 
@@ -49,6 +55,12 @@ def calculate_priority(message: "ProjectMessage", project: "Project | None" = No
 
     if any(kw in text for kw in _FEATURE_KEYWORDS):
         return 3
+
+    # Heuristics returned the default — try embedding for finer classification
+    if EMBEDDING_AVAILABLE:
+        embedded = _embedding_classifier.classify(message.content)
+        if embedded != 0:
+            return embedded
 
     return 2
 

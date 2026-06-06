@@ -114,13 +114,21 @@ class TestFeatureKeywords:
 # ---------------------------------------------------------------------------
 
 class TestDefaultPriority:
-    def test_generic_message_returns_2(self):
+    """Tests verify keyword-heuristic default with embedding disabled."""
+
+    def test_generic_message_returns_2(self, monkeypatch):
+        import team_cli.priority_engine as pe
+        monkeypatch.setattr(pe, "EMBEDDING_AVAILABLE", False)
         assert calculate_priority(_msg("how do I reset my password?")) == 2
 
-    def test_empty_content_returns_2(self):
+    def test_empty_content_returns_2(self, monkeypatch):
+        import team_cli.priority_engine as pe
+        monkeypatch.setattr(pe, "EMBEDDING_AVAILABLE", False)
         assert calculate_priority(_msg("")) == 2
 
-    def test_no_keywords_no_linked_id_returns_2(self):
+    def test_no_keywords_no_linked_id_returns_2(self, monkeypatch):
+        import team_cli.priority_engine as pe
+        monkeypatch.setattr(pe, "EMBEDDING_AVAILABLE", False)
         assert calculate_priority(_msg("please update the documentation")) == 2
 
 

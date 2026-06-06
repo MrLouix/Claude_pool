@@ -114,10 +114,12 @@ class TestAutoCalculatePriority:
             with patch("team_cli.api.execute_message", new=AsyncMock(
                 return_value={"result": "ok", "cli_used": "claude"}
             )):
-                resp = client.post(
-                    f"/api/projects/{proj.id}/messages",
-                    json={"content": "how do I reset my password?", "role": "user"},
-                )
+                # Disable embedding so keyword-heuristic default (2) is deterministic
+                with patch("team_cli.priority_engine.EMBEDDING_AVAILABLE", False):
+                    resp = client.post(
+                        f"/api/projects/{proj.id}/messages",
+                        json={"content": "how do I reset my password?", "role": "user"},
+                    )
 
         assert resp.status_code == 201
         assert resp.json()["priority"] == 2
