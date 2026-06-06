@@ -1,10 +1,13 @@
 """SQLite persistence layer for TeamCLI."""
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
 
 import aiosqlite
+
+from .migrations import apply_migrations
 
 _CREATE_POOL_META = """
 CREATE TABLE IF NOT EXISTS pool_meta (
@@ -91,21 +94,23 @@ class DatabaseManager:
         self.db_path = db_path
 
     async def init(self) -> None:
-        """Create tables and ensure the single pool_meta row exists."""
+        """Create tables, self-heal any missing columns, then seed default rows."""
+        # Phase 1: create tables that don't exist yet (no-op for existing tables).
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(_CREATE_POOL_META)
             await db.execute(_CREATE_BUCKETS)
             await db.execute(_CREATE_TASKS)
             await db.execute(_CREATE_PROJECTS)
             await db.execute(_CREATE_PROJECT_MESSAGES)
+            await db.commit()
+
+        # Phase 2: add any columns that were introduced after the DB was created.
+        # Must run before the INSERT so seeding uses the fully-migrated schema.
+        await asyncio.to_thread(apply_migrations, str(self.db_path))
+
+        # Phase 3: seed the single pool_meta row (idempotent — INSERT OR IGNORE).
+        async with aiosqlite.connect(self.db_path) as db:
             await db.execute(_INSERT_DEFAULT_META)
-            # Migration: add priority column if it does not exist yet
-            try:
-                await db.execute(
-                    "ALTER TABLE project_messages ADD COLUMN priority INTEGER NOT NULL DEFAULT 2"
-                )
-            except Exception:
-                pass  # Column already exists
             await db.commit()
 
     # ------------------------------------------------------------------
