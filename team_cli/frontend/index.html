@@ -1459,7 +1459,75 @@
                 border-color: var(--color-border);
             }
 
-            /* Scrollbar styling for dark mode */
+            /* ── Step Plan Card ── */
+            .step-plan-card {
+                border: 1px solid var(--color-border);
+                border-radius: var(--radius-md);
+                background: var(--color-surface-alt);
+                margin-top: 12px;
+                overflow: hidden;
+            }
+            .step-plan-header {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 10px 14px;
+                background: var(--color-surface);
+                border-bottom: 1px solid var(--color-border);
+                font-weight: 600;
+                font-size: 0.9rem;
+            }
+            .step-task-list {
+                padding: 8px 0;
+            }
+            .step-task-item {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 8px 14px;
+                border-left: 3px solid transparent;
+                font-size: 0.875rem;
+                cursor: pointer;
+                transition: background 0.15s;
+            }
+            .step-task-item:hover { background: var(--color-surface); }
+            .step-task-item[data-status="pending"]    { border-left-color: #9ca3af; }
+            .step-task-item[data-status="running"]    { border-left-color: #f59e0b; }
+            .step-task-item[data-status="success"]    { border-left-color: #22c55e; }
+            .step-task-item[data-status="failed"]     { border-left-color: #ef4444; }
+            .step-task-item[data-status="rate_limit"] { border-left-color: #f97316; }
+            .step-status-icon {
+                font-size: 1rem;
+                flex-shrink: 0;
+            }
+            .step-plan-actions {
+                display: flex;
+                gap: 8px;
+                padding: 8px 14px;
+                border-top: 1px solid var(--color-border);
+            }
+            .step-details-modal {
+                position: fixed;
+                inset: 0;
+                background: rgba(0,0,0,0.6);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+            }
+            .step-details-modal-content {
+                background: var(--color-surface);
+                border-radius: var(--radius-md);
+                padding: 24px;
+                max-width: 600px;
+                width: 90%;
+                max-height: 70vh;
+                overflow-y: auto;
+            }
+            @keyframes step-spin { to { transform: rotate(360deg); } }
+            .step-status-running { display: inline-block; animation: step-spin 1s linear infinite; }
+
+        /* Scrollbar styling for dark mode */
             ::-webkit-scrollbar {
                 width: 8px;
                 height: 8px;
@@ -2125,6 +2193,53 @@
                     // Skip if we already added this message optimistically (same id in DOM)
                     if (!document.querySelector(`[data-msg-id="${message.message?.id}"]`)) {
                         fetchMessages(currentChatId);
+                    }
+                }
+            } else if (message.event === 'step_plan_created') {
+                const data = message.data;
+                logEvent(`Step plan created: ${data.plan_id}`, 'info');
+                const msgEl = document.querySelector(`[data-msg-id="${data.message_id}"]`);
+                if (msgEl) {
+                    fetch(`/api/skills/multi_step_planner/plans/${data.plan_id}`)
+                        .then(r => r.json())
+                        .then(plan => {
+                            const existing = msgEl.querySelector(`.step-plan-card[data-plan-id="${data.plan_id}"]`);
+                            if (existing) existing.remove();
+                            msgEl.appendChild(renderStepPlan(plan));
+                        }).catch(() => {});
+                }
+            } else if (message.event === 'step_task_updated') {
+                const data = message.data;
+                const card = document.querySelector(`.step-plan-card[data-plan-id="${data.plan_id}"]`);
+                if (card) {
+                    const stepEl = card.querySelector(`[data-task-id="${data.task_id}"]`);
+                    if (stepEl) {
+                        stepEl.dataset.status = data.status;
+                        stepEl.querySelector('.step-status-icon').textContent = getStatusIcon(data.status);
+                    }
+                    const doneCount = card.querySelectorAll('.step-task-item[data-status="success"]').length;
+                    const totalCount = card.querySelectorAll('.step-task-item').length;
+                    const statusLabel = card.querySelector('.step-plan-header span:last-child');
+                    if (statusLabel) statusLabel.textContent = `En cours (${doneCount}/${totalCount})`;
+                }
+            } else if (message.event === 'plan_completed') {
+                const data = message.data;
+                const card = document.querySelector(`.step-plan-card[data-plan-id="${data.plan_id}"]`);
+                if (card) {
+                    const header = card.querySelector('.step-plan-header');
+                    const statusIcon = header.querySelector('span:first-child');
+                    const statusLabel = header.querySelector('span:last-child');
+                    if (data.status === 'completed') {
+                        statusIcon.textContent = getStatusIcon('success');
+                        if (statusLabel) statusLabel.textContent = 'Terminé';
+                    } else {
+                        statusIcon.textContent = getStatusIcon('failed');
+                        if (statusLabel) statusLabel.textContent = 'Échoué';
+                    }
+                    if (data.final_evaluation) {
+                        const evalDiv = document.createElement('div');
+                        evalDiv.innerHTML = renderFinalEvaluation(data.final_evaluation);
+                        card.appendChild(evalDiv);
                     }
                 }
             }
@@ -3556,6 +3671,38 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             const input = document.getElementById('project-input');
             const content = input.value.trim();
             if (!content) return;
+
+            // /plan slash command: generate a multi-step coding plan
+            if (content.startsWith('/plan ')) {
+                const prompt = content.slice(6).trim();
+                if (!prompt) return;
+                const sendBtn = document.getElementById('btn-send-project-message');
+                const origBtnText = sendBtn.textContent;
+                input.value = '';
+                input.disabled = true;
+                sendBtn.disabled = true;
+                sendBtn.textContent = '…';
+                try {
+                    const res = await fetch('/api/skills/multi_step_planner/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ project_id: currentProjectId, message_id: '', prompt }),
+                    });
+                    if (!res.ok) {
+                        const err = await res.json();
+                        logEvent(`Error generating plan: ${err.detail || JSON.stringify(err)}`, 'error');
+                    }
+                } catch (e) {
+                    logEvent(`Error generating plan: ${e}`, 'error');
+                } finally {
+                    input.disabled = false;
+                    sendBtn.disabled = false;
+                    sendBtn.textContent = origBtnText;
+                    input.focus();
+                }
+                return;
+            }
+
             const cliOverride = document.getElementById('project-cli-select').value || null;
             const linkSel = document.getElementById('project-link-select');
             const linkedMessageId = (linkSel && linkSel.value) || _replyToMessageId || null;
@@ -3822,6 +3969,138 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             } catch (e) {
                 logEvent(`Error duplicating task: ${e}`, 'error');
             }
+        }
+
+        /* ── Multi-Step Planner UI ── */
+
+        function getStatusIcon(status) {
+            const icons = { pending: '⚪', running: '🟡', rate_limit: '🟠', success: '🟢', failed: '🔴' };
+            return icons[status] || '⚪';
+        }
+
+        function formatDuration(ms) {
+            if (ms == null) return '—';
+            if (ms < 1000) return `${ms}ms`;
+            const s = Math.floor(ms / 1000);
+            if (s < 60) return `${s}s`;
+            const m = Math.floor(s / 60);
+            return `${m}m ${s % 60}s`;
+        }
+
+        function renderStepPlan(plan) {
+            const steps = plan.steps || [];
+            const stepCount = steps.length;
+            const doneCount = steps.filter(s => s.status === 'success').length;
+            const anyFailed = steps.some(s => s.status === 'failed');
+            const planStatusToIcon = { completed: 'success', failed: 'failed', running: 'running' };
+            const statusIcon = getStatusIcon(planStatusToIcon[plan.status] || 'pending');
+            const statusLabels = {
+                pending: 'En attente',
+                running: `En cours (${doneCount}/${stepCount})`,
+                completed: 'Terminé',
+                failed: 'Échoué',
+            };
+            const statusLabel = statusLabels[plan.status] || plan.status;
+
+            const stepsHtml = steps.map(step => {
+                const icon = getStatusIcon(step.status);
+                const dur = formatDuration(step.duration_ms);
+                const cli = step.cli_used
+                    ? `<span style="color:var(--color-text-muted);font-size:0.8em">${escapeHtml(step.cli_used)}</span>`
+                    : '';
+                return `<div class="step-task-item" data-status="${escapeHtml(step.status)}" data-task-id="${escapeHtml(step.id)}" onclick="showStepDetails('${escapeHtml(plan.id)}','${escapeHtml(step.id)}')">
+                    <span class="step-status-icon">${icon}</span>
+                    <span style="flex:1">${escapeHtml(step.description)}</span>
+                    ${cli}
+                    <span style="color:var(--color-text-muted);font-size:0.8em">${escapeHtml(dur)}</span>
+                </div>`;
+            }).join('');
+
+            const retryBtn = anyFailed
+                ? `<button class="btn-msg-action" onclick="retryFailedSteps('${escapeHtml(plan.id)}')">↺ Relancer les échouées</button>`
+                : '';
+
+            const card = document.createElement('div');
+            card.className = 'step-plan-card';
+            card.dataset.planId = plan.id;
+            card.innerHTML = `
+                <div class="step-plan-header">
+                    <span>${statusIcon}</span>
+                    <span>Plan de codage (${stepCount} étapes)</span>
+                    <span style="margin-left:auto;font-weight:normal;color:var(--color-text-muted)">${escapeHtml(statusLabel)}</span>
+                </div>
+                <div class="step-task-list">${stepsHtml}</div>
+                <div class="step-plan-actions">
+                    ${retryBtn}
+                    <button class="btn-msg-action btn-msg-delete" onclick="deleteStepPlan('${escapeHtml(plan.id)}',this.closest('.step-plan-card'))">🗑 Supprimer</button>
+                </div>`;
+            return card;
+        }
+
+        function renderFinalEvaluation(evaluation) {
+            const ok = evaluation.success;
+            const icon = ok ? '🟢' : '🔴';
+            const title = ok ? 'Succès !' : 'Échec partiel';
+            const bg = ok ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
+            let html = `<div style="margin-top:12px;padding:12px;border-radius:8px;background:${bg}">
+                <div style="font-weight:600;margin-bottom:6px">${icon} ${escapeHtml(title)}</div>
+                <div>${escapeHtml(evaluation.summary || '')}</div>`;
+            if (!ok && evaluation.missing && evaluation.missing.length) {
+                html += `<ul style="margin:8px 0 0 16px">${evaluation.missing.map(m => `<li>${escapeHtml(String(m))}</li>`).join('')}</ul>`;
+            }
+            if (!ok && evaluation.suggestions && evaluation.suggestions.length) {
+                html += `<div style="margin-top:6px;font-weight:600">Suggestions :</div>
+                    <ul style="margin:4px 0 0 16px">${evaluation.suggestions.map(s => `<li>${escapeHtml(String(s))}</li>`).join('')}</ul>`;
+            }
+            html += '</div>';
+            return html;
+        }
+
+        async function showStepDetails(planId, taskId) {
+            try {
+                const res = await fetch(`/api/skills/multi_step_planner/plans/${planId}/steps`);
+                if (!res.ok) return;
+                const steps = await res.json();
+                const task = steps.find(s => s.id === taskId);
+                if (!task) return;
+                const existing = document.getElementById('step-details-modal');
+                if (existing) existing.remove();
+                const text = task.output || task.error || '(no output)';
+                const modal = document.createElement('div');
+                modal.className = 'step-details-modal';
+                modal.id = 'step-details-modal';
+                modal.innerHTML = `<div class="step-details-modal-content">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                        <strong>${escapeHtml(task.description)}</strong>
+                        <button onclick="document.getElementById('step-details-modal').remove()">✕</button>
+                    </div>
+                    <div style="font-size:0.8em;color:var(--color-text-muted);margin-bottom:8px">${getStatusIcon(task.status)} ${escapeHtml(task.status)} · ${escapeHtml(formatDuration(task.duration_ms))}</div>
+                    <pre style="white-space:pre-wrap;word-break:break-word;font-size:0.85em">${escapeHtml(text)}</pre>
+                </div>`;
+                modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+                document.body.appendChild(modal);
+            } catch (e) { logEvent(`Error loading step details: ${e}`, 'error'); }
+        }
+
+        async function deleteStepPlan(planId, cardEl) {
+            if (!confirm('Supprimer ce plan ?')) return;
+            try {
+                const res = await fetch(`/api/skills/multi_step_planner/plans/${planId}`, { method: 'DELETE' });
+                if (res.ok && cardEl) cardEl.remove();
+            } catch (e) { logEvent(`Error deleting plan: ${e}`, 'error'); }
+        }
+
+        async function retryFailedSteps(planId) {
+            try {
+                const res = await fetch(`/api/skills/multi_step_planner/plans/${planId}/steps`);
+                if (!res.ok) return;
+                const steps = await res.json();
+                for (const step of steps) {
+                    if (step.status === 'failed') {
+                        await fetch(`/api/skills/multi_step_planner/steps/${step.id}/retry`, { method: 'POST' });
+                    }
+                }
+            } catch (e) { logEvent(`Error retrying steps: ${e}`, 'error'); }
         }
     </script>
 </body>
