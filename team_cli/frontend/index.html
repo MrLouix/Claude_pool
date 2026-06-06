@@ -945,6 +945,39 @@
             padding: 0 2px;
         }
 
+        /* Compose panel wrapper */
+        .project-compose-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 10px 0 0;
+            border-top: 1px solid var(--color-border-dark);
+        }
+        .project-compose-panel #project-input {
+            padding: 8px 10px;
+            border: 1px solid var(--color-border-dark);
+            border-radius: var(--radius-md);
+            font-family: inherit;
+            font-size: 0.875rem;
+            box-sizing: border-box;
+        }
+        .project-compose-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        #project-link-select {
+            flex: 1;
+            min-width: 0;
+            padding: 6px 8px;
+            border: 1px solid var(--color-border-dark);
+            border-radius: var(--radius-md);
+            font-family: inherit;
+            font-size: 0.8125rem;
+            background: var(--color-surface);
+        }
+
         /* CLI override select in project compose area */
         #project-cli-select {
             padding: 6px 8px;
@@ -1714,17 +1747,22 @@
         <div class="message-thread" id="project-message-thread">
             <div class="empty-state">No messages yet. Send one below to get started.</div>
         </div>
-        <div id="project-reply-banner" class="project-reply-banner hidden">
-            <span>↩ Replying to:</span>
-            <span class="project-reply-excerpt" id="project-reply-excerpt"></span>
-            <button class="project-reply-close" id="btn-project-reply-close" aria-label="Cancel reply">×</button>
-        </div>
-        <div class="chat-input-row" style="align-items:flex-end;gap:6px;">
-            <textarea id="project-input" rows="2" placeholder="Type a message… (Ctrl+Enter to send)" aria-label="Project message"></textarea>
-            <select id="project-cli-select" aria-label="CLI override">
-                <option value="">Auto (project default)</option>
-            </select>
-            <button class="btn-primary" id="btn-send-project-message" style="padding:8px 12px;font-size:18px;line-height:1;min-width:0;" aria-label="Send message">⬆</button>
+        <div id="project-compose-panel" class="project-compose-panel">
+            <div id="project-reply-banner" class="project-reply-banner hidden">
+                <span>↩ Replying to:</span>
+                <span class="project-reply-excerpt" id="project-reply-excerpt"></span>
+                <button class="project-reply-close" id="btn-project-reply-close" aria-label="Cancel reply">×</button>
+            </div>
+            <textarea id="project-input" rows="3" placeholder="Type your message… (Ctrl+Enter to send)" aria-label="Project message" style="width:100%;resize:vertical;"></textarea>
+            <div class="project-compose-controls">
+                <select id="project-link-select" aria-label="Link to message">
+                    <option value="">— No link (new thread) —</option>
+                </select>
+                <select id="project-cli-select" aria-label="CLI override">
+                    <option value="">Auto (project default)</option>
+                </select>
+                <button class="btn-primary" id="btn-send-project-message" aria-label="Send message">⬆ Send</button>
+            </div>
         </div>
     </div>
 
@@ -2624,8 +2662,12 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             chatView.style.display = 'none';
             taskView.style.display = 'none';
             projectView.style.display = '';
+            clearReplyContext();
             loadProjectMeta(projectId);
             fetchProjectMessages(projectId);
+            populateProjectLinkSelect(projectId);
+            const input = document.getElementById('project-input');
+            if (input) setTimeout(() => input.focus(), 50);
             if (_projectPollInterval) clearInterval(_projectPollInterval);
             _projectPollInterval = setInterval(() => {
                 if (currentProjectId === projectId) fetchProjectMessages(projectId);
@@ -3351,6 +3393,8 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 if (cliStatus) {
                     cliStatus.textContent = p.default_cli ? `CLI: ${p.default_cli}` : '';
                 }
+                const cliSel = document.getElementById('project-cli-select');
+                if (cliSel) cliSel.style.display = p.allow_cli_switch ? '' : 'none';
             } catch (e) { navigate(''); }
         }
 
@@ -3445,6 +3489,25 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         }
         populateProjectCliSelect();
 
+        async function populateProjectLinkSelect(projectId) {
+            const sel = document.getElementById('project-link-select');
+            if (!sel) return;
+            sel.innerHTML = '<option value="">— No link (new thread) —</option>';
+            try {
+                const res = await fetch(`/api/projects/${projectId}/messages`);
+                if (!res.ok) return;
+                const msgs = await res.json();
+                const userMsgs = msgs.filter(m => m.role === 'user');
+                userMsgs.forEach(m => {
+                    const label = (m.content || '').slice(0, 60).replace(/\n/g, ' ');
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.textContent = label.length < (m.content || '').length ? label + '…' : label;
+                    sel.appendChild(opt);
+                });
+            } catch (e) { /* ignore */ }
+        }
+
         document.getElementById('btn-project-back').addEventListener('click', () => navigate(''));
         document.getElementById('btn-project-reply-close').addEventListener('click', clearReplyContext);
         document.getElementById('btn-project-new-message').addEventListener('click', () => {
@@ -3458,6 +3521,8 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             _replyToMessageId = messageId;
             document.getElementById('project-reply-excerpt').textContent = excerpt;
             document.getElementById('project-reply-banner').classList.remove('hidden');
+            const linkSel = document.getElementById('project-link-select');
+            if (linkSel) linkSel.value = messageId;
             document.getElementById('project-input').focus();
         }
 
@@ -3492,11 +3557,15 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             const content = input.value.trim();
             if (!content) return;
             const cliOverride = document.getElementById('project-cli-select').value || null;
-            const linkedMessageId = _replyToMessageId;
+            const linkSel = document.getElementById('project-link-select');
+            const linkedMessageId = (linkSel && linkSel.value) || _replyToMessageId || null;
+            const sendBtn = document.getElementById('btn-send-project-message');
+            const origBtnText = sendBtn.textContent;
             input.value = '';
             clearReplyContext();
             input.disabled = true;
-            document.getElementById('btn-send-project-message').disabled = true;
+            sendBtn.disabled = true;
+            sendBtn.textContent = '…';
             try {
                 const body = { content, role: 'user' };
                 if (cliOverride) body.cli_used = cliOverride;
@@ -3510,13 +3579,17 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                     const err = await res.json();
                     logEvent(`Error sending message: ${(err.detail && err.detail.message) || JSON.stringify(err)}`, 'error');
                 }
+                const cliSel = document.getElementById('project-cli-select');
+                if (cliSel) cliSel.value = '';
             } catch (e) {
                 logEvent(`Error sending message: ${e}`, 'error');
             } finally {
                 input.disabled = false;
-                document.getElementById('btn-send-project-message').disabled = false;
+                sendBtn.disabled = false;
+                sendBtn.textContent = origBtnText;
                 input.focus();
                 fetchProjectMessages(currentProjectId);
+                populateProjectLinkSelect(currentProjectId);
             }
         }
 
