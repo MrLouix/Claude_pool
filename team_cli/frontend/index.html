@@ -294,12 +294,19 @@
 
     .priority-badge {
         display: inline-block;
-        font-size: 0.6875rem; padding: 2px 7px; border-radius: var(--radius-xl);
-        margin-left: 6px; font-weight: 600; vertical-align: middle;
+        font-size: 11px; padding: 2px 8px; border-radius: 12px;
+        margin-left: 6px; font-weight: 600; vertical-align: middle; color: #fff;
     }
+    /* legacy short classes used by task list */
     .priority-badge.p1 { background: var(--color-danger-bg); color: #b91c1c; }
     .priority-badge.p2 { background: var(--color-code-text); color: #555; }
     .priority-badge.p3 { background: var(--color-info-bg); color: #1d4ed8; }
+    /* canonical 1-5 classes */
+    .priority-badge.priority-1 { background: #6c757d; color: #fff; }
+    .priority-badge.priority-2 { background: #0d6efd; color: #fff; }
+    .priority-badge.priority-3 { background: #ffc107; color: #212529; }
+    .priority-badge.priority-4 { background: #fd7e14; color: #fff; }
+    .priority-badge.priority-5 { background: #dc3545; color: #fff; }
 
 
     /* ---- Mobile / responsive helpers ---- */
@@ -2096,11 +2103,15 @@
             }
         }
 
-        function priorityBadge(priority) {
+        function getPriorityBadgeHtml(priority) {
             const p = priority || 2;
-            const labels = { 1: 'P1', 2: 'P2', 3: 'P3' };
-            const cls = { 1: 'p1', 2: 'p2', 3: 'p3' };
-            return `<span class="priority-badge ${cls[p]}">${labels[p]}</span>`;
+            const labels = { 1: 'Low', 2: 'Normal', 3: 'Feature', 4: 'Follow-up', 5: 'Urgent' };
+            const label = labels[p] || 'Normal';
+            return `<span class="priority-badge priority-${p}">${label}</span>`;
+        }
+
+        function priorityBadge(priority) {
+            return getPriorityBadgeHtml(priority);
         }
 
         function bucketBadge(bucketId) {
@@ -3153,9 +3164,11 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 const cliBadge = (m.role === 'assistant' && m.cli_used)
                     ? `<span class="msg-cli-badge">${escapeHtml(m.cli_used)}</span>`
                     : '';
+                const priorityBadgeHtml = m.role === 'user' ? getPriorityBadgeHtml(m.priority || 2) : '';
                 return `<div class="${cls}">
                     <div class="project-msg-header">
                         <span class="project-msg-role">${m.role === 'user' ? 'You' : 'Assistant'}</span>
+                        ${priorityBadgeHtml}
                         ${cliBadge}
                         <span class="project-msg-time">${escapeHtml(time)}</span>
                     </div>
