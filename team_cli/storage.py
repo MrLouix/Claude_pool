@@ -483,6 +483,19 @@ def save_step_task(task: StepTask, db_path: Path) -> None:
     _run_async(_save())
 
 
+def load_step_task(task_id: str, db_path: Path) -> StepTask | None:
+    """Load a single StepTask by id, or None if not found."""
+    async def _load() -> StepTask | None:
+        db = DatabaseManager(db_path)
+        await db.init()
+        row = await db.get_step_task(task_id)
+        if row is None:
+            return None
+        return StepTask.from_db_row(row)
+
+    return _run_async(_load())
+
+
 def load_step_tasks_for_plan(plan_id: str, db_path: Path) -> list[StepTask]:
     """Load all StepTasks for a plan, ordered by step_number ascending."""
     async def _load() -> list[StepTask]:

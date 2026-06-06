@@ -29,6 +29,7 @@ from .api_models import (
     ProjectMessageInput,
     ProjectUpdateInput,
     ProjectMessageResponse,
+    StepPlanGenerateRequest,
     TaskDetailResponse,
     TaskInput,
     TaskPatchInput,
@@ -1201,6 +1202,98 @@ class ApiServer:
                 priority=message.priority,
             )
 
+        # ── Multi-Step Planner ────────────────────────────────────
+
+        @self.app.post("/api/skills/multi_step_planner/generate")
+        async def generate_plan(body: StepPlanGenerateRequest) -> dict:
+            from .skills.multi_step_planner.generator import PlanGenerator
+            from .skills.multi_step_planner.utils import MAX_PROMPT_LENGTH
+            from .storage import load_project, save_step_plan, save_step_task
+
+            if len(body.prompt) > MAX_PROMPT_LENGTH:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Prompt exceeds maximum length of {MAX_PROMPT_LENGTH} characters",
+                )
+
+            project = await asyncio.to_thread(load_project, self.pool_file, body.project_id)
+            if project is None:
+                raise HTTPException(
+                    status_code=404, detail=f"Project {body.project_id} not found"
+                )
+
+            generator = PlanGenerator()
+            plan = await generator.generate(body.prompt, body.project_id, body.message_id)
+
+            await asyncio.to_thread(save_step_plan, plan, self.pool_file)
+            for task in plan.steps:
+                await asyncio.to_thread(save_step_task, task, self.pool_file)
+
+            await self._broadcast_event({
+                "event": "step_plan_created",
+                "data": {
+                    "plan_id": plan.id,
+                    "project_id": plan.project_id,
+                    "message_id": plan.message_id,
+                    "description": plan.description,
+                    "status": plan.status,
+                    "step_count": len(plan.steps),
+                },
+            })
+
+            asyncio.create_task(self._execute_plan_background(plan))
+
+            return plan.model_dump(mode="json")
+
+        @self.app.get("/api/skills/multi_step_planner/plans/{plan_id}")
+        async def get_plan(plan_id: str) -> dict:
+            from .storage import load_step_plan
+
+            plan = await asyncio.to_thread(load_step_plan, plan_id, self.pool_file)
+            if plan is None:
+                raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
+            return plan.model_dump(mode="json")
+
+        @self.app.get("/api/skills/multi_step_planner/plans/{plan_id}/steps")
+        async def get_plan_steps(plan_id: str) -> list:
+            from .storage import load_step_plan, load_step_tasks_for_plan
+
+            plan = await asyncio.to_thread(load_step_plan, plan_id, self.pool_file)
+            if plan is None:
+                raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
+            steps = await asyncio.to_thread(load_step_tasks_for_plan, plan_id, self.pool_file)
+            return [s.model_dump(mode="json") for s in steps]
+
+        @self.app.post("/api/skills/multi_step_planner/steps/{step_id}/retry")
+        async def retry_step(step_id: str) -> dict:
+            from .storage import load_step_task, load_step_plan, update_step_task_status
+
+            step = await asyncio.to_thread(load_step_task, step_id, self.pool_file)
+            if step is None:
+                raise HTTPException(status_code=404, detail=f"Step {step_id} not found")
+            if step.status != "failed":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot retry step in {step.status!r} status",
+                )
+
+            await asyncio.to_thread(update_step_task_status, step_id, "pending", self.pool_file)
+            step = step.model_copy(update={"status": "pending"})
+
+            plan = await asyncio.to_thread(load_step_plan, step.plan_id, self.pool_file)
+            asyncio.create_task(self._execute_step_background(plan, step))
+
+            return step.model_dump(mode="json")
+
+        @self.app.delete("/api/skills/multi_step_planner/plans/{plan_id}", status_code=204)
+        async def delete_plan(plan_id: str) -> None:
+            from .storage import load_step_plan, delete_step_plan
+
+            plan = await asyncio.to_thread(load_step_plan, plan_id, self.pool_file)
+            if plan is None:
+                raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
+            await asyncio.to_thread(delete_step_plan, plan_id, self.pool_file)
+
         # ── Admin ─────────────────────────────────────────────────
 
         @self.app.get("/api/admin/migration-status")
@@ -1247,6 +1340,61 @@ class ApiServer:
             except Exception as e:
                 logger.error(f"WebSocket error: {e}")
                 self.ws_clients.discard(websocket)
+
+    # ── Multi-Step Planner background helpers ─────────────────────
+
+    async def _execute_plan_background(self, plan: object) -> None:
+        """Run plan execution in background and broadcast step/completion events."""
+        from .skills.multi_step_planner.executor import StepTaskExecutor
+
+        async def broadcast_fn(event: str, data: dict) -> None:
+            await self._broadcast_event({"event": event, "data": data})
+
+        executor = StepTaskExecutor(db_path=self.pool_file)
+        result = await executor.execute_plan(plan, broadcast_fn=broadcast_fn)
+
+        await self._broadcast_event({
+            "event": "plan_completed",
+            "data": {
+                "plan_id": result.id,
+                "status": result.status,
+                "final_evaluation": result.final_evaluation,
+            },
+        })
+
+    async def _execute_step_background(self, plan: object, step: object) -> None:
+        """Execute a single step in background, then check plan completion."""
+        from .skills.multi_step_planner.executor import StepTaskExecutor
+        from .storage import load_step_plan as _load_plan
+
+        executor = StepTaskExecutor(db_path=self.pool_file)
+        updated = await executor.execute_step(step)
+
+        await self._broadcast_event({
+            "event": "step_task_updated",
+            "data": {
+                "task_id": updated.id,
+                "plan_id": updated.plan_id,
+                "step_number": updated.step_number,
+                "description": updated.description,
+                "status": updated.status,
+                "cli_used": updated.cli_used,
+                "duration_ms": updated.duration_ms,
+            },
+        })
+
+        await executor._check_plan_completion(plan)
+
+        reloaded = await asyncio.to_thread(_load_plan, plan.id, self.pool_file)
+        if reloaded and reloaded.status in ("completed", "failed"):
+            await self._broadcast_event({
+                "event": "plan_completed",
+                "data": {
+                    "plan_id": reloaded.id,
+                    "status": reloaded.status,
+                    "final_evaluation": reloaded.final_evaluation,
+                },
+            })
 
     def _on_task_update(self, task: Task) -> None:
         asyncio.create_task(

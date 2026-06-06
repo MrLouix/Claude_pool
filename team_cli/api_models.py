@@ -192,3 +192,11 @@ class CLIConfigResponse(BaseModel):
     cli_type: str
     enabled: bool
     default_model: str = ""
+
+
+class StepPlanGenerateRequest(BaseModel):
+    """Input model for generating a multi-step coding plan."""
+
+    project_id: str
+    message_id: str
+    prompt: str

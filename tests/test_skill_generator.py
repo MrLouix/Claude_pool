@@ -260,7 +260,7 @@ class TestPlanGeneratorGenerate:
     """All tests mock asyncio.create_subprocess_exec to avoid real CLI calls."""
 
     def _run(self, coro):
-        return asyncio.get_event_loop().run_until_complete(coro)
+        return asyncio.run(coro)
 
     def test_returns_step_plan(self):
         proc = _mock_process(stdout=_valid_plan_json(3).encode())

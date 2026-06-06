@@ -531,6 +531,16 @@ class DatabaseManager:
             )
             await db.commit()
 
+    async def get_step_task(self, task_id: str) -> dict[str, Any] | None:
+        """Fetch a single step_task row by id, or None."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM step_tasks WHERE id = ?", (task_id,)
+            ) as cur:
+                row = await cur.fetchone()
+        return dict(row) if row is not None else None
+
     async def get_step_tasks_for_plan(self, plan_id: str) -> list[dict[str, Any]]:
         """Return all step_tasks for a plan, ordered by step_number ASC."""
         async with aiosqlite.connect(self.db_path) as db:
