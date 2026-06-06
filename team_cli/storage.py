@@ -11,6 +11,7 @@ from typing import Any
 
 from .database import DatabaseManager
 from .models import MAIN_BUCKET_LABEL, Bucket, PoolState, Project, ProjectMessage, Task
+from .skills.multi_step_planner.models import StepPlan, StepTask
 
 logger = logging.getLogger(__name__)
 
@@ -359,6 +360,159 @@ def build_context(message: ProjectMessage, db_path: Path) -> list[dict[str, str]
         history = get_message_history(db_path, message.linked_message_id, limit=3)
         return [{"role": m.role, "content": m.content} for m in history]
     return []
+
+
+# ---------------------------------------------------------------------------
+# Migration: Chats (buckets) → Projects
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Step Plans
+# ---------------------------------------------------------------------------
+
+def save_step_plan(plan: StepPlan, db_path: Path) -> None:
+    """Upsert a StepPlan (without its steps — save each StepTask separately)."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    async def _save() -> None:
+        db = DatabaseManager(db_path)
+        await db.init()
+        await db.upsert_step_plan({
+            "id": plan.id,
+            "project_id": plan.project_id,
+            "message_id": plan.message_id,
+            "description": plan.description,
+            "status": plan.status,
+            "created_at": plan.created_at.isoformat(),
+            "completed_at": plan.completed_at.isoformat() if plan.completed_at else None,
+            "final_evaluation": plan.final_evaluation,
+        })
+
+    _run_async(_save())
+
+
+def load_step_plan(plan_id: str, db_path: Path) -> StepPlan | None:
+    """Load a StepPlan by id, including its StepTask list, or None if missing."""
+    async def _load() -> StepPlan | None:
+        db = DatabaseManager(db_path)
+        await db.init()
+        row = await db.get_step_plan(plan_id)
+        if row is None:
+            return None
+        task_rows = await db.get_step_tasks_for_plan(plan_id)
+        steps = [StepTask.from_db_row(r) for r in task_rows]
+        return StepPlan.from_db_row(row, steps=steps)
+
+    return _run_async(_load())
+
+
+def load_step_plans_for_message(message_id: str, db_path: Path) -> list[StepPlan]:
+    """Load all StepPlans associated with a message (without their tasks)."""
+    async def _load() -> list[StepPlan]:
+        db = DatabaseManager(db_path)
+        await db.init()
+        rows = await db.get_step_plans_for_message(message_id)
+        return [StepPlan.from_db_row(r) for r in rows]
+
+    return _run_async(_load())
+
+
+def update_step_plan_status(
+    plan_id: str,
+    status: str,
+    db_path: Path,
+    completed_at: datetime | None = None,
+    final_evaluation: dict | None = None,
+) -> None:
+    """Update the status (and optionally completed_at / final_evaluation) of a StepPlan."""
+    async def _update() -> None:
+        db = DatabaseManager(db_path)
+        await db.init()
+        final_eval_json = (
+            json.dumps(final_evaluation) if final_evaluation is not None else None
+        )
+        await db.update_step_plan(
+            plan_id,
+            status=status,
+            completed_at=completed_at.isoformat() if completed_at else None,
+            final_evaluation=final_eval_json,
+        )
+
+    _run_async(_update())
+
+
+def delete_step_plan(plan_id: str, db_path: Path) -> None:
+    """Delete a StepPlan and all its StepTasks from the database."""
+    async def _delete() -> None:
+        db = DatabaseManager(db_path)
+        await db.init()
+        await db.delete_step_plan(plan_id)
+
+    _run_async(_delete())
+
+
+# ---------------------------------------------------------------------------
+# Step Tasks
+# ---------------------------------------------------------------------------
+
+def save_step_task(task: StepTask, db_path: Path) -> None:
+    """Upsert a StepTask."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    async def _save() -> None:
+        db = DatabaseManager(db_path)
+        await db.init()
+        await db.upsert_step_task({
+            "id": task.id,
+            "plan_id": task.plan_id,
+            "step_number": task.step_number,
+            "description": task.description,
+            "prompt": task.prompt,
+            "status": task.status,
+            "cli_used": task.cli_used,
+            "model_used": task.model_used,
+            "output": task.output,
+            "error": task.error,
+            "tokens_used": task.tokens_used,
+            "duration_ms": task.duration_ms,
+            "created_at": task.created_at.isoformat(),
+            "started_at": task.started_at.isoformat() if task.started_at else None,
+            "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+        })
+
+    _run_async(_save())
+
+
+def load_step_tasks_for_plan(plan_id: str, db_path: Path) -> list[StepTask]:
+    """Load all StepTasks for a plan, ordered by step_number ascending."""
+    async def _load() -> list[StepTask]:
+        db = DatabaseManager(db_path)
+        await db.init()
+        rows = await db.get_step_tasks_for_plan(plan_id)
+        return [StepTask.from_db_row(r) for r in rows]
+
+    return _run_async(_load())
+
+
+def update_step_task_status(task_id: str, status: str, db_path: Path, **kwargs: Any) -> None:
+    """Update the status and any provided optional fields of a StepTask.
+
+    Accepted keyword arguments: cli_used, model_used, output, error,
+    tokens_used, duration_ms, started_at, completed_at.
+    datetime values are automatically serialised to ISO strings.
+    """
+    async def _update() -> None:
+        db = DatabaseManager(db_path)
+        await db.init()
+        fields: dict[str, Any] = {"status": status}
+        for key, val in kwargs.items():
+            if isinstance(val, datetime):
+                fields[key] = val.isoformat()
+            else:
+                fields[key] = val
+        await db.update_step_task(task_id, **fields)
+
+    _run_async(_update())
 
 
 # ---------------------------------------------------------------------------

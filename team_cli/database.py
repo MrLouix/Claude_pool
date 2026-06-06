@@ -419,6 +419,150 @@ class DatabaseManager:
     async def close(self) -> None:
         """No-op: connections are opened/closed per operation."""
 
+    # ------------------------------------------------------------------
+    # Step Plans
+    # ------------------------------------------------------------------
+
+    async def upsert_step_plan(self, plan_dict: dict[str, Any]) -> None:
+        """Insert or replace a step_plan row. final_evaluation is JSON-serialized."""
+        final_eval = plan_dict.get("final_evaluation")
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT OR REPLACE INTO step_plans
+                    (id, project_id, message_id, description, status,
+                     created_at, completed_at, final_evaluation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    plan_dict["id"],
+                    plan_dict["project_id"],
+                    plan_dict["message_id"],
+                    plan_dict["description"],
+                    plan_dict.get("status", "pending"),
+                    plan_dict["created_at"],
+                    plan_dict.get("completed_at"),
+                    json.dumps(final_eval) if final_eval is not None and not isinstance(final_eval, str) else final_eval,
+                ),
+            )
+            await db.commit()
+
+    async def get_step_plan(self, plan_id: str) -> dict[str, Any] | None:
+        """Fetch a single step_plan row by id, or None."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM step_plans WHERE id = ?", (plan_id,)
+            ) as cur:
+                row = await cur.fetchone()
+        return dict(row) if row is not None else None
+
+    async def get_step_plans_for_message(self, message_id: str) -> list[dict[str, Any]]:
+        """Return all step_plans for a given message_id, ordered by created_at ASC."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM step_plans WHERE message_id = ? ORDER BY created_at ASC",
+                (message_id,),
+            ) as cur:
+                rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def update_step_plan(
+        self,
+        plan_id: str,
+        status: str,
+        completed_at: str | None = None,
+        final_evaluation: str | None = None,
+    ) -> None:
+        """Update status and optional fields on a step_plan row."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                UPDATE step_plans
+                SET status = ?,
+                    completed_at = COALESCE(?, completed_at),
+                    final_evaluation = COALESCE(?, final_evaluation)
+                WHERE id = ?
+                """,
+                (status, completed_at, final_evaluation, plan_id),
+            )
+            await db.commit()
+
+    async def delete_step_plan(self, plan_id: str) -> None:
+        """Delete a step_plan and all its step_tasks."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM step_tasks WHERE plan_id = ?", (plan_id,))
+            await db.execute("DELETE FROM step_plans WHERE id = ?", (plan_id,))
+            await db.commit()
+
+    # ------------------------------------------------------------------
+    # Step Tasks
+    # ------------------------------------------------------------------
+
+    async def upsert_step_task(self, task_dict: dict[str, Any]) -> None:
+        """Insert or replace a step_task row."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT OR REPLACE INTO step_tasks
+                    (id, plan_id, step_number, description, prompt, status,
+                     cli_used, model_used, output, error, tokens_used, duration_ms,
+                     created_at, started_at, completed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    task_dict["id"],
+                    task_dict["plan_id"],
+                    task_dict["step_number"],
+                    task_dict["description"],
+                    task_dict["prompt"],
+                    task_dict.get("status", "pending"),
+                    task_dict.get("cli_used"),
+                    task_dict.get("model_used"),
+                    task_dict.get("output"),
+                    task_dict.get("error"),
+                    task_dict.get("tokens_used"),
+                    task_dict.get("duration_ms"),
+                    task_dict["created_at"],
+                    task_dict.get("started_at"),
+                    task_dict.get("completed_at"),
+                ),
+            )
+            await db.commit()
+
+    async def get_step_tasks_for_plan(self, plan_id: str) -> list[dict[str, Any]]:
+        """Return all step_tasks for a plan, ordered by step_number ASC."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM step_tasks WHERE plan_id = ? ORDER BY step_number ASC",
+                (plan_id,),
+            ) as cur:
+                rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def update_step_task(self, task_id: str, **fields: Any) -> None:
+        """Update arbitrary fields on a step_task row.
+
+        Only keys present in *fields* are written; all others are untouched.
+        """
+        _ALLOWED = frozenset({
+            "status", "cli_used", "model_used", "output", "error",
+            "tokens_used", "duration_ms", "started_at", "completed_at",
+        })
+        updates = {k: v for k, v in fields.items() if k in _ALLOWED}
+        if not updates:
+            return
+        set_clause = ", ".join(f"{col} = ?" for col in updates)
+        values = list(updates.values()) + [task_id]
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                f"UPDATE step_tasks SET {set_clause} WHERE id = ?",
+                values,
+            )
+            await db.commit()
+
 
 # ------------------------------------------------------------------
 # Helpers
