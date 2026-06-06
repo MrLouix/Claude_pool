@@ -298,6 +298,17 @@ def load_project_messages(db_path: Path, project_id: str) -> list[ProjectMessage
     return _run_async(_load())
 
 
+def load_project_message(db_path: Path, message_id: str) -> ProjectMessage | None:
+    """Load a single project message by ID, or None if not found."""
+    async def _load() -> ProjectMessage | None:
+        db = DatabaseManager(db_path)
+        await db.init()
+        row = await db.get_project_message(message_id)
+        return ProjectMessage.from_dict(row) if row is not None else None
+
+    return _run_async(_load())
+
+
 def save_project_message(db_path: Path, message: ProjectMessage) -> None:
     """Save a project message to the database."""
     db_path.parent.mkdir(parents=True, exist_ok=True)

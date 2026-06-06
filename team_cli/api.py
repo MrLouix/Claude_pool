@@ -37,6 +37,7 @@ from .executor import CLIManager, NoCLIAvailableError, TaskExecutor, execute_mes
 from .models import Bucket, PoolState, Project, ProjectMessage, Task
 from .cli_detector import detect_clis
 from .config import load_cli_configs
+from .priority_engine import calculate_priority
 
 logger = logging.getLogger(__name__)
 
@@ -986,6 +987,9 @@ class ApiServer:
                 created_at=datetime.now(),
                 priority=message_input.priority,
             )
+            # Auto-calculate unless the caller explicitly overrode the default
+            if message_input.priority == 2:
+                message.priority = calculate_priority(message, project)
             save_project_message(db_path, message)
 
             await self._broadcast_event({
@@ -1041,6 +1045,7 @@ class ApiServer:
                     linked_message_id=message.id,
                     metadata=assistant_metadata,
                     created_at=datetime.now(),
+                    priority=message.priority,
                 )
                 save_project_message(db_path, assistant_msg)
 
@@ -1056,6 +1061,41 @@ class ApiServer:
                         "created_at": assistant_msg.created_at.isoformat(),
                     },
                 })
+
+            return ProjectMessageResponse(
+                id=message.id,
+                project_id=message.project_id,
+                content=message.content,
+                role=message.role,
+                cli_used=message.cli_used,
+                linked_message_id=message.linked_message_id,
+                metadata=message.metadata,
+                created_at=message.created_at.isoformat(),
+                priority=message.priority,
+            )
+
+        @self.app.post(
+            "/api/projects/{project_id}/messages/{message_id}/promote",
+            status_code=200,
+        )
+        async def promote_project_message(
+            project_id: str, message_id: str
+        ) -> ProjectMessageResponse:
+            """Promote a message's priority by one step (capped at 5)."""
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+
+            from .storage import load_project_message, save_project_message
+            from .priority_engine import promote_priority
+
+            db_path = self.executor.pool.pool_file.with_suffix(".db")
+            message = load_project_message(db_path, message_id)
+
+            if message is None or message.project_id != project_id:
+                raise HTTPException(status_code=404, detail=f"Message {message_id} not found")
+
+            message.priority = promote_priority(message.priority)
+            save_project_message(db_path, message)
 
             return ProjectMessageResponse(
                 id=message.id,

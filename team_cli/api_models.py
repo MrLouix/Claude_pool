@@ -6,9 +6,9 @@ from pydantic import BaseModel, field_validator
 
 
 def _validate_priority(v: int) -> int:
-    """Shared validator: priority must be 1, 2, or 3."""
-    if v not in (1, 2, 3):
-        raise ValueError("priority must be 1, 2, or 3")
+    """Shared validator: priority must be 1–5."""
+    if v not in (1, 2, 3, 4, 5):
+        raise ValueError("priority must be between 1 and 5")
     return v
 
 

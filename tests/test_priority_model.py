@@ -219,7 +219,7 @@ class TestApiModelsPriority:
         from pydantic import ValidationError
         from team_cli.api_models import ProjectMessageInput
         with pytest.raises(ValidationError):
-            ProjectMessageInput(content="hi", priority=5)
+            ProjectMessageInput(content="hi", priority=6)
 
     def test_project_message_response_includes_priority(self):
         from team_cli.api_models import ProjectMessageResponse
