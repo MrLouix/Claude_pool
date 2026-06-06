@@ -9,7 +9,7 @@ import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, TypedDict
 
 from .concurrency import TaskSemaphore
 from .models import CLIConfig, PoolState, Project, ProjectMessage, Task
@@ -36,6 +36,17 @@ class NoCLIAvailableError(Exception):
     """Raised when no CLI executor is available (all rate-limited or excluded)."""
 
 
+class NormalizedOutput(TypedDict):
+    """Standard output shape returned by every CLI executor's execute()."""
+
+    content: str          # Main text response
+    model: Optional[str]  # Model name used, if available
+    cli_name: str         # Name of the CLI that produced this output
+    tokens_used: Optional[int]   # Token count if available
+    duration_ms: Optional[int]   # Execution duration if available
+    raw: dict             # Original unmodified output from the CLI
+
+
 class BaseCLIExecutor(ABC):
     """Abstract base class for CLI executors."""
 
@@ -43,6 +54,21 @@ class BaseCLIExecutor(ABC):
         self.config = config
 
     @abstractmethod
+    def _run_raw(
+        self,
+        prompt: str,
+        context: list[dict],
+        directory: str,
+        model: str,
+    ) -> dict:
+        """Run the CLI and return the raw parsed output dict."""
+        ...
+
+    @abstractmethod
+    def normalize_output(self, raw_output: dict) -> NormalizedOutput:
+        """Map CLI-specific raw output to the standard NormalizedOutput shape."""
+        ...
+
     def execute(
         self,
         prompt: str,
@@ -50,8 +76,28 @@ class BaseCLIExecutor(ABC):
         directory: str,
         model: str,
     ) -> dict:
-        """Run the CLI and return parsed output dict. Raises on fatal error."""
-        ...
+        """Run the CLI, normalize output, and return a merged result dict.
+
+        The returned dict contains all raw keys (backward compat) plus the
+        six standardized NormalizedOutput fields: content, model, cli_name,
+        tokens_used, duration_ms, raw.
+        """
+        raw = self._run_raw(prompt, context, directory, model)
+        norm = self.normalize_output(raw)
+        # Merge: start with raw for backward compat, then overlay normalized fields.
+        result = dict(raw)
+        result["content"] = norm["content"]
+        result["cli_name"] = norm["cli_name"]
+        result["raw"] = norm["raw"]
+        # Only overlay optional fields when the normalized value is not None,
+        # so existing raw values (e.g. tokens_used=0 from Claude) are preserved.
+        if norm.get("model") is not None:
+            result["model"] = norm["model"]
+        if norm.get("tokens_used") is not None:
+            result["tokens_used"] = norm["tokens_used"]
+        if norm.get("duration_ms") is not None:
+            result["duration_ms"] = norm["duration_ms"]
+        return result
 
     @abstractmethod
     def check_rate_limit(self) -> bool:
@@ -72,14 +118,14 @@ class ClaudeExecutor(BaseCLIExecutor):
         self._last_stderr: str = ""
         self._last_stdout: str = ""
 
-    def execute(
+    def _run_raw(
         self,
         prompt: str,
         context: list[dict],
         directory: str,
         model: str,
     ) -> dict:
-        """Run Claude CLI and return parsed output dict."""
+        """Run Claude CLI and return raw parsed output dict."""
         import json
         import tempfile
         import os
@@ -156,6 +202,18 @@ class ClaudeExecutor(BaseCLIExecutor):
                 except OSError:
                     pass
 
+    def normalize_output(self, raw_output: dict) -> NormalizedOutput:
+        """Normalize Claude's parsed output to the standard shape."""
+        tokens = raw_output.get("tokens_used")
+        return NormalizedOutput(
+            content=str(raw_output.get("result", "")),
+            model=raw_output.get("model"),
+            cli_name=self.config.name,
+            tokens_used=int(tokens) if tokens else None,
+            duration_ms=raw_output.get("duration_ms"),
+            raw=dict(raw_output),
+        )
+
     def check_rate_limit(self) -> bool:
         """Check if the last execution hit a rate limit."""
         if self._last_exit_code == 1 and self._last_stderr:
@@ -173,14 +231,14 @@ class MistralExecutor(BaseCLIExecutor):
         self._last_stdout: str = ""
         self._last_stderr: str = ""
 
-    def execute(
+    def _run_raw(
         self,
         prompt: str,
         context: list[dict],
         directory: str,
         model: str,
     ) -> dict:
-        """Run Mistral CLI and return parsed output dict."""
+        """Run Mistral CLI and return raw parsed output dict."""
         import json
         import tempfile
         import os
@@ -253,6 +311,26 @@ class MistralExecutor(BaseCLIExecutor):
                 except OSError:
                     pass
 
+    def normalize_output(self, raw_output: dict) -> NormalizedOutput:
+        """Normalize Mistral's output to the standard shape."""
+        content = str(raw_output.get("result", raw_output.get("content", "")))
+        usage = raw_output.get("usage", {})
+        tokens: Optional[int] = None
+        if isinstance(usage, dict):
+            t = usage.get("total_tokens") or usage.get("tokens_used")
+            tokens = int(t) if t else None
+        if tokens is None:
+            t = raw_output.get("tokens_used")
+            tokens = int(t) if t else None
+        return NormalizedOutput(
+            content=content,
+            model=raw_output.get("model"),
+            cli_name=self.config.name,
+            tokens_used=tokens,
+            duration_ms=raw_output.get("duration_ms"),
+            raw=dict(raw_output),
+        )
+
     def check_rate_limit(self) -> bool:
         """Check if the last execution hit a rate limit."""
         if self._last_exit_code != 0:
@@ -268,7 +346,7 @@ class GenericCLIExecutor(BaseCLIExecutor):
         super().__init__(config)
         self._last_exit_code: int | None = None
 
-    def execute(
+    def _run_raw(
         self,
         prompt: str,
         context: list[dict],
@@ -318,6 +396,23 @@ class GenericCLIExecutor(BaseCLIExecutor):
         except Exception as e:
             self._last_exit_code = -1
             return {"result": f"Execution error: {str(e)}", "parse_error": True}
+
+    def normalize_output(self, raw_output: dict) -> NormalizedOutput:
+        """Best-effort normalization for generic CLI output."""
+        content = str(
+            raw_output.get("result",
+            raw_output.get("content",
+            raw_output.get("output", "")))
+        )
+        t = raw_output.get("tokens_used")
+        return NormalizedOutput(
+            content=content,
+            model=raw_output.get("model"),
+            cli_name=self.config.name,
+            tokens_used=int(t) if t else None,
+            duration_ms=raw_output.get("duration_ms"),
+            raw=dict(raw_output),
+        )
 
     def check_rate_limit(self) -> bool:
         """Custom CLIs are assumed not to rate-limit by default."""
@@ -488,7 +583,7 @@ async def execute_message(
         )
 
         if not cli.check_rate_limit():
-            result["cli_used"] = cli.config.name
+            result["cli_used"] = result["cli_name"]
             return result
 
         # Rate-limited — record and optionally switch

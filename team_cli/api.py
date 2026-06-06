@@ -1122,9 +1122,10 @@ class ApiServer:
                     )
 
                 # Build and persist the assistant reply
-                assistant_content = result.get("result", "")
+                assistant_content = result.get("content", result.get("result", ""))
+                _raw = result.get("raw", result)
                 assistant_metadata = {
-                    k: v for k, v in result.items()
+                    k: v for k, v in _raw.items()
                     if k not in ("result", "cli_used", "reasoning")
                 }
                 assistant_msg = ProjectMessage(
