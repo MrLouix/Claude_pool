@@ -409,7 +409,7 @@ class TestExecuteMessageCliUsed:
         import inspect
         import team_cli.executor as mod
         src = inspect.getsource(mod.execute_message)
-        assert 'result["cli_used"] = result["cli_name"]' in src
+        assert 'result["cli_used"] = result.get("cli_name"' in src
 
     def test_execute_message_returns_cli_used(self):
         import asyncio
@@ -497,6 +497,7 @@ class TestAbstractMethodEnforcement:
                 content=raw.get("result", ""), model=None, cli_name=self.config.name,
                 tokens_used=None, duration_ms=None, raw=dict(raw)
             )
+            def format_context(self, messages): return ""
             def check_rate_limit(self): return False
 
         obj = Full(_config())

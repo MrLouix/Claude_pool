@@ -50,6 +50,7 @@ def _make_executor(name: str, rate_limited: bool = False, result: dict | None = 
     executor.config = config
     executor.check_rate_limit.return_value = rate_limited
     executor.execute.return_value = result or {"result": f"ok from {name}"}
+    executor.format_context.return_value = ""
     return executor
 
 
@@ -60,7 +61,7 @@ def _make_manager(*executors) -> CLIManager:
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 # ---------------------------------------------------------------------------

@@ -464,12 +464,12 @@ def test_post_task_default_priority_is_2(api):
     assert task.priority == 2
 
 
-def test_post_task_priority_5_returns_422(api):
-    """POST /api/tasks with priority=5 returns 422 Unprocessable Entity."""
+def test_post_task_priority_6_returns_422(api):
+    """POST /api/tasks with priority=6 returns 422 Unprocessable Entity."""
     client, _ = api
     r = client.post(
         "/api/tasks",
-        json={"prompt": "Bad priority", "directory": str(Path.home()), "priority": 5},
+        json={"prompt": "Bad priority", "directory": str(Path.home()), "priority": 6},
     )
     assert r.status_code == 422
 

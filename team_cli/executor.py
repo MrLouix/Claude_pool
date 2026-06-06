@@ -100,6 +100,14 @@ class BaseCLIExecutor(ABC):
         return result
 
     @abstractmethod
+    def format_context(self, messages: list[dict[str, str]]) -> str:
+        """Convert context messages to a CLI-specific string for prompt prepending.
+
+        Returns empty string when messages is empty.
+        """
+        ...
+
+    @abstractmethod
     def check_rate_limit(self) -> bool:
         """Return True if this CLI is currently rate-limited."""
         ...
@@ -213,6 +221,16 @@ class ClaudeExecutor(BaseCLIExecutor):
             duration_ms=raw_output.get("duration_ms"),
             raw=dict(raw_output),
         )
+
+    def format_context(self, messages: list[dict[str, str]]) -> str:
+        """Format context as Claude's Human/Assistant multi-turn format."""
+        if not messages:
+            return ""
+        parts = []
+        for msg in messages:
+            role = "Human" if msg["role"] == "user" else "Assistant"
+            parts.append(f"{role}: {msg['content']}")
+        return "\n".join(parts) + "\n"
 
     def check_rate_limit(self) -> bool:
         """Check if the last execution hit a rate limit."""
@@ -331,6 +349,17 @@ class MistralExecutor(BaseCLIExecutor):
             raw=dict(raw_output),
         )
 
+    def format_context(self, messages: list[dict[str, str]]) -> str:
+        """Format context as a readable conversation block."""
+        if not messages:
+            return ""
+        lines = ["[Previous conversation:]"]
+        for msg in messages:
+            role = "User" if msg["role"] == "user" else "AI"
+            lines.append(f"{role}: {msg['content']}")
+        lines.append("[End of context]")
+        return "\n".join(lines) + "\n"
+
     def check_rate_limit(self) -> bool:
         """Check if the last execution hit a rate limit."""
         if self._last_exit_code != 0:
@@ -413,6 +442,17 @@ class GenericCLIExecutor(BaseCLIExecutor):
             duration_ms=raw_output.get("duration_ms"),
             raw=dict(raw_output),
         )
+
+    def format_context(self, messages: list[dict[str, str]]) -> str:
+        """Format context as a readable conversation block."""
+        if not messages:
+            return ""
+        lines = ["[Previous conversation:]"]
+        for msg in messages:
+            role = "User" if msg["role"] == "user" else "AI"
+            lines.append(f"{role}: {msg['content']}")
+        lines.append("[End of context]")
+        return "\n".join(lines) + "\n"
 
     def check_rate_limit(self) -> bool:
         """Custom CLIs are assumed not to rate-limit by default."""
@@ -526,6 +566,16 @@ class CLIManager:
         return None
 
 
+def truncate_context_messages(
+    messages: list[dict[str, str]],
+    max_count: int = 3,
+) -> list[dict[str, str]]:
+    """Return the last *max_count* messages, keeping context bounded."""
+    if len(messages) <= max_count:
+        return messages
+    return messages[-max_count:]
+
+
 async def execute_message(
     message: ProjectMessage,
     project: Project,
@@ -553,7 +603,8 @@ async def execute_message(
         NoCLIAvailableError: When no CLI is available or all retries are exhausted.
         RuntimeError: When rate-limited and allow_cli_switch is False.
     """
-    context = await asyncio.to_thread(build_context, message, Path(db_path))
+    raw_context = await asyncio.to_thread(build_context, message, Path(db_path))
+    context = truncate_context_messages(raw_context)
 
     # Resolve starting executor
     if project.default_cli:
@@ -574,9 +625,11 @@ async def execute_message(
     tried_clis: list[str] = []
 
     for _ in range(MAX_RETRIES):
+        formatted_context = cli.format_context(context)
+        full_prompt = formatted_context + message.content if formatted_context else message.content
         result = await asyncio.to_thread(
             cli.execute,
-            prompt=message.content,
+            prompt=full_prompt,
             context=context,
             directory=project.directory,
             model=model or "",
