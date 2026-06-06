@@ -7,18 +7,43 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+import httpx
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.containers import Container, ScrollableContainer, Vertical, VerticalScroll
-from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Footer, Header, Input, Label, Select, Static
+from textual.screen import ModalScreen, Screen
+from textual.widgets import (
+    Button,
+    DataTable,
+    Footer,
+    Header,
+    Input,
+    Label,
+    Select,
+    Static,
+    TabbedContent,
+    TabPane,
+)
 
 from .executor import CLIManager, TaskExecutor
-from .models import Task
-from .storage import cleanup_old_tasks
+from .models import ProjectMessage, Task
+from .priority_engine import PRIORITY_LABELS, promote_priority
+from .storage import (
+    cleanup_old_tasks,
+    delete_project_message,
+    load_project_messages,
+    load_projects,
+    save_project_message,
+)
 
 logger = logging.getLogger(__name__)
 
+_API_BASE = "http://localhost:8001"
+
+
+# ---------------------------------------------------------------------------
+# Task-related modals (unchanged)
+# ---------------------------------------------------------------------------
 
 class AddTaskScreen(ModalScreen[dict | None]):
     """Modal screen for adding a new task."""
@@ -75,7 +100,6 @@ class AddTaskScreen(ModalScreen[dict | None]):
         directory = self.query_one("#directory_input", Input).value.strip()
         prompt = self.query_one("#prompt_input", Input).value.strip()
 
-        # Handle Select widgets that may return NoSelection
         model_value = self.query_one("#model_select", Select).value
         model = (
             "" if isinstance(model_value, NoSelection) or model_value == "" else str(model_value)
@@ -88,7 +112,6 @@ class AddTaskScreen(ModalScreen[dict | None]):
 
         args = self.query_one("#args_input", Input).value.strip()
 
-        # Validate required fields
         if not directory:
             self.notify("Directory is required", severity="error")
             return
@@ -96,7 +119,6 @@ class AddTaskScreen(ModalScreen[dict | None]):
             self.notify("Prompt is required", severity="error")
             return
 
-        # Validate directory path
         try:
             dir_path = Path(directory).expanduser().resolve()
             if not dir_path.exists():
@@ -109,14 +131,12 @@ class AddTaskScreen(ModalScreen[dict | None]):
             self.notify(f"Invalid directory path: {e}", severity="error")
             return
 
-        # Build args list
         args_list = []
         if model:
             args_list.extend(["--model", model])
         if effort:
             args_list.extend(["--effort", effort])
         if args:
-            # Split by spaces, respecting quotes
             args_list.extend(args.split())
 
         self.dismiss(
@@ -295,6 +315,10 @@ class DetailedOutputScreen(ModalScreen):
     """
 
 
+# ---------------------------------------------------------------------------
+# Task tab widgets (unchanged internals)
+# ---------------------------------------------------------------------------
+
 class TaskListWidget(Static):
     """Widget displaying the list of tasks in a table."""
 
@@ -320,12 +344,10 @@ class TaskListWidget(Static):
         self.task_map.clear()
 
         for idx, task in enumerate(self.executor.pool.tasks):
-            # Format task fields
             task_id = task.id
             prompt = task.prompt[:20] + ("..." if len(task.prompt) > 20 else "")
             directory = str(task.directory)
 
-            # Format status with emoji and color
             status_emoji = {
                 "pending": "⏸",
                 "running": "▶",
@@ -338,7 +360,6 @@ class TaskListWidget(Static):
 
             status_text = f"{status_emoji} {task.status}"
 
-            # Apply color based on status
             if task.status == "success":
                 status_display = f"[green]{status_text}[/green]"
             elif task.status in ("failed", "stopped"):
@@ -348,7 +369,6 @@ class TaskListWidget(Static):
             else:
                 status_display = f"[dim]{status_text}[/dim]"
 
-            # Add row and store task mapping by row index
             row_key = table.add_row(task_id, prompt, directory, status_display)
             self.task_map[str(idx)] = task
 
@@ -356,7 +376,7 @@ class TaskListWidget(Static):
 class JsonOutputWidget(Static):
     """Widget displaying JSON output of selected task."""
 
-    can_focus = True  # Allow widget to receive focus for scrolling
+    can_focus = True
 
     def __init__(self) -> None:
         """Initialize the JSON output widget."""
@@ -471,7 +491,7 @@ class ResultWidget(Static):
 class LogWidget(Static):
     """Widget displaying logs."""
 
-    can_focus = True  # Allow widget to receive focus for scrolling
+    can_focus = True
 
     def __init__(self) -> None:
         """Initialize the log widget."""
@@ -488,6 +508,276 @@ class LogWidget(Static):
         self.update("\n".join(self.logs))
 
 
+# ---------------------------------------------------------------------------
+# Project tab widgets
+# ---------------------------------------------------------------------------
+
+class ProjectListWidget(Static):
+    """DataTable listing all projects."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._project_map: dict[int, object] = {}  # row_idx -> Project
+
+    def compose(self) -> ComposeResult:
+        table = DataTable(id="projects_table")
+        table.add_columns("Name", "Directory", "Default CLI", "CLI Switch")
+        table.cursor_type = "row"
+        yield table
+
+    def refresh_projects(self, projects: list) -> None:
+        """Repopulate the table from *projects* list."""
+        table = self.query_one(DataTable)
+        table.clear()
+        self._project_map.clear()
+        for idx, p in enumerate(projects):
+            cli_switch = "✓" if p.allow_cli_switch else "✗"
+            table.add_row(
+                p.name,
+                p.directory[:40] + ("…" if len(p.directory) > 40 else ""),
+                p.default_cli or "—",
+                cli_switch,
+            )
+            self._project_map[idx] = p
+
+    def selected_project(self) -> object | None:
+        """Return the Project at the current cursor row, or None."""
+        try:
+            table = self.query_one(DataTable)
+            idx = table.cursor_row
+            return self._project_map.get(idx)
+        except Exception:
+            return None
+
+
+# ---------------------------------------------------------------------------
+# Compose message modal
+# ---------------------------------------------------------------------------
+
+class ComposeMessageScreen(ModalScreen[dict | None]):
+    """Modal for composing a new project message."""
+
+    def __init__(self, project_name: str, linked_message_id: str | None = None) -> None:
+        super().__init__()
+        self._project_name = project_name
+        self._linked_message_id = linked_message_id
+
+    def compose(self) -> ComposeResult:
+        title = "Reply" if self._linked_message_id else "New Message"
+        yield Container(
+            Label(f"[bold]{title}[/bold] — {self._project_name}"),
+            Label("Message:"),
+            Input(placeholder="Type your message…", id="msg_input"),
+            Container(
+                Button("Send", id="send_btn", variant="success"),
+                Button("Cancel", id="cancel_btn", variant="primary"),
+                id="compose_buttons",
+            ),
+            id="compose_dialog",
+        )
+
+    def on_mount(self) -> None:
+        self.query_one("#msg_input", Input).focus()
+
+    @on(Button.Pressed, "#send_btn")
+    def on_send(self) -> None:
+        content = self.query_one("#msg_input", Input).value.strip()
+        if not content:
+            self.notify("Message cannot be empty", severity="error")
+            return
+        self.dismiss({"content": content, "linked_message_id": self._linked_message_id})
+
+    @on(Button.Pressed, "#cancel_btn")
+    def on_cancel(self) -> None:
+        self.dismiss(None)
+
+    def on_key(self, event) -> None:
+        if event.key == "escape":
+            self.dismiss(None)
+
+    CSS = """
+    #compose_dialog {
+        width: 70;
+        height: auto;
+        border: thick $background 80%;
+        background: $surface;
+        padding: 1;
+        align: center middle;
+    }
+    #compose_dialog Label { margin-top: 1; }
+    #compose_dialog Input { width: 100%; margin-bottom: 1; }
+    #compose_buttons {
+        width: 100%;
+        height: 3;
+        align: center middle;
+        layout: horizontal;
+    }
+    #compose_buttons Button { height: 3; margin: 0 1; padding: 0 2; }
+    """
+
+
+# ---------------------------------------------------------------------------
+# Project detail screen
+# ---------------------------------------------------------------------------
+
+class ProjectDetailScreen(Screen):
+    """Full-screen view of a single project's messages."""
+
+    BINDINGS = [
+        ("b", "back", "Back"),
+        ("escape", "back", "Back"),
+        ("n", "new_message", "New Message"),
+        ("p", "promote_message", "Promote"),
+        ("r", "reply_message", "Reply"),
+        ("delete", "delete_message", "Delete"),
+    ]
+
+    def __init__(self, project, db_path: Path) -> None:
+        super().__init__()
+        self.project = project
+        self.db_path = db_path
+        self._messages: list[ProjectMessage] = []
+        self._msg_map: dict[int, ProjectMessage] = {}
+
+    # ---- layout ----
+
+    def compose(self) -> ComposeResult:
+        p = self.project
+        cli_switch = "Yes" if p.allow_cli_switch else "No"
+        meta = (
+            f"[bold]{p.name}[/bold]  |  {p.directory}"
+            f"  |  CLI: {p.default_cli or '(auto)'}  |  Switch: {cli_switch}"
+        )
+        yield Header()
+        yield Static(meta, id="proj_meta")
+        with ScrollableContainer(id="msg_scroll"):
+            yield DataTable(id="msg_table")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        table = self.query_one("#msg_table", DataTable)
+        table.add_columns("Role", "Priority", "CLI", "Content", "Created")
+        table.cursor_type = "row"
+        self._reload_messages()
+
+    # ---- data ----
+
+    def _reload_messages(self) -> None:
+        self._messages = load_project_messages(self.db_path, self.project.id)
+        table = self.query_one("#msg_table", DataTable)
+        table.clear()
+        self._msg_map.clear()
+        for idx, m in enumerate(self._messages):
+            label = PRIORITY_LABELS.get(m.priority, str(m.priority))
+            content_preview = m.content[:60] + ("…" if len(m.content) > 60 else "")
+            created = m.created_at.strftime("%m-%d %H:%M") if m.created_at else ""
+            table.add_row(m.role, label, m.cli_used or "—", content_preview, created)
+            self._msg_map[idx] = m
+
+    def _selected_message(self) -> ProjectMessage | None:
+        try:
+            table = self.query_one("#msg_table", DataTable)
+            return self._msg_map.get(table.cursor_row)
+        except Exception:
+            return None
+
+    # ---- actions ----
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
+
+    async def action_new_message(self) -> None:
+        result = await self.app.push_screen_wait(
+            ComposeMessageScreen(self.project.name)
+        )
+        if result:
+            await self._send_message(result["content"], result["linked_message_id"])
+
+    async def action_reply_message(self) -> None:
+        msg = self._selected_message()
+        linked_id = msg.id if msg else None
+        result = await self.app.push_screen_wait(
+            ComposeMessageScreen(self.project.name, linked_message_id=linked_id)
+        )
+        if result:
+            await self._send_message(result["content"], result["linked_message_id"])
+
+    def action_promote_message(self) -> None:
+        msg = self._selected_message()
+        if msg is None:
+            self.notify("No message selected", severity="warning")
+            return
+        new_priority = promote_priority(msg.priority)
+        if new_priority == msg.priority:
+            self.notify("Already at maximum priority", severity="warning")
+            return
+        msg.priority = new_priority
+        save_project_message(self.db_path, msg)
+        self._reload_messages()
+        self.notify(
+            f"Priority → {PRIORITY_LABELS.get(new_priority, str(new_priority))}",
+            severity="information",
+        )
+
+    async def action_delete_message(self) -> None:
+        msg = self._selected_message()
+        if msg is None:
+            self.notify("No message selected", severity="warning")
+            return
+        confirmed = await self.app.push_screen_wait(
+            ConfirmDialog(f"Delete this message?")
+        )
+        if confirmed:
+            delete_project_message(self.db_path, msg.id)
+            self._reload_messages()
+            self.notify("Message deleted", severity="information")
+
+    async def _send_message(self, content: str, linked_message_id: str | None) -> None:
+        """POST to the API, falling back to direct storage if API is unreachable."""
+        payload = {"content": content, "role": "user"}
+        if linked_message_id:
+            payload["linked_message_id"] = linked_message_id
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(
+                    f"{_API_BASE}/api/projects/{self.project.id}/messages",
+                    json=payload,
+                )
+            if resp.status_code in (200, 201):
+                self.notify("Message sent", severity="information")
+            else:
+                self.notify(f"API error {resp.status_code}", severity="error")
+        except Exception:
+            # API not running — save directly to DB
+            msg_id = f"msg_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+            msg = ProjectMessage(
+                id=msg_id,
+                project_id=self.project.id,
+                content=content,
+                role="user",
+                linked_message_id=linked_message_id,
+            )
+            save_project_message(self.db_path, msg)
+            self.notify("Message saved (offline)", severity="information")
+        self._reload_messages()
+
+    CSS = """
+    #proj_meta {
+        height: 3;
+        padding: 1;
+        background: $boost;
+        border-bottom: solid $primary;
+    }
+    #msg_scroll {
+        height: 1fr;
+    }
+    """
+
+
+# ---------------------------------------------------------------------------
+# Main application
+# ---------------------------------------------------------------------------
+
 class PoolTUI(App):
     """Main TUI application for TeamCLI."""
 
@@ -496,14 +786,19 @@ class PoolTUI(App):
         layout: vertical;
     }
 
+    TabbedContent {
+        height: 1fr;
+    }
+
+    /* Tasks tab */
     #task_list_widget {
-        height: 25%;
+        height: 30%;
         border: solid green;
         padding: 1;
     }
 
     #json_output_container {
-        height: 50%;
+        height: 45%;
         layout: vertical;
     }
 
@@ -533,7 +828,7 @@ class PoolTUI(App):
         height: 18%;
         border: solid yellow;
     }
-    
+
     #logs {
         width: 100%;
         height: auto;
@@ -550,20 +845,37 @@ class PoolTUI(App):
         margin: 0;
         padding: 0 1;
     }
+
+    /* Projects tab */
+    #projects_tab_content {
+        height: 1fr;
+        padding: 1;
+    }
+
+    #project_list_widget {
+        height: 1fr;
+        border: solid $primary;
+    }
     """
 
     BINDINGS = [
+        ("q", "quit", "Quit"),
+        # Tasks tab bindings
         ("p", "toggle_pause", "Pause/Resume"),
         ("s", "skip_task", "Skip"),
         ("x", "stop_task", "Stop"),
         ("d", "delete_task", "Delete"),
-        ("enter", "show_detail", "Detail"),
-        ("q", "quit", "Quit"),
+        ("enter", "activate_row", "Open/Detail"),
         ("r", "retry_task", "Retry"),
         ("a", "add_task", "Add Task"),
     ]
 
-    def __init__(self, pool_file: Path, max_concurrent: int = 1, cli_manager: "CLIManager | None" = None) -> None:
+    def __init__(
+        self,
+        pool_file: Path,
+        max_concurrent: int = 1,
+        cli_manager: "CLIManager | None" = None,
+    ) -> None:
         """Initialize the TUI application."""
         super().__init__()
         self.pool_file = pool_file
@@ -576,67 +888,81 @@ class PoolTUI(App):
         """Compose the UI."""
         yield Header()
 
-        task_list_widget = TaskListWidget(None)
-        task_list_widget.id = "task_list_widget"
-        yield task_list_widget
+        with TabbedContent(initial="tab_tasks"):
+            with TabPane("Tasks", id="tab_tasks"):
+                task_list_widget = TaskListWidget(None)
+                task_list_widget.id = "task_list_widget"
+                yield task_list_widget
 
-        with Container(id="json_output_container"):
-            with ScrollableContainer(id="prompt_container"):
-                json_widget = JsonOutputWidget()
-                json_widget.id = "json_output"
-                yield json_widget
-            with ScrollableContainer(id="result_container"):
-                result_widget = ResultWidget()
-                result_widget.id = "result_output"
-                yield result_widget
+                with Container(id="json_output_container"):
+                    with ScrollableContainer(id="prompt_container"):
+                        json_widget = JsonOutputWidget()
+                        json_widget.id = "json_output"
+                        yield json_widget
+                    with ScrollableContainer(id="result_container"):
+                        result_widget = ResultWidget()
+                        result_widget.id = "result_output"
+                        yield result_widget
 
-        # Wrap logs in scrollable container
-        with ScrollableContainer(id="logs_container"):
-            log_widget = LogWidget()
-            log_widget.id = "logs"
-            yield log_widget
+                with ScrollableContainer(id="logs_container"):
+                    log_widget = LogWidget()
+                    log_widget.id = "logs"
+                    yield log_widget
 
-        yield Container(
-            Button("Add Task", id="add_task_btn", variant="success"),
-            Button("Pause", id="pause_btn", variant="warning"),
-            Button("Skip", id="skip_btn", variant="error"),
-            Button("Stop", id="stop_btn", variant="error"),
-            Button("Delete", id="delete_btn", variant="error"),
-            Button("Retry", id="retry_btn", variant="warning"),
-            Button("Quit", id="quit_btn", variant="primary"),
-            id="controls",
-        )
+                yield Container(
+                    Button("Add Task", id="add_task_btn", variant="success"),
+                    Button("Pause", id="pause_btn", variant="warning"),
+                    Button("Skip", id="skip_btn", variant="error"),
+                    Button("Stop", id="stop_btn", variant="error"),
+                    Button("Delete", id="delete_btn", variant="error"),
+                    Button("Retry", id="retry_btn", variant="warning"),
+                    Button("Quit", id="quit_btn", variant="primary"),
+                    id="controls",
+                )
+
+            with TabPane("Projects", id="tab_projects"):
+                with Container(id="projects_tab_content"):
+                    proj_list = ProjectListWidget()
+                    proj_list.id = "project_list_widget"
+                    yield proj_list
+
         yield Footer()
+
+    # ---- helpers ----
 
     def _update_detail(self, task: "Task | None") -> None:
         """Update both prompt and result detail widgets."""
         self.query_one("#json_output", JsonOutputWidget).update_content(task)
         self.query_one("#result_output", ResultWidget).update_content(task)
 
+    def _active_tab(self) -> str:
+        try:
+            return str(self.query_one(TabbedContent).active)
+        except Exception:
+            return "tab_tasks"
+
+    # ---- lifecycle ----
+
     async def on_mount(self) -> None:
         """Called when app is mounted."""
-        # Initialize executor
         self.executor = TaskExecutor(
-            self.pool_file, on_task_update=self._on_task_update, max_concurrent=self.max_concurrent,
-            cli_manager=self.cli_manager
+            self.pool_file,
+            on_task_update=self._on_task_update,
+            max_concurrent=self.max_concurrent,
+            cli_manager=self.cli_manager,
         )
 
-        # Update task list widget with executor
         task_list = self.query_one("#task_list_widget", TaskListWidget)
         task_list.executor = self.executor
 
-        # Load tasks
         log_widget = self.query_one("#logs", LogWidget)
-        log_widget.add_log("Loading tasks...")
+        log_widget.add_log("Loading tasks…")
 
         try:
             await self.executor.load_tasks()
             log_widget.add_log(f"Loaded {len(self.executor.pool.tasks)} tasks")
             task_list.update_tasks()
-
-            # Start execution in background
             self._start_execution()
-
         except Exception as e:
             log_widget.add_log(f"[red]Error loading tasks: {e}[/red]")
 
@@ -645,17 +971,32 @@ class PoolTUI(App):
         """Start task execution in background."""
         if self.executor:
             log_widget = self.query_one("#logs", LogWidget)
-            log_widget.add_log("[green]Starting task execution...[/green]")
+            log_widget.add_log("[green]Starting task execution…[/green]")
             await self.executor.run_pool()
             log_widget.add_log("[green]All tasks completed[/green]")
 
+    # ---- tab switching ----
+
+    def on_tabbed_content_tab_activated(
+        self, event: TabbedContent.TabActivated
+    ) -> None:
+        """Reload projects whenever the Projects tab becomes active."""
+        if str(event.tab.id) == "tab_projects":
+            self._reload_project_list()
+
+    def _reload_project_list(self) -> None:
+        try:
+            projects = load_projects(self.pool_file)
+            self.query_one("#project_list_widget", ProjectListWidget).refresh_projects(projects)
+        except Exception as e:
+            self.notify(f"Error loading projects: {e}", severity="error")
+
+    # ---- task update callback ----
+
     def _on_task_update(self, task: Task) -> None:
-        """Called when a task is updated."""
-        # Update UI from main thread
         self.call_later(self._update_ui, task)
 
     def _update_ui(self, task: Task) -> None:
-        """Update UI elements."""
         task_list = self.query_one("#task_list_widget", TaskListWidget)
         task_list.update_tasks()
 
@@ -665,19 +1006,25 @@ class PoolTUI(App):
         if self.selected_task and self.selected_task.id == task.id:
             self._update_detail(task)
 
+    # ---- row highlight (tasks table) ----
+
     @on(DataTable.RowHighlighted)
     def on_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
-        """Handle task row selection."""
-        task_list = self.query_one("#task_list_widget", TaskListWidget)
-        table = self.query_one("#task_list_widget DataTable", DataTable)
+        """Handle row highlight — only act on the task table."""
+        try:
+            table = self.query_one("#task_list_widget DataTable", DataTable)
+        except Exception:
+            return
+        if event.data_table is not table:
+            return
 
         if event.row_key is None or table.cursor_row < 0:
             self.selected_task = None
             self._update_detail(None)
             return
 
+        task_list = self.query_one("#task_list_widget", TaskListWidget)
         row_idx = table.cursor_row
-
         if str(row_idx) in task_list.task_map:
             self.selected_task = task_list.task_map[str(row_idx)]
             self._update_detail(self.selected_task)
@@ -685,48 +1032,58 @@ class PoolTUI(App):
             self.selected_task = None
             self._update_detail(None)
 
+    # ---- enter / activate ----
+
+    def action_activate_row(self) -> None:
+        """Enter key: open project detail if on Projects tab, else show task detail."""
+        if self._active_tab() == "tab_projects":
+            proj = self.query_one("#project_list_widget", ProjectListWidget).selected_project()
+            if proj is not None:
+                self.push_screen(ProjectDetailScreen(proj, self.pool_file))
+        else:
+            self.action_show_detail()
+
     def action_show_detail(self) -> None:
         """Show detailed output for selected task."""
         if self.selected_task and self.selected_task.json_output:
             self.push_screen(DetailedOutputScreen(self.selected_task))
 
+    # ---- task actions ----
+
     def action_toggle_pause(self) -> None:
-        """Toggle pause state."""
+        if self._active_tab() != "tab_tasks":
+            return
         if self.executor:
             if self.executor.paused:
                 self.executor.resume()
-                log_widget = self.query_one("#logs", LogWidget)
-                log_widget.add_log("[green]Execution resumed[/green]")
-                btn = self.query_one("#pause_btn", Button)
-                btn.label = "Pause"
+                self.query_one("#logs", LogWidget).add_log("[green]Execution resumed[/green]")
+                self.query_one("#pause_btn", Button).label = "Pause"
             else:
                 self.executor.pause()
-                log_widget = self.query_one("#logs", LogWidget)
-                log_widget.add_log("[yellow]Execution paused[/yellow]")
-                btn = self.query_one("#pause_btn", Button)
-                btn.label = "Resume"
+                self.query_one("#logs", LogWidget).add_log("[yellow]Execution paused[/yellow]")
+                self.query_one("#pause_btn", Button).label = "Resume"
 
     def action_skip_task(self) -> None:
-        """Skip current task."""
+        if self._active_tab() != "tab_tasks":
+            return
         if self.executor and self.executor.current_task:
-            log_widget = self.query_one("#logs", LogWidget)
-            log_widget.add_log(f"[yellow]Skipping task {self.executor.current_task.id}[/yellow]")
+            self.query_one("#logs", LogWidget).add_log(
+                f"[yellow]Skipping task {self.executor.current_task.id}[/yellow]"
+            )
             self.executor.skip_current()
 
     async def action_stop_task(self) -> None:
-        """Hard-stop the currently selected running task."""
+        if self._active_tab() != "tab_tasks":
+            return
         log_widget = self.query_one("#logs", LogWidget)
         if not self.selected_task:
             log_widget.add_log("[red]No task selected[/red]")
             return
-
         task = self.selected_task
         if task.status != "running":
             log_widget.add_log(f"[yellow]Task {task.id} is {task.status}, cannot stop[/yellow]")
             return
-
         result = await self.push_screen_wait(ConfirmDialog(f"Hard-stop running task {task.id}?"))
-
         if result and self.executor:
             await self.executor.stop_task(task.id)
             log_widget.add_log(f"[red]Task {task.id} hard-stopped[/red]")
@@ -734,69 +1091,27 @@ class PoolTUI(App):
             self._update_detail(self.selected_task)
 
     async def action_delete_task(self) -> None:
-        """Delete selected task."""
-        if not self.selected_task:
-            log_widget = self.query_one("#logs", LogWidget)
-            log_widget.add_log("[red]No task selected[/red]")
+        if self._active_tab() != "tab_tasks":
             return
-
-        # Show confirmation dialog
+        if not self.selected_task:
+            self.query_one("#logs", LogWidget).add_log("[red]No task selected[/red]")
+            return
         result = await self.push_screen_wait(ConfirmDialog(f"Delete task {self.selected_task.id}?"))
-
         if result and self.executor:
             task_id = self.selected_task.id
             if self.executor.delete_task(task_id):
-                log_widget = self.query_one("#logs", LogWidget)
-                log_widget.add_log(f"[red]Deleted task {task_id}[/red]")
-
-                task_list = self.query_one("#task_list_widget", TaskListWidget)
-                task_list.update_tasks()
-
+                self.query_one("#logs", LogWidget).add_log(f"[red]Deleted task {task_id}[/red]")
+                self.query_one("#task_list_widget", TaskListWidget).update_tasks()
                 self.selected_task = None
                 self._update_detail(None)
 
-    @on(Button.Pressed, "#add_task_btn")
-    def on_add_task_pressed(self) -> None:
-        """Handle add task button press."""
-        self.run_worker(self.action_add_task())
-
-    @on(Button.Pressed, "#pause_btn")
-    def on_pause_pressed(self) -> None:
-        """Handle pause button press."""
-        self.action_toggle_pause()
-
-    @on(Button.Pressed, "#skip_btn")
-    def on_skip_pressed(self) -> None:
-        """Handle skip button press."""
-        self.action_skip_task()
-
-    @on(Button.Pressed, "#stop_btn")
-    def on_stop_pressed(self) -> None:
-        """Handle stop button press."""
-        self.run_worker(self.action_stop_task())
-
-    @on(Button.Pressed, "#delete_btn")
-    def on_delete_pressed(self) -> None:
-        """Handle delete button press."""
-        self.run_worker(self.action_delete_task())
-
-    @on(Button.Pressed, "#retry_btn")
-    def on_retry_pressed(self) -> None:
-        """Handle retry button press."""
-        self.action_retry_task()
-
-    @on(Button.Pressed, "#quit_btn")
-    def on_quit_pressed(self) -> None:
-        """Handle quit button press."""
-        self.exit()
-
     def action_retry_task(self) -> None:
-        """Retry selected task by resetting it to pending and incrementing retry count."""
+        if self._active_tab() != "tab_tasks":
+            return
         log_widget = self.query_one("#logs", LogWidget)
         if not self.selected_task:
             log_widget.add_log("[red]No task selected[/red]")
             return
-
         task = self.selected_task
         if task.status in ("failed", "success"):
             if self.executor:
@@ -810,13 +1125,11 @@ class PoolTUI(App):
             log_widget.add_log(f"[yellow]Task {task.id} is {task.status}, cannot retry[/yellow]")
 
     async def action_add_task(self) -> None:
-        """Show add task dialog."""
+        if self._active_tab() != "tab_tasks":
+            return
         result = await self.push_screen_wait(AddTaskScreen())
-
         if result and self.executor:
             task_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
-
-            # Create new task
             new_task = Task(
                 id=task_id,
                 prompt=result["prompt"],
@@ -825,30 +1138,48 @@ class PoolTUI(App):
                 status="pending",
                 priority=2,
             )
-
-            # Add to executor's pool
             self.executor.pool.tasks.append(new_task)
-
-            # Automatic cleanup of old tasks (48+ hours)
             removed = cleanup_old_tasks(self.executor.pool, max_age_hours=48)
             if removed > 0:
                 logger.info(f"Automatically cleaned up {removed} old completed tasks")
-
             self.executor._save_state()
-
-            # Update UI
-            task_list = self.query_one("#task_list_widget", TaskListWidget)
-            task_list.update_tasks()
-
+            self.query_one("#task_list_widget", TaskListWidget).update_tasks()
             log_widget = self.query_one("#logs", LogWidget)
-            log_widget.add_log(
-                f"[green]Added new task {task_id}: {result['prompt'][:40]}...[/green]"
-            )
+            log_widget.add_log(f"[green]Added new task {task_id}: {result['prompt'][:40]}…[/green]")
             if removed > 0:
                 log_widget.add_log(f"[dim]Cleaned up {removed} old completed task(s)[/dim]")
 
+    # ---- button handlers ----
+
+    @on(Button.Pressed, "#add_task_btn")
+    def on_add_task_pressed(self) -> None:
+        self.run_worker(self.action_add_task())
+
+    @on(Button.Pressed, "#pause_btn")
+    def on_pause_pressed(self) -> None:
+        self.action_toggle_pause()
+
+    @on(Button.Pressed, "#skip_btn")
+    def on_skip_pressed(self) -> None:
+        self.action_skip_task()
+
+    @on(Button.Pressed, "#stop_btn")
+    def on_stop_pressed(self) -> None:
+        self.run_worker(self.action_stop_task())
+
+    @on(Button.Pressed, "#delete_btn")
+    def on_delete_pressed(self) -> None:
+        self.run_worker(self.action_delete_task())
+
+    @on(Button.Pressed, "#retry_btn")
+    def on_retry_pressed(self) -> None:
+        self.action_retry_task()
+
+    @on(Button.Pressed, "#quit_btn")
+    def on_quit_pressed(self) -> None:
+        self.exit()
+
     def action_quit(self) -> None:
-        """Quit the application."""
         if self.executor:
             self.executor.should_stop = True
         self.exit()
