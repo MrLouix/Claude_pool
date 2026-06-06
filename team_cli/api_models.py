@@ -31,6 +31,14 @@ class ProjectEntry(BaseModel):
     message_count: int = 0
 
 
+class ProjectUpdateInput(BaseModel):
+    """Input model for PATCH /api/projects/{project_id}. All fields optional."""
+    name: Optional[str] = None
+    directory: Optional[str] = None
+    default_cli: Optional[str] = None
+    allow_cli_switch: Optional[bool] = None
+
+
 class ProjectMessageInput(BaseModel):
     """Input model for creating a project message."""
     content: str

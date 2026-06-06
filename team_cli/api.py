@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional, Set
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
 from .api_models import (
@@ -27,6 +27,7 @@ from .api_models import (
     ProjectEntry,
     ProjectInput,
     ProjectMessageInput,
+    ProjectUpdateInput,
     ProjectMessageResponse,
     TaskDetailResponse,
     TaskInput,
@@ -926,8 +927,49 @@ class ApiServer:
             
             return {"deleted": True, "project_id": project_id}
 
+        @self.app.patch("/api/projects/{project_id}")
+        async def update_project(
+            project_id: str, update_input: ProjectUpdateInput
+        ) -> ProjectEntry:
+            """Partially update a project's fields."""
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+
+            from .storage import load_project, save_project, load_project_messages
+
+            db_path = self.executor.pool.pool_file.with_suffix(".db")
+            project = load_project(db_path, project_id)
+
+            if project is None:
+                raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
+
+            if update_input.name is not None:
+                project.name = update_input.name
+            if update_input.directory is not None:
+                project.directory = update_input.directory
+            if update_input.default_cli is not None:
+                project.default_cli = update_input.default_cli
+            if update_input.allow_cli_switch is not None:
+                project.allow_cli_switch = update_input.allow_cli_switch
+
+            save_project(db_path, project)
+
+            messages = load_project_messages(db_path, project_id)
+            return ProjectEntry(
+                id=project.id,
+                name=project.name,
+                directory=project.directory,
+                created_at=project.created_at.isoformat(),
+                default_cli=project.default_cli,
+                allow_cli_switch=project.allow_cli_switch,
+                message_count=len(messages),
+            )
+
         @self.app.get("/api/projects/{project_id}/messages")
-        async def list_project_messages(project_id: str) -> list[ProjectMessageResponse]:
+        async def list_project_messages(
+            project_id: str,
+            linked_to: Optional[str] = Query(default=None),
+        ) -> list[ProjectMessageResponse]:
             """List all messages for a project."""
             if not self.executor:
                 raise HTTPException(status_code=503, detail="Executor not initialized")
@@ -941,7 +983,10 @@ class ApiServer:
                 raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
             
             messages = load_project_messages(db_path, project_id)
-            
+
+            if linked_to is not None:
+                messages = [m for m in messages if m.linked_message_id == linked_to]
+
             return [
                 ProjectMessageResponse(
                     id=m.id,
@@ -956,6 +1001,52 @@ class ApiServer:
                 )
                 for m in messages
             ]
+
+        @self.app.get("/api/projects/{project_id}/messages/{message_id}")
+        async def get_project_message_endpoint(
+            project_id: str, message_id: str
+        ) -> ProjectMessageResponse:
+            """Get a single project message by ID."""
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+
+            from .storage import load_project_message
+
+            db_path = self.executor.pool.pool_file.with_suffix(".db")
+            message = load_project_message(db_path, message_id)
+
+            if message is None or message.project_id != project_id:
+                raise HTTPException(status_code=404, detail=f"Message {message_id} not found")
+
+            return ProjectMessageResponse(
+                id=message.id,
+                project_id=message.project_id,
+                content=message.content,
+                role=message.role,
+                cli_used=message.cli_used,
+                linked_message_id=message.linked_message_id,
+                metadata=message.metadata,
+                created_at=message.created_at.isoformat(),
+                priority=message.priority,
+            )
+
+        @self.app.delete("/api/projects/{project_id}/messages/{message_id}", status_code=204)
+        async def delete_project_message_endpoint(
+            project_id: str, message_id: str
+        ) -> None:
+            """Delete a single project message."""
+            if not self.executor:
+                raise HTTPException(status_code=503, detail="Executor not initialized")
+
+            from .storage import load_project_message, delete_project_message
+
+            db_path = self.executor.pool.pool_file.with_suffix(".db")
+            message = load_project_message(db_path, message_id)
+
+            if message is None or message.project_id != project_id:
+                raise HTTPException(status_code=404, detail=f"Message {message_id} not found")
+
+            delete_project_message(db_path, message_id)
 
         @self.app.post("/api/projects/{project_id}/messages", status_code=201)
         async def create_project_message(
