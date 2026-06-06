@@ -41,6 +41,7 @@ class Project:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Project":
+        """Construct a Project from a database row dict."""
         return cls(
             id=str(data["id"]),
             name=str(data["name"]),
@@ -51,6 +52,7 @@ class Project:
         )
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialise to a dict suitable for database insertion."""
         return {
             "id": self.id,
             "name": self.name,
@@ -77,6 +79,7 @@ class ProjectMessage:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ProjectMessage":
+        """Construct a ProjectMessage from a database row dict."""
         return cls(
             id=str(data["id"]),
             project_id=str(data["project_id"]),
@@ -90,6 +93,7 @@ class ProjectMessage:
         )
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialise to a dict suitable for database insertion."""
         return {
             "id": self.id,
             "project_id": self.project_id,
@@ -129,6 +133,7 @@ class Bucket:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Bucket":
+        """Construct a Bucket from a database row dict."""
         return cls(
             id=str(data["id"]),
             type=str(data.get("type", "cli")),  # type: ignore[arg-type]
@@ -138,6 +143,7 @@ class Bucket:
         )
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialise to a dict suitable for database insertion."""
         return {
             "id": self.id,
             "type": self.type,

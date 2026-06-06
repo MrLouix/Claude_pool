@@ -1,5 +1,6 @@
 """Pytest configuration and shared fixtures for tests."""
 
+import asyncio
 import json
 from datetime import datetime
 from pathlib import Path
@@ -8,8 +9,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from team_cli.database import DatabaseManager
 from team_cli.executor import TaskExecutor
-from team_cli.models import PoolState, Task
+from team_cli.models import PoolState, Project, ProjectMessage, Task
 
 
 @pytest.fixture
@@ -155,3 +157,40 @@ def mock_executor_empty(temp_pool_file: Path) -> MagicMock:
     executor._save_state = MagicMock()
 
     return executor
+
+
+@pytest.fixture
+def tmp_db_path(tmp_path: Path):
+    """Yield a path to an initialised SQLite DB (tables created, migrations applied)."""
+    db_path = tmp_path / "pool.db"
+    asyncio.run(DatabaseManager(db_path).init())
+    yield db_path
+
+
+@pytest.fixture
+def sample_project() -> Project:
+    """Return a Project instance with stable test data."""
+    return Project(
+        id="proj-fixture-1",
+        name="Sample Project",
+        directory="/tmp/sample",
+        created_at=datetime(2026, 1, 1, 0, 0, 0),
+        default_cli=None,
+        allow_cli_switch=True,
+    )
+
+
+@pytest.fixture
+def sample_message() -> ProjectMessage:
+    """Return a ProjectMessage with role='user' and priority=2."""
+    return ProjectMessage(
+        id="msg-fixture-1",
+        project_id="proj-fixture-1",
+        content="Sample user message",
+        role="user",
+        cli_used=None,
+        linked_message_id=None,
+        metadata={},
+        created_at=datetime(2026, 1, 1, 0, 0, 0),
+        priority=2,
+    )

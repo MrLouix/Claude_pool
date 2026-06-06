@@ -29,6 +29,7 @@ class EmbeddingClassifier:
     }
 
     def __init__(self) -> None:
+        """Initialise with no model loaded; loading is deferred to first classify() call."""
         self._model = None
         self._prototype_embeddings: dict[int, "np.ndarray"] | None = None
 

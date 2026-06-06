@@ -121,6 +121,7 @@ class ClaudeExecutor(BaseCLIExecutor):
     """Executor for Anthropic Claude CLI."""
 
     def __init__(self, config: CLIConfig):
+        """Initialise executor and reset per-call state tracking."""
         super().__init__(config)
         self._last_exit_code: int | None = None
         self._last_stderr: str = ""
@@ -244,6 +245,7 @@ class MistralExecutor(BaseCLIExecutor):
     """Executor for Mistral CLI."""
 
     def __init__(self, config: CLIConfig):
+        """Initialise executor and reset per-call state tracking."""
         super().__init__(config)
         self._last_exit_code: int | None = None
         self._last_stdout: str = ""
@@ -372,6 +374,7 @@ class GenericCLIExecutor(BaseCLIExecutor):
     """Executor for custom CLIs configured via clis.json."""
 
     def __init__(self, config: CLIConfig):
+        """Initialise executor and reset per-call state tracking."""
         super().__init__(config)
         self._last_exit_code: int | None = None
 
@@ -492,6 +495,7 @@ class CLIManager:
     """Manages multiple CLI executors with fallback logic."""
 
     def __init__(self, configs: list[CLIConfig]):
+        """Build executor pool from enabled configs."""
         self._executors: list[BaseCLIExecutor] = [
             create_executor(c) for c in configs if c.enabled
         ]

@@ -22,7 +22,8 @@ lint:
 	isort --check-only team_cli/ tests/
 
 test:
-	pytest tests/ -v --cov=team_cli
+	# Use --tb=short for concise tracebacks
+	pytest tests/ -v --cov=team_cli --tb=short
 
 run:
 	python -m team_cli --pool pool.json
