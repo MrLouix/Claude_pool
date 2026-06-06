@@ -892,6 +892,59 @@
             color: #1e40af;
         }
 
+        /* Threaded messages indentation */
+        .project-msg-threaded {
+            margin-left: 28px;
+            border-left: 3px solid var(--color-border-dark);
+            padding-left: 10px;
+        }
+
+        /* Per-message action buttons */
+        .project-msg-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 4px;
+            flex-wrap: wrap;
+        }
+        .btn-msg-action {
+            padding: 2px 8px;
+            font-size: 0.75rem;
+            border: 1px solid var(--color-border-dark);
+            border-radius: var(--radius-sm);
+            background: var(--color-surface);
+            cursor: pointer;
+            color: var(--color-text-muted);
+            white-space: nowrap;
+        }
+        .btn-msg-action:hover { background: var(--color-hover); }
+        .btn-msg-delete { color: var(--color-danger); border-color: var(--color-danger); }
+        .btn-msg-delete:hover { background: #fff0f0; }
+
+        /* Reply context banner */
+        .project-reply-banner {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: var(--radius-sm);
+            font-size: 0.8125rem;
+            color: #1e40af;
+            margin-bottom: 6px;
+        }
+        .project-reply-banner.hidden { display: none; }
+        .project-reply-excerpt { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .project-reply-close {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            color: #1e40af;
+            line-height: 1;
+            padding: 0 2px;
+        }
+
         /* CLI override select in project compose area */
         #project-cli-select {
             padding: 6px 8px;
@@ -1650,14 +1703,21 @@
     <!-- PROJECT VIEW (hidden until hash = #project/<id>) -->
     <div class="container" id="project-view" style="display:none;">
         <div class="chat-header">
-            <button class="btn-back" id="btn-project-back">← Back</button>
+            <button class="btn-back" id="btn-project-back">← Back to Projects</button>
             <div class="chat-header-info">
                 <div class="chat-header-label" id="project-header-label">Project</div>
                 <div class="chat-header-dir" id="project-header-dir"></div>
             </div>
+            <span id="project-cli-status" style="font-size:0.8125rem;color:var(--color-text-muted);margin-left:auto;"></span>
+            <button class="btn-secondary" id="btn-project-new-message" style="padding:6px 12px;font-size:0.8125rem;">+ New Message</button>
         </div>
         <div class="message-thread" id="project-message-thread">
             <div class="empty-state">No messages yet. Send one below to get started.</div>
+        </div>
+        <div id="project-reply-banner" class="project-reply-banner hidden">
+            <span>↩ Replying to:</span>
+            <span class="project-reply-excerpt" id="project-reply-excerpt"></span>
+            <button class="project-reply-close" id="btn-project-reply-close" aria-label="Cancel reply">×</button>
         </div>
         <div class="chat-input-row" style="align-items:flex-end;gap:6px;">
             <textarea id="project-input" rows="2" placeholder="Type a message… (Ctrl+Enter to send)" aria-label="Project message"></textarea>
@@ -2517,10 +2577,13 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             }
         }
 
+        let _projectPollInterval = null;
+
         function showDashboardView() {
             currentChatId = null;
             currentTaskId = null;
             currentProjectId = null;
+            if (_projectPollInterval) { clearInterval(_projectPollInterval); _projectPollInterval = null; }
             dashboardView.style.display = '';
             chatView.style.display = 'none';
             taskView.style.display = 'none';
@@ -2563,6 +2626,11 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             projectView.style.display = '';
             loadProjectMeta(projectId);
             fetchProjectMessages(projectId);
+            if (_projectPollInterval) clearInterval(_projectPollInterval);
+            _projectPollInterval = setInterval(() => {
+                if (currentProjectId === projectId) fetchProjectMessages(projectId);
+                else clearInterval(_projectPollInterval);
+            }, 5000);
         }
 
         async function loadTaskView(taskId) {
@@ -3279,6 +3347,10 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 const p = await res.json();
                 document.getElementById('project-header-label').textContent = p.name || 'Project';
                 document.getElementById('project-header-dir').textContent = p.directory || '';
+                const cliStatus = document.getElementById('project-cli-status');
+                if (cliStatus) {
+                    cliStatus.textContent = p.default_cli ? `CLI: ${p.default_cli}` : '';
+                }
             } catch (e) { navigate(''); }
         }
 
@@ -3298,24 +3370,35 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 return;
             }
             el.innerHTML = messages.map(m => {
-                const cls = m.role === 'user' ? 'project-msg project-msg-user' : 'project-msg project-msg-assistant';
+                const isUser = m.role === 'user';
+                const isThreaded = !!m.linked_message_id;
+                let cls = isUser ? 'project-msg project-msg-user' : 'project-msg project-msg-assistant';
+                if (isThreaded) cls += ' project-msg-threaded';
                 const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
-                const cliBadge = (m.role === 'assistant' && m.cli_used)
+                const cliBadge = (!isUser && m.cli_used)
                     ? `<span class="msg-cli-badge">${escapeHtml(m.cli_used)}</span>`
                     : '';
                 const priority = m.priority || 2;
-                const priorityBadgeHtml = m.role === 'user' ? getPriorityBadgeHtml(priority) : '';
-                const promoteBtn = m.role === 'user' && priority < 5
+                const priorityBadgeHtml = isUser ? getPriorityBadgeHtml(priority) : '';
+                const promoteBtn = isUser && priority < 5
                     ? `<button class="btn-promote" data-msg-id="${escapeHtml(m.id)}" title="Increase priority" onclick="promoteMessage('${escapeHtml(currentProjectId)}','${escapeHtml(m.id)}',this,this.previousElementSibling)">↑ Promote</button>`
                     : '';
-                return `<div class="${cls}">
+                const contentEscaped = escapeHtml(m.content.slice(0, 80).replace(/\n/g, ' '));
+                const actionBtns = `<div class="project-msg-actions">
+                    <button class="btn-msg-action" onclick="setReplyContext('${escapeHtml(m.id)}','${contentEscaped}')">↩ Reply</button>
+                    <button class="btn-msg-action" onclick="setNewThreadContext()">New Thread</button>
+                    ${promoteBtn}
+                    <button class="btn-msg-action btn-msg-delete" onclick="deleteProjectMessage('${escapeHtml(currentProjectId)}','${escapeHtml(m.id)}')">🗑 Delete</button>
+                </div>`;
+                return `<div class="${cls}" data-msg-id="${escapeHtml(m.id)}">
                     <div class="project-msg-header">
-                        <span class="project-msg-role">${m.role === 'user' ? 'You' : 'Assistant'}</span>
-                        ${priorityBadgeHtml}${promoteBtn}
+                        <span class="project-msg-role">${isUser ? 'You' : 'Assistant'}</span>
+                        ${priorityBadgeHtml}
                         ${cliBadge}
                         <span class="project-msg-time">${escapeHtml(time)}</span>
                     </div>
                     <div class="project-msg-content">${renderText(m.content)}</div>
+                    ${actionBtns}
                 </div>`;
             }).join('');
             el.scrollTop = el.scrollHeight;
@@ -3363,6 +3446,45 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         populateProjectCliSelect();
 
         document.getElementById('btn-project-back').addEventListener('click', () => navigate(''));
+        document.getElementById('btn-project-reply-close').addEventListener('click', clearReplyContext);
+        document.getElementById('btn-project-new-message').addEventListener('click', () => {
+            setNewThreadContext();
+            document.getElementById('project-input').scrollIntoView({ behavior: 'smooth' });
+        });
+
+        let _replyToMessageId = null;
+
+        function setReplyContext(messageId, excerpt) {
+            _replyToMessageId = messageId;
+            document.getElementById('project-reply-excerpt').textContent = excerpt;
+            document.getElementById('project-reply-banner').classList.remove('hidden');
+            document.getElementById('project-input').focus();
+        }
+
+        function setNewThreadContext() {
+            clearReplyContext();
+            document.getElementById('project-input').focus();
+        }
+
+        function clearReplyContext() {
+            _replyToMessageId = null;
+            document.getElementById('project-reply-banner').classList.add('hidden');
+            document.getElementById('project-reply-excerpt').textContent = '';
+        }
+
+        async function deleteProjectMessage(projectId, messageId) {
+            if (!confirm('Delete this message?')) return;
+            try {
+                const res = await fetch(`/api/projects/${projectId}/messages/${messageId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    fetchProjectMessages(projectId);
+                } else {
+                    logEvent(`Error deleting message: HTTP ${res.status}`, 'error');
+                }
+            } catch (e) {
+                logEvent(`Error deleting message: ${e}`, 'error');
+            }
+        }
 
         async function sendProjectMessage() {
             if (!currentProjectId) return;
@@ -3370,12 +3492,15 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             const content = input.value.trim();
             if (!content) return;
             const cliOverride = document.getElementById('project-cli-select').value || null;
+            const linkedMessageId = _replyToMessageId;
             input.value = '';
+            clearReplyContext();
             input.disabled = true;
             document.getElementById('btn-send-project-message').disabled = true;
             try {
                 const body = { content, role: 'user' };
                 if (cliOverride) body.cli_used = cliOverride;
+                if (linkedMessageId) body.linked_message_id = linkedMessageId;
                 const res = await fetch(`/api/projects/${currentProjectId}/messages`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
