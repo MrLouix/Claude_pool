@@ -583,7 +583,9 @@ async def execute_message(
         )
 
         if not cli.check_rate_limit():
-            result["cli_used"] = result["cli_name"]
+            result["cli_used"] = result.get("cli_name", cli.config.name)
+            if "cli_name" not in result:
+                result["cli_name"] = cli.config.name
             return result
 
         # Rate-limited — record and optionally switch
