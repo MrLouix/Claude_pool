@@ -77,6 +77,42 @@ CREATE TABLE IF NOT EXISTS project_messages (
 )
 """
 
+_CREATE_STEP_PLANS = """
+CREATE TABLE IF NOT EXISTS step_plans (
+    id               TEXT PRIMARY KEY,
+    project_id       TEXT NOT NULL,
+    message_id       TEXT NOT NULL,
+    description      TEXT NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'pending',
+    created_at       TEXT NOT NULL,
+    completed_at     TEXT,
+    final_evaluation TEXT,
+    FOREIGN KEY (project_id) REFERENCES projects(id),
+    FOREIGN KEY (message_id) REFERENCES project_messages(id)
+)
+"""
+
+_CREATE_STEP_TASKS = """
+CREATE TABLE IF NOT EXISTS step_tasks (
+    id           TEXT PRIMARY KEY,
+    plan_id      TEXT NOT NULL,
+    step_number  INTEGER NOT NULL,
+    description  TEXT NOT NULL,
+    prompt       TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'pending',
+    cli_used     TEXT,
+    model_used   TEXT,
+    output       TEXT,
+    error        TEXT,
+    tokens_used  INTEGER,
+    duration_ms  INTEGER,
+    created_at   TEXT NOT NULL,
+    started_at   TEXT,
+    completed_at TEXT,
+    FOREIGN KEY (plan_id) REFERENCES step_plans(id)
+)
+"""
+
 _INSERT_DEFAULT_META = """
 INSERT OR IGNORE INTO pool_meta (id, retry_count, suspended_until, provider)
 VALUES (1, 0, NULL, 'claude')
@@ -102,6 +138,8 @@ class DatabaseManager:
             await db.execute(_CREATE_TASKS)
             await db.execute(_CREATE_PROJECTS)
             await db.execute(_CREATE_PROJECT_MESSAGES)
+            await db.execute(_CREATE_STEP_PLANS)
+            await db.execute(_CREATE_STEP_TASKS)
             await db.commit()
 
         # Phase 2: add any columns that were introduced after the DB was created.

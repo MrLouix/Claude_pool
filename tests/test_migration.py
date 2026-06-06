@@ -65,6 +65,36 @@ def _init_full_db(path: Path) -> None:
             created_at TEXT NOT NULL,
             priority INTEGER NOT NULL DEFAULT 2
         );
+        CREATE TABLE IF NOT EXISTS step_plans (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            description TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            final_evaluation TEXT,
+            FOREIGN KEY (project_id) REFERENCES projects(id),
+            FOREIGN KEY (message_id) REFERENCES project_messages(id)
+        );
+        CREATE TABLE IF NOT EXISTS step_tasks (
+            id TEXT PRIMARY KEY,
+            plan_id TEXT NOT NULL,
+            step_number INTEGER NOT NULL,
+            description TEXT NOT NULL,
+            prompt TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            cli_used TEXT,
+            model_used TEXT,
+            output TEXT,
+            error TEXT,
+            tokens_used INTEGER,
+            duration_ms INTEGER,
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            FOREIGN KEY (plan_id) REFERENCES step_plans(id)
+        );
         INSERT OR IGNORE INTO pool_meta (id) VALUES (1);
     """)
     conn.commit()
