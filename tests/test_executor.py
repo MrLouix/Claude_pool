@@ -707,7 +707,9 @@ class TestBuildCommand:
         ex = self._executor(tmp_path)
         task = Task(id="t1", prompt="do something", directory=Path("/tmp"), args=[])
         cmd = ex._build_command(task, session_id=None)
-        assert cmd[:6] == ["claude", "-p", "do something", "--output-format", "json", "--dangerously-skip-permissions"]
+        assert cmd[:5] == ["claude", "-p", "do something", "--output-format", "json"]
+        assert "--structured-output" in cmd
+        assert "--dangerously-skip-permissions" in cmd
         assert "--resume" not in cmd
 
     def test_session_resume_appended(self, tmp_path: Path):

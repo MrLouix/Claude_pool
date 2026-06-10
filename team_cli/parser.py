@@ -151,6 +151,8 @@ def parse_claude_output(stdout: bytes) -> dict[str, Any]:
         except ValueError:
             # No JSON object found anywhere — return text as-is
             return _make_error_result(text)
+        # Strip reasoning field once centrally (per spec)
+        data.pop("reasoning", None)
         if data.get("type") == "result":
             return _parse_new_format(data)
         return _parse_legacy_format(data)

@@ -38,7 +38,7 @@ from .storage import (
 
 logger = logging.getLogger(__name__)
 
-_API_BASE = "http://localhost:8001"
+_API_BASE = "http://localhost:8000"
 
 
 # ---------------------------------------------------------------------------

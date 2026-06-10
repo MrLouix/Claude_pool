@@ -83,6 +83,8 @@ class BaseCLIExecutor(ABC):
         tokens_used, duration_ms, raw.
         """
         raw = self._run_raw(prompt, context, directory, model)
+        # Strip reasoning field once centrally (per spec)
+        raw.pop("reasoning", None)
         norm = self.normalize_output(raw)
         # Merge: start with raw for backward compat, then overlay normalized fields.
         result = dict(raw)
@@ -176,6 +178,9 @@ class ClaudeExecutor(BaseCLIExecutor):
             pass
 
         try:
+            # Log the full command for debugging
+            logger.info(f"CLIManager executing: {' '.join(cmd)}")
+            
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -364,9 +369,9 @@ class MistralExecutor(BaseCLIExecutor):
 
     def check_rate_limit(self) -> bool:
         """Check if the last execution hit a rate limit."""
-        if self._last_exit_code != 0:
+        if self._last_exit_code == 1:
             output_text = (self._last_stdout + self._last_stderr).lower()
-            return "rate" in output_text or "429" in output_text
+            return any(p in output_text for p in _RATE_LIMIT_PATTERNS) or "429" in output_text
         return False
 
 
@@ -849,6 +854,7 @@ class TaskExecutor:
             task.prompt,
             "--output-format",
             "json",
+            "--structured-output",
             "--dangerously-skip-permissions",
         ]
         if session_id:
@@ -877,17 +883,18 @@ class TaskExecutor:
         return matching_tasks[0].session_id
 
     async def execute_task(self, task: Task) -> None:
-        """Execute a single task.
+        """Execute a single task using asyncio subprocess.
 
-        Args:
-            task: Task to execute
+        Uses asyncio.create_subprocess_exec so the process handle is
+        available immediately in _running_processes, making stop_task()
+        functional (C1 fix).  The actual returncode is captured after
+        communicate() rather than being hard-coded to 0 (C2 fix).
         """
         self.current_task = task
         task.status = "running"
         self._notify_update(task)
         self._save_state()
 
-        # Check if skip was requested before executing
         if self.skip_requested:
             logger.info(f"Skipping task {task.id} as requested")
             self.skip_requested = False
@@ -899,75 +906,81 @@ class TaskExecutor:
             return
 
         start_time = time.time()
-
         logger.info(f"Executing task {task.id}: {task.prompt[:50]}...")
         logger.info(f"Working directory: {task.directory}")
 
-        # Use CLIManager for multi-CLI support
+        stdout = b""
+        stderr = b""
+        exit_code = -1
+
         try:
-            # Get model from task or use default
-            effective_model = task.model if task.model else ""
-            
-            # Get context from task if available (for project messages)
-            context = []
-            if task.json_output and isinstance(task.json_output, dict):
-                context = task.json_output.get("context", [])
-            
-            # Execute via CLIManager (runs in thread pool to avoid blocking)
-            result = await asyncio.to_thread(
-                self.cli_manager.execute,
-                prompt=task.prompt,
-                context=context,
-                directory=str(task.directory),
-                model=effective_model,
+            session_id = self._find_session_for_directory(task.directory, task.bucket_id)
+            cmd = self._build_command(task, session_id)
+            logger.info(f"Spawning: {' '.join(cmd[:4])} ...")
+
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=str(task.directory),
             )
-            
-            task.exit_code = 0  # CLIManager doesn't return exit code directly
-            task.duration_ms = int((time.time() - start_time) * 1000)
-            task.json_output = result
-            
-            # Write debug log with result
-            self._write_debug_log_with_result(task.id, task.exit_code, task.duration_ms, result)
-            
-            # Determine status based on result
-            if task.json_output and isinstance(task.json_output, dict):
-                if task.json_output.get("parse_error"):
-                    task.status = "failed"
-                    logger.error(f"Task {task.id} failed with parse error")
-                else:
-                    task.status = "success"
-                    logger.info(f"Task {task.id} completed successfully")
-                    # Extract session_id if available
-                    sid = task.json_output.get("session_id")
-                    if sid:
-                        task.session_id = sid
-                        logger.info(f"Persisted session_id for task {task.id}: {sid}")
-                    usage = task.json_output.get("session_usage_percent", 0)
-                    if usage >= 80:
-                        logger.warning(
-                            f"Task {task.id} succeeded but session usage is {usage}% — "
-                            f"next rate limit will use shorter initial backoff"
-                        )
-            else:
-                task.status = "success"
-                
-        except RuntimeError as e:
-            # All executors rate-limited or failed
-            logger.error(f"Task {task.id} failed: all CLI executors are rate-limited or failed")
-            task.status = "rate_limit_retry"
-            task.exit_code = -1
-            task.duration_ms = int((time.time() - start_time) * 1000)
-            task.json_output = {"result": str(e)}
-            self._on_rate_limit_detected(task)
-            
+            # C1 fix: register immediately so stop_task() can signal the process
+            self._running_processes[task.id] = process
+
+            stdout, stderr = await process.communicate()
+            exit_code = process.returncode  # C2 fix: capture the real exit code
+
         except Exception as e:
-            logger.error(f"Error executing task {task.id}: {e}")
+            logger.error(f"Error spawning subprocess for task {task.id}: {e}")
             task.status = "failed"
             task.exit_code = -1
             task.duration_ms = int((time.time() - start_time) * 1000)
             task.json_output = {"result": f"Execution error: {str(e)}", "parse_error": True}
-        finally:
             self._running_processes.pop(task.id, None)
+            self._notify_update(task)
+            self._save_state()
+            self.current_task = None
+            return
+
+        task.duration_ms = int((time.time() - start_time) * 1000)
+        task.exit_code = exit_code
+        self._running_processes.pop(task.id, None)
+
+        self._write_debug_log(task.id, exit_code, task.duration_ms, stdout, stderr)
+
+        # If stop_task() already marked this stopped, don't reclassify
+        if task.status == "stopped":
+            self._notify_update(task)
+            await self._save_state_async()
+            self.current_task = None
+            return
+
+        json_output = parse_claude_output(stdout) if stdout else None
+        task.json_output = json_output
+
+        status, is_rate_limit = self._classify_exit(exit_code, stdout, stderr, json_output)
+        task.status = status
+
+        if status == "success":
+            sid = (json_output or {}).get("session_id")
+            if sid:
+                task.session_id = sid
+                logger.info(f"Persisted session_id for task {task.id}: {sid}")
+            usage = (json_output or {}).get("session_usage_percent", 0)
+            if usage >= 80:
+                logger.warning(
+                    f"Task {task.id} succeeded but session usage is {usage}% — "
+                    "next rate limit will use shorter initial backoff"
+                )
+            logger.info(f"Task {task.id} completed successfully")
+        elif is_rate_limit:
+            logger.warning(f"Task {task.id} hit rate limit (exit_code={exit_code})")
+            self._on_rate_limit_detected(task)
+        else:
+            logger.error(
+                f"Task {task.id} failed (exit_code={exit_code}): "
+                f"{stderr.decode('utf-8', errors='replace')[:200]}"
+            )
 
         self._notify_update(task)
         self._save_state()
@@ -976,15 +989,26 @@ class TaskExecutor:
     def _on_rate_limit_detected(self, task: Task) -> None:
         """Handle global pool suspension when a rate limit is detected.
 
+        Implements exponential backoff: delay = min(60 * 2**retry_count, 18000).
+        After MAX_RETRIES attempts the task is permanently failed (C3 fix).
+
         Args:
             task: Task that triggered the rate limit
         """
+        if self.pool.retry_count >= MAX_RETRIES:
+            task.status = "failed"
+            if isinstance(task.json_output, dict):
+                task.json_output["rate_limit_exhausted"] = True
+            logger.error(
+                f"Task {task.id} permanently failed after {MAX_RETRIES} rate-limit retries"
+            )
+            self._save_state()
+            return
+
+        # Exponential backoff: delay = min(60 * 2^retry_count, 18000 seconds / 5 hours)
+        wait_seconds = min(60 * (2 ** self.pool.retry_count), 18000)
         self.pool.retry_count += 1
         task.status = "rate_limit_retry"
-
-        # Fixed 1-hour backoff between retries
-        wait_seconds = 3600
-
         self.pool.suspended_until = datetime.now() + timedelta(seconds=wait_seconds)
 
         logger.info(
