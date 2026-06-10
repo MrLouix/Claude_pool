@@ -390,24 +390,24 @@ class GenericCLIExecutor(BaseCLIExecutor):
         directory: str,
         model: str,
     ) -> dict:
-        """Run custom CLI using args_template formatting."""
-        import json
+        """Run custom CLI using args_template as static flags only.
 
-        # Format args_template with available variables
-        template = self.config.args_template or "{prompt}"
-        formatted = template.format(
-            prompt=prompt,
-            context=json.dumps(context) if context else "",
-            model=model,
-        )
-        
-        # Split into argv
+        args_template is split into a fixed argv list — no string interpolation
+        is performed, so a prompt containing shell metacharacters cannot inject
+        extra arguments (C6 fix).  The prompt is always appended as the final
+        isolated positional argument.
+        """
+        import json
         import shlex
+
+        template = self.config.args_template or ""
         try:
-            cmd = [self.config.path] + shlex.split(formatted)
+            static_args = shlex.split(template) if template else []
         except ValueError:
-            # Fallback: split on whitespace
-            cmd = [self.config.path] + formatted.split()
+            static_args = template.split() if template else []
+
+        # Prompt is a separate argument, never interpolated into the template
+        cmd = [self.config.path] + static_args + [prompt]
 
         try:
             result = subprocess.run(

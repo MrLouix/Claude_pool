@@ -127,13 +127,19 @@ class TestGenericCLIExecutor:
     """Tests for GenericCLIExecutor."""
 
     def test_execute_formats_args_template(self):
-        """GenericCLIExecutor.execute() correctly formats args_template."""
+        """GenericCLIExecutor passes args_template as static flags; prompt is isolated.
+
+        C6 security fix: args_template is split as-is (no format() interpolation).
+        The prompt is always appended as a separate positional argument.
+        Template placeholders like {prompt} remain as literal strings in the static
+        args, not replaced with the actual prompt value.
+        """
         config = CLIConfig(
             name="custom",
             path="/usr/bin/custom-cli",
             models=["model1"],
             cli_type="custom",
-            args_template="--prompt {prompt} --context {context} --model {model}",
+            args_template="--flag value",
         )
         executor = GenericCLIExecutor(config)
 
@@ -143,21 +149,22 @@ class TestGenericCLIExecutor:
         mock_result.stderr = ""
 
         with patch("team_cli.executor.subprocess.run", return_value=mock_result):
-            result = executor.execute(
+            executor.execute(
                 prompt="my prompt",
-                context=[{"role": "user", "content": "test"}],
+                context=[],
                 directory="/tmp",
                 model="model1",
             )
 
-            # Verify command was formatted correctly
             call_args = subprocess.run.call_args[0][0]
             assert call_args[0] == "/usr/bin/custom-cli"
-            # The formatted args should be split
-            assert "--prompt" in call_args
-            assert "my prompt" in call_args
-            assert "--model" in call_args
-            assert "model1" in call_args
+            # Static args from template come first
+            assert "--flag" in call_args
+            assert "value" in call_args
+            # Prompt is the last isolated argument — never interpolated
+            assert call_args[-1] == "my prompt"
+            # Model is NOT injected via the template (no format() interpolation)
+            assert "model1" not in call_args[:-1]
 
     def test_check_rate_limit_always_false(self):
         """GenericCLIExecutor.check_rate_limit() always returns False."""
@@ -330,7 +337,11 @@ class TestCLIManager:
                     )
 
     def test_available_executors_excludes_rate_limited(self):
-        """CLIManager.available_executors() excludes rate-limited executors."""
+        """CLIManager.available_executors() excludes rate-limited executors.
+
+        Only Claude's executor is made to trigger a rate-limit so that Mistral
+        remains uncalled (and therefore available).
+        """
         config1 = CLIConfig(
             name="claude",
             path="/usr/bin/claude",
@@ -346,27 +357,18 @@ class TestCLIManager:
             enabled=True,
         )
 
-        # Simulate claude being rate-limited
-        with patch("team_cli.executor.subprocess.run") as mock_run:
-            mock_result = MagicMock()
-            mock_result.returncode = 1
-            mock_result.stdout = ""
-            mock_result.stderr = "rate limit exceeded"
-            mock_run.return_value = mock_result
-            
-            with patch("team_cli.executor.parse_claude_output", return_value={}):
-                manager = CLIManager([config1, config2])
-                
-                # Execute with claude to trigger rate limit
-                try:
-                    manager.execute(prompt="test", context=[], directory="/tmp", model="")
-                except RuntimeError:
-                    pass  # Expected to fail
-                
-                # Now only mistral should be available
-                available = manager.available_executors()
-                assert len(available) == 1
-                assert isinstance(available[0], MistralExecutor)
+        manager = CLIManager([config1, config2])
+
+        # Directly trigger Claude's rate-limit by simulating a run with exit_code=1
+        claude_ex = manager.get_executor_by_name("claude")
+        claude_ex._last_exit_code = 1
+        claude_ex._last_stderr = "rate limit exceeded"
+        claude_ex._last_stdout = ""
+
+        # Mistral has never been called → not rate-limited
+        available = manager.available_executors()
+        assert len(available) == 1, f"Expected 1 available executor, got {len(available)}"
+        assert isinstance(available[0], MistralExecutor)
 
     def test_execute_uses_default_model(self):
         """CLIManager.execute() uses default_model when model is empty."""

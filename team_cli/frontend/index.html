@@ -728,11 +728,11 @@
             margin-bottom: 16px;
             box-shadow: var(--shadow-md);
             display: flex;
-            align-items: center;
-            gap: 12px;
+            flex-direction: column;
+            gap: 10px;
         }
 
-        .chat-header-info { flex: 1; overflow: hidden; }
+        .chat-header-info { overflow: hidden; }
 
         .chat-header-label {
             font-size: 1.0625rem;
@@ -752,7 +752,7 @@
             text-overflow: ellipsis;
         }
 
-        .chat-header-actions { display: flex; gap: 8px; flex-shrink: 0; }
+        .chat-header-actions { display: flex; gap: 8px; align-items: center; }
 
         .btn-back {
             background: var(--color-inline-code-bg);
@@ -1592,7 +1592,7 @@
                 <span id="add-task-heading">Add New Task</span>
             </div>
             <div class="section-content">
-                <form class="task-form" id="add-task-form">
+                <form class="task-form" id="add-task-form" onsubmit="return false">
                     <div class="form-group">
                         <label for="prompt">Prompt (required)</label>
                         <textarea id="prompt" name="prompt" required></textarea>
@@ -1778,12 +1778,12 @@
     <!-- CHAT VIEW (hidden until hash = #chat/<id>) -->
     <div class="container" id="chat-view" style="display:none;">
         <div class="chat-header">
-            <button class="btn-back" id="btn-back">← Back</button>
             <div class="chat-header-info">
                 <div class="chat-header-label" id="chat-header-label">Chat</div>
                 <div class="chat-header-dir" id="chat-header-dir"></div>
             </div>
             <div class="chat-header-actions">
+                <button class="btn-back" id="btn-back">←</button>
                 <button class="btn-run-plan" id="btn-chat-run-plan">⚙ Run Dev Plan</button>
                 <button class="btn-danger" id="btn-delete-chat">Delete</button>
             </div>
@@ -2080,6 +2080,10 @@
     </div>
 
     <script>
+        /* ---- Global functions stubs (defined before DOM ready) ---- */
+        function navigate(hash) { window.location.hash = hash || ''; }
+
+        document.addEventListener('DOMContentLoaded', function() {
         /* ---- Keyboard Utilities ---- */
         function trapFocus(modal) {
             const focusable = modal.querySelectorAll(
@@ -2291,7 +2295,11 @@
             const time = new Date().toLocaleTimeString();
             const line = document.createElement('div');
             line.className = 'log-line';
-            line.innerHTML = `<span class="log-timestamp">[${time}]</span> ${message}`;
+            const ts = document.createElement('span');
+            ts.className = 'log-timestamp';
+            ts.textContent = `[${time}]`;
+            line.appendChild(ts);
+            line.appendChild(document.createTextNode(` ${message}`));
             eventLog.appendChild(line);
             eventLog.scrollTop = eventLog.scrollHeight;
         }
@@ -2439,38 +2447,52 @@
             }
         }
 
-        document.getElementById('add-task-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
+        const addTaskForm = document.getElementById('add-task-form');
+        if (addTaskForm) {
+            addTaskForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
 
-            const formData = {
-                prompt: document.getElementById('prompt').value,
-                directory: document.getElementById('directory').value,
-                model: document.getElementById('model').value || null,
-                effort: document.getElementById('effort').value || null,
-                priority: parseInt(document.getElementById('task-priority').value),
-            };
+                const promptEl = document.getElementById('prompt');
+                const directoryEl = document.getElementById('directory');
+                const modelEl = document.getElementById('model');
+                const effortEl = document.getElementById('effort');
+                const priorityEl = document.getElementById('task-priority');
 
-            try {
-                const response = await fetch('/api/tasks', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(formData)
-                });
-
-                if (response.ok) {
-                    const task = await response.json();
-                    logEvent(`Task created: ${task.id}`, 'info');
-                    // Only reset prompt, keep directory/model/effort for next task
-                    document.getElementById('prompt').value = '';
-                    fetchTasks();
-                } else {
-                    const error = await response.json();
-                    logEvent(`Error creating task: ${error.detail}`, 'error');
+                if (!promptEl || !directoryEl || !priorityEl) {
+                    logEvent('Task form elements missing', 'error');
+                    return;
                 }
-            } catch (error) {
-                logEvent(`Error creating task: ${error}`, 'error');
-            }
-        });
+
+                const formData = {
+                    prompt: promptEl.value,
+                    directory: directoryEl.value,
+                    model: modelEl ? modelEl.value || null : null,
+                    effort: effortEl ? effortEl.value || null : null,
+                    priority: parseInt(priorityEl.value) || 2,
+                };
+
+                try {
+                    const response = await fetch('/api/tasks', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(formData)
+                    });
+
+                    if (response.ok) {
+                        const task = await response.json();
+                        logEvent(`Task created: ${task.id}`, 'info');
+                        // Only reset prompt, keep directory/model/effort for next task
+                        if (promptEl) promptEl.value = '';
+                        fetchTasks();
+                    } else {
+                        const error = await response.json();
+                        logEvent(`Error creating task: ${error.detail}`, 'error');
+                    }
+                } catch (error) {
+                    logEvent(`Error creating task: ${error}`, 'error');
+                }
+            });
+        }
 
         // Fetch chats first so chatLabelMap is ready before tasks render
         fetchChats().then(fetchTasks).then(fetchPoolStatus);
@@ -2688,7 +2710,8 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         function escapeHtml(s) {
             return String(s)
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;').replace(/\//g, '&#x2F;');
         }
 
         function renderText(text) {
@@ -2714,8 +2737,6 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         }
 
         /* ---- Router ---- */
-        function navigate(hash) { window.location.hash = hash || ''; }
-
         function handleRoute() {
             const hash = window.location.hash.slice(1);
             const parts = hash.split('/').filter(Boolean);
@@ -2892,19 +2913,26 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             newChatModal._openerElement?.focus();
         }
 
-        document.getElementById('btn-new-chat').addEventListener('click', openNewChatModal);
-        document.getElementById('new-chat-close').addEventListener('click', closeNewChatModal);
-        document.getElementById('new-chat-cancel').addEventListener('click', closeNewChatModal);
-        newChatModal.addEventListener('click', e => { if (e.target === newChatModal) closeNewChatModal(); });
+        const btnNewChat = document.getElementById('btn-new-chat');
+        if (btnNewChat) btnNewChat.addEventListener('click', openNewChatModal);
+        const btnNewChatClose = document.getElementById('new-chat-close');
+        if (btnNewChatClose) btnNewChatClose.addEventListener('click', closeNewChatModal);
+        const btnNewChatCancel = document.getElementById('new-chat-cancel');
+        if (btnNewChatCancel) btnNewChatCancel.addEventListener('click', closeNewChatModal);
+        if (newChatModal) newChatModal.addEventListener('click', e => { if (e.target === newChatModal) closeNewChatModal(); });
 
-        document.getElementById('btn-new-chat-browse').addEventListener('click', () => {
+        const btnNewChatBrowse = document.getElementById('btn-new-chat-browse');
+        if (btnNewChatBrowse) btnNewChatBrowse.addEventListener('click', () => {
             dirModalTarget = 'new-chat';
             openDirModal(defaultBrowsePath || '/');
         });
 
-        document.getElementById('btn-new-chat-confirm').addEventListener('click', async () => {
-            const label = document.getElementById('new-chat-label').value.trim();
-            const directory = document.getElementById('new-chat-directory').value.trim();
+        const btnNewChatConfirm = document.getElementById('btn-new-chat-confirm');
+        if (btnNewChatConfirm) btnNewChatConfirm.addEventListener('click', async () => {
+            const labelEl = document.getElementById('new-chat-label');
+            const directoryEl = document.getElementById('new-chat-directory');
+            const label = labelEl ? labelEl.value.trim() : '';
+            const directory = directoryEl ? directoryEl.value.trim() : '';
             if (!label) { alert('Please enter a chat name.'); return; }
             if (!directory) { alert('Please specify a working directory.'); return; }
 
@@ -3323,7 +3351,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                     <div class="task-actions">
                         <button class="btn-primary" style="font-size:12px;padding:5px 10px;" onclick="navigate('project/${escapeHtml(p.id)}')">Open</button>
                         <button class="btn-run-plan" style="font-size:12px;padding:5px 10px;" onclick="openEditProjectModal('${escapeHtml(p.id)}')">Edit</button>
-                        <button class="btn-danger" style="font-size:12px;padding:5px 10px;" onclick="deleteProjectConfirm('${escapeHtml(p.id)}','${escapeHtml(p.name).replace(/'/g,&quot;&#39;&quot;)}')">Delete</button>
+                        <button class="btn-danger" style="font-size:12px;padding:5px 10px;" onclick="deleteProjectConfirm('${escapeHtml(p.id)}', ${JSON.stringify(escapeHtml(p.name))})">Delete</button>
                     </div>
                 </div>`;
             }).join('');
@@ -3425,11 +3453,16 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         const newProjectModal = document.getElementById('new-project-modal');
 
         async function openNewProjectModal() {
+            if (!newProjectModal) { console.error('New project modal not found'); return; }
             newProjectModal._openerElement = document.activeElement;
-            document.getElementById('new-project-name').value = '';
-            document.getElementById('new-project-directory').value = '';
-            document.getElementById('new-project-allow-cli-switch').checked = true;
-            document.getElementById('new-project-default-cli-section').style.display = 'none';
+            const nameInput = document.getElementById('new-project-name');
+            const dirInput = document.getElementById('new-project-directory');
+            const switchInput = document.getElementById('new-project-allow-cli-switch');
+            const cliSection = document.getElementById('new-project-default-cli-section');
+            if (nameInput) nameInput.value = '';
+            if (dirInput) dirInput.value = '';
+            if (switchInput) switchInput.checked = true;
+            if (cliSection) cliSection.style.display = 'none';
             newProjectModal.classList.add('active');
             trapFocus(newProjectModal);
             // Populate CLI dropdown
@@ -3438,38 +3471,52 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 if (res.ok) {
                     const clis = await res.json();
                     const sel = document.getElementById('new-project-default-cli');
-                    sel.innerHTML = clis.length
-                        ? clis.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('')
-                        : '<option value="">— No CLIs detected —</option>';
+                    if (sel) {
+                        sel.innerHTML = clis.length
+                            ? clis.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('')
+                            : '<option value="">— No CLIs detected —</option>';
+                    }
                 }
             } catch (e) { /* ignore */ }
         }
 
         function closeNewProjectModal() {
+            if (!newProjectModal) return;
             newProjectModal.classList.remove('active');
             newProjectModal._removeTrapFocus?.();
             newProjectModal._openerElement?.focus();
         }
 
-        document.getElementById('btn-new-project').addEventListener('click', openNewProjectModal);
-        document.getElementById('new-project-close').addEventListener('click', closeNewProjectModal);
-        document.getElementById('new-project-cancel').addEventListener('click', closeNewProjectModal);
-        newProjectModal.addEventListener('click', e => { if (e.target === newProjectModal) closeNewProjectModal(); });
+        const btnNewProject = document.getElementById('btn-new-project');
+        const btnNewProjectClose = document.getElementById('new-project-close');
+        const btnNewProjectCancel = document.getElementById('new-project-cancel');
+        if (btnNewProject) btnNewProject.addEventListener('click', openNewProjectModal);
+        if (btnNewProjectClose) btnNewProjectClose.addEventListener('click', closeNewProjectModal);
+        if (btnNewProjectCancel) btnNewProjectCancel.addEventListener('click', closeNewProjectModal);
+        if (newProjectModal) newProjectModal.addEventListener('click', e => { if (e.target === newProjectModal) closeNewProjectModal(); });
 
-        document.getElementById('btn-new-project-browse').addEventListener('click', () => {
+        const btnNewProjectBrowse = document.getElementById('btn-new-project-browse');
+        const allowCliSwitchEl = document.getElementById('new-project-allow-cli-switch');
+        const btnNewProjectConfirm = document.getElementById('btn-new-project-confirm');
+        if (btnNewProjectBrowse) btnNewProjectBrowse.addEventListener('click', () => {
             dirModalTarget = 'new-project';
             openDirModal(defaultBrowsePath || '/');
         });
 
-        document.getElementById('new-project-allow-cli-switch').addEventListener('change', function () {
-            document.getElementById('new-project-default-cli-section').style.display = this.checked ? 'none' : '';
+        if (allowCliSwitchEl) allowCliSwitchEl.addEventListener('change', function () {
+            const cliSection = document.getElementById('new-project-default-cli-section');
+            if (cliSection) cliSection.style.display = this.checked ? 'none' : '';
         });
 
-        document.getElementById('btn-new-project-confirm').addEventListener('click', async () => {
-            const name = document.getElementById('new-project-name').value.trim();
-            const directory = document.getElementById('new-project-directory').value.trim();
-            const allowCliSwitch = document.getElementById('new-project-allow-cli-switch').checked;
-            const defaultCli = allowCliSwitch ? null : (document.getElementById('new-project-default-cli').value || null);
+        if (btnNewProjectConfirm) btnNewProjectConfirm.addEventListener('click', async () => {
+            const nameInput = document.getElementById('new-project-name');
+            const dirInput = document.getElementById('new-project-directory');
+            const allowCliSwitchInput = document.getElementById('new-project-allow-cli-switch');
+            const defaultCliEl = document.getElementById('new-project-default-cli');
+            const name = nameInput ? nameInput.value.trim() : '';
+            const directory = dirInput ? dirInput.value.trim() : '';
+            const allowCliSwitch = allowCliSwitchInput ? allowCliSwitchInput.checked : true;
+            const defaultCli = allowCliSwitch ? null : (defaultCliEl ? defaultCliEl.value || null : null);
 
             if (!name) { alert('Please enter a project name.'); return; }
             if (!directory) { alert('Please specify a directory.'); return; }
@@ -4102,6 +4149,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 }
             } catch (e) { logEvent(`Error retrying steps: ${e}`, 'error'); }
         }
+        });
     </script>
 </body>
 </html>

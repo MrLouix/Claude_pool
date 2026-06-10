@@ -14,8 +14,10 @@ from pathlib import Path
 from typing import Optional, Set
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from .api_models import (
     ChatCreateInput,
@@ -188,6 +190,34 @@ class ApiServer:
         )
         self.ws_clients: Set[WebSocket] = set()
 
+        # Enable CORS. Default: localhost only. Override via ALLOWED_ORIGINS env var
+        # (comma-separated list, e.g. "http://localhost:3000,http://192.168.1.10:8000").
+        _cors_raw = os.environ.get(
+            "ALLOWED_ORIGINS",
+            "http://localhost:8000,http://127.0.0.1:8000",
+        )
+        allowed_origins = [o.strip() for o in _cors_raw.split(",") if o.strip()]
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=allowed_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+        # Mount static files (CSS, JS, images)
+        self.frontend_path = Path(__file__).parent / "frontend"
+        if self.frontend_path.exists():
+            self.app.mount("/static", StaticFiles(directory=str(self.frontend_path)), name="static")
+
+        # Serve favicon.ico from frontend directory
+        @self.app.get("/favicon.ico")
+        async def favicon():
+            favicon_path = self.frontend_path / "favicon.ico"
+            if favicon_path.exists():
+                return FileResponse(favicon_path)
+            return Response(status_code=204)
+
         self._projects_dir = Path.home() / ".claude-pool"
         self._projects_dir.mkdir(exist_ok=True)
         self._projects_file = self._projects_dir / "projects.json"
@@ -303,6 +333,8 @@ class ApiServer:
 
         @self.app.post("/api/tasks")
         async def create_task(task_input: TaskInput) -> TaskResponse:
+            # C8: Pydantic body model enforces Content-Type: application/json;
+            # FastAPI rejects form-encoded bodies, preventing CSRF from browser forms.
             if not self.executor:
                 raise HTTPException(status_code=503, detail="Executor not initialized")
 
@@ -321,6 +353,9 @@ class ApiServer:
                     detail="Either 'directory' or 'github_url' must be provided",
                 )
 
+            # C9: validate directory is absolute, exists, is a real directory
+            resolved = _validate_directory(directory)
+
             task_id = _generate_task_id()
             args = list(task_input.args)
             if task_input.model:
@@ -331,7 +366,7 @@ class ApiServer:
             new_task = Task(
                 id=task_id,
                 prompt=task_input.prompt,
-                directory=Path(directory),
+                directory=resolved,
                 args=args,
                 status="pending",
                 priority=task_input.priority,
@@ -359,6 +394,7 @@ class ApiServer:
                 retry_count=0,
                 bucket_id=new_task.bucket_id,
                 priority=new_task.priority,
+                created_at=new_task.created_at,
             )
 
         @self.app.post("/api/tasks/{task_id}/retry")
@@ -397,6 +433,7 @@ class ApiServer:
                 retry_count=task.retry_count,
                 bucket_id=task.bucket_id,
                 priority=task.priority,
+                created_at=task.created_at,
             )
 
         @self.app.post("/api/tasks/{task_id}/skip")
@@ -424,6 +461,7 @@ class ApiServer:
                 retry_count=task.retry_count,
                 bucket_id=task.bucket_id,
                 priority=task.priority,
+                created_at=task.created_at,
             )
 
         @self.app.post("/api/tasks/{task_id}/stop")
@@ -452,6 +490,7 @@ class ApiServer:
                 retry_count=task.retry_count,
                 bucket_id=task.bucket_id,
                 priority=task.priority,
+                created_at=task.created_at,
             )
 
         @self.app.delete("/api/tasks/{task_id}")
@@ -505,6 +544,7 @@ class ApiServer:
                 retry_count=0,
                 bucket_id=new_task.bucket_id,
                 priority=new_task.priority,
+                created_at=new_task.created_at,
             )
 
         @self.app.patch("/api/tasks/{task_id}")
@@ -558,6 +598,7 @@ class ApiServer:
                 retry_count=task.retry_count,
                 bucket_id=task.bucket_id,
                 priority=task.priority,
+                created_at=task.created_at,
             )
 
         @self.app.post("/api/pool/instant-retry")
@@ -600,39 +641,7 @@ class ApiServer:
 
         # ── Projects ──────────────────────────────────────────────
 
-        @self.app.get("/api/projects")
-        async def list_projects() -> list[ProjectEntry]:
-            return [ProjectEntry(**p) for p in self._projects]
 
-        @self.app.post("/api/projects", status_code=201)
-        async def create_project(proj: ProjectInput) -> ProjectEntry:
-            for p in self._projects:
-                if p["github_url"].rstrip("/") == proj.github_url.rstrip("/"):
-                    raise HTTPException(
-                        status_code=409,
-                        detail=f"GitHub URL already mapped to {p['directory']}",
-                    )
-            entry = {"name": proj.name, "github_url": proj.github_url, "directory": proj.directory}
-            self._projects.append(entry)
-            self._save_projects()
-            return ProjectEntry(**entry)
-
-        @self.app.delete("/api/projects/{project_name}")
-        async def delete_project(project_name: str) -> dict:
-            before = len(self._projects)
-            self._projects = [p for p in self._projects if p["name"] != project_name]
-            if len(self._projects) == before:
-                raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found")
-            self._save_projects()
-            return {"removed": project_name}
-
-        @self.app.post("/api/projects/resolve")
-        async def resolve_project(body: dict) -> dict:
-            github_url = body.get("github_url", "")
-            directory = self._resolve_directory(github_url)
-            if not directory:
-                return {"github_url": github_url, "directory": None, "found": False}
-            return {"github_url": github_url, "directory": directory, "found": True}
 
         # ── CLI Config ────────────────────────────────────────────
 
@@ -947,6 +956,7 @@ class ApiServer:
             if update_input.name is not None:
                 project.name = update_input.name
             if update_input.directory is not None:
+                _validate_directory(update_input.directory)
                 project.directory = update_input.directory
             if update_input.default_cli is not None:
                 project.default_cli = update_input.default_cli
