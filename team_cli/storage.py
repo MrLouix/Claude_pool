@@ -20,6 +20,10 @@ _DEFAULT_CLEANUP_AGE_HOURS = 48
 # Active statuses that are never removed by cleanup regardless of age.
 _ACTIVE_STATUSES = frozenset({"pending", "running", "rate_limit_retry"})
 
+# Singleton thread pool — avoids creating a new OS thread on every storage call
+# that originates from within a running event loop.
+_thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
 
 # ---------------------------------------------------------------------------
 # Async bridge
@@ -36,9 +40,8 @@ def _run_async(coro: Any) -> Any:
     except RuntimeError:
         return asyncio.run(coro)
     else:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(asyncio.run, coro)
-            return future.result()
+        future = _thread_pool.submit(asyncio.run, coro)
+        return future.result()
 
 
 # ---------------------------------------------------------------------------

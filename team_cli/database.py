@@ -9,6 +9,10 @@ import aiosqlite
 
 from .migrations import apply_migrations
 
+# Tracks DB paths that have already been fully initialised in this process.
+# init() is a no-op for any path already in this set.
+_initialized_paths: set[str] = set()
+
 _CREATE_POOL_META = """
 CREATE TABLE IF NOT EXISTS pool_meta (
     id              INTEGER PRIMARY KEY DEFAULT 1,
@@ -118,6 +122,16 @@ INSERT OR IGNORE INTO pool_meta (id, retry_count, suspended_until, provider)
 VALUES (1, 0, NULL, 'claude')
 """
 
+_CREATE_INDEXES = [
+    "CREATE INDEX IF NOT EXISTS idx_tasks_status     ON tasks(status)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_bucket_id  ON tasks(bucket_id)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_priority   ON tasks(priority)",
+    "CREATE INDEX IF NOT EXISTS idx_step_plans_status    ON step_plans(status)",
+    "CREATE INDEX IF NOT EXISTS idx_step_tasks_plan_id   ON step_tasks(plan_id)",
+    "CREATE INDEX IF NOT EXISTS idx_step_tasks_status    ON step_tasks(status)",
+]
+
 
 class DatabaseManager:
     """Async SQLite backend for pool state.
@@ -130,9 +144,21 @@ class DatabaseManager:
         self.db_path = db_path
 
     async def init(self) -> None:
-        """Create tables, self-heal any missing columns, then seed default rows."""
-        # Phase 1: create tables that don't exist yet (no-op for existing tables).
+        """Create tables, self-heal any missing columns, then seed default rows.
+
+        Idempotent within a process: the second call for the same path is a
+        no-op so callers do not need to guard against double-initialisation.
+        """
+        path_key = str(self.db_path)
+        if path_key in _initialized_paths:
+            return
+
+        # Phase 1: WAL mode, performance PRAGMAs, and schema creation.
         async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("PRAGMA journal_mode=WAL")
+            await db.execute("PRAGMA synchronous=NORMAL")
+            await db.execute("PRAGMA foreign_keys=ON")
+            await db.execute("PRAGMA cache_size=-64000")
             await db.execute(_CREATE_POOL_META)
             await db.execute(_CREATE_BUCKETS)
             await db.execute(_CREATE_TASKS)
@@ -140,6 +166,8 @@ class DatabaseManager:
             await db.execute(_CREATE_PROJECT_MESSAGES)
             await db.execute(_CREATE_STEP_PLANS)
             await db.execute(_CREATE_STEP_TASKS)
+            for idx_sql in _CREATE_INDEXES:
+                await db.execute(idx_sql)
             await db.commit()
 
         # Phase 2: add any columns that were introduced after the DB was created.
@@ -150,6 +178,8 @@ class DatabaseManager:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(_INSERT_DEFAULT_META)
             await db.commit()
+
+        _initialized_paths.add(path_key)
 
     # ------------------------------------------------------------------
     # Pool metadata
@@ -189,7 +219,11 @@ class DatabaseManager:
     # ------------------------------------------------------------------
 
     async def upsert_task(self, task_dict: dict[str, Any]) -> None:
-        """Insert or replace a task row. JSON fields are serialized automatically."""
+        """Insert or update a task row. JSON fields are serialized automatically.
+
+        Uses ON CONFLICT DO UPDATE so existing rows are updated in-place
+        (no DELETE+INSERT) and created_at is never overwritten.
+        """
         args = task_dict.get("args", [])
         json_output = task_dict.get("json_output")
         context_messages = task_dict.get("context_messages", [])
@@ -197,11 +231,27 @@ class DatabaseManager:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
                 """
-                INSERT OR REPLACE INTO tasks
+                INSERT INTO tasks
                     (id, prompt, directory, args, status, exit_code, duration_ms,
                      json_output, retry_count, created_at, session_id, bucket_id,
                      priority, provider, context_messages, rerouted_from, rerouted_to)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    prompt           = excluded.prompt,
+                    directory        = excluded.directory,
+                    args             = excluded.args,
+                    status           = excluded.status,
+                    exit_code        = excluded.exit_code,
+                    duration_ms      = excluded.duration_ms,
+                    json_output      = excluded.json_output,
+                    retry_count      = excluded.retry_count,
+                    session_id       = excluded.session_id,
+                    bucket_id        = excluded.bucket_id,
+                    priority         = excluded.priority,
+                    provider         = excluded.provider,
+                    context_messages = excluded.context_messages,
+                    rerouted_from    = excluded.rerouted_from,
+                    rerouted_to      = excluded.rerouted_to
                 """,
                 (
                     task_dict["id"],
@@ -222,6 +272,32 @@ class DatabaseManager:
                     task_dict.get("rerouted_from"),
                     task_dict.get("rerouted_to"),
                 ),
+            )
+            await db.commit()
+
+    async def update_task_fields(self, task_id: str, **fields: Any) -> None:
+        """Update only the specified mutable fields of a task row.
+
+        Emits a single targeted UPDATE — no DELETE+INSERT overhead.
+        Immutable fields (id, prompt, directory, created_at) are silently ignored.
+        """
+        _ALLOWED = frozenset({
+            "status", "exit_code", "duration_ms", "json_output", "retry_count",
+            "session_id", "bucket_id", "priority", "provider", "context_messages",
+            "rerouted_from", "rerouted_to", "model",
+        })
+        updates = {k: v for k, v in fields.items() if k in _ALLOWED}
+        if not updates:
+            return
+        for field in ("json_output", "context_messages"):
+            if field in updates and not isinstance(updates[field], (str, type(None))):
+                updates[field] = json.dumps(updates[field])
+        set_clause = ", ".join(f"{col} = ?" for col in updates)
+        values = list(updates.values()) + [task_id]
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                f"UPDATE tasks SET {set_clause} WHERE id = ?",  # noqa: S608
+                values,
             )
             await db.commit()
 
@@ -385,36 +461,34 @@ class DatabaseManager:
 
     async def get_message_history(self, message_id: str, limit: int = 3) -> list[dict[str, Any]]:
         """Get message history by following linked_message_id chain.
-        
-        Returns up to `limit` messages from the chain, INCLUDING the given message_id
-        and going backwards through linked_message_id.
-        Results are ordered from oldest to newest.
-        
+
+        Uses a single recursive CTE query instead of N+1 individual SELECTs.
+        Returns up to `limit` messages ordered oldest-first.
+
         Example: If msg3 has linked_message_id=msg2, and msg2 has linked_message_id=msg1:
         - get_message_history('msg3', limit=3) returns [msg1, msg2, msg3]
         - get_message_history('msg3', limit=2) returns [msg2, msg3]
         """
-        history: list[dict[str, Any]] = []
-        current_id = message_id
-        
         async with aiosqlite.connect(self.db_path) as db:
-            for _ in range(limit):
-                db.row_factory = aiosqlite.Row
-                async with db.execute(
-                    "SELECT * FROM project_messages WHERE id = ?", (current_id,)
-                ) as cur:
-                    row = await cur.fetchone()
-                if row is None:
-                    break
-                message = _deserialize_project_message(dict(row))
-                # Prepend to maintain chronological order (oldest first)
-                history.insert(0, message)
-                # Move to parent
-                current_id = message.get("linked_message_id") or ""
-                if not current_id:
-                    break
-        
-        return history
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                WITH RECURSIVE chain AS (
+                    SELECT *, 0 AS depth FROM project_messages WHERE id = ?
+                    UNION ALL
+                    SELECT pm.*, chain.depth + 1
+                    FROM project_messages pm
+                    JOIN chain ON pm.id = chain.linked_message_id
+                    WHERE chain.depth < ?
+                )
+                SELECT id, project_id, content, role, cli_used, linked_message_id,
+                       metadata, created_at, priority
+                FROM chain ORDER BY depth DESC
+                """,
+                (message_id, limit - 1),
+            ) as cur:
+                rows = await cur.fetchall()
+        return [_deserialize_project_message(dict(row)) for row in rows]
 
     async def close(self) -> None:
         """No-op: connections are opened/closed per operation."""

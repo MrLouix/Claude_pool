@@ -1,5 +1,6 @@
 """Detection of installed AI CLI binaries."""
 
+import functools
 import shutil
 import subprocess
 from typing import Any
@@ -85,9 +86,14 @@ def probe_cli(name: str, path: str, cli_type: str) -> CLIConfig | None:
     return None
 
 
+@functools.lru_cache(maxsize=None)
 def detect_clis() -> list[CLIConfig]:
     """Detect installed AI CLI binaries on the system.
-    
+
+    Result is cached for the lifetime of the process — binary probing is
+    expensive (one subprocess per known CLI) and the set of installed CLIs
+    does not change at runtime.
+
     Returns:
         List of CLIConfig objects for detected CLIs, merged with custom configs.
     """
