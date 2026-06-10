@@ -125,6 +125,10 @@ class TestProbeCli:
 class TestDetectClis:
     """Tests for detect_clis()."""
 
+    def setup_method(self):
+        """Clear lru_cache so each test runs against fresh mocks."""
+        detect_clis.cache_clear()
+
     def test_detects_known_clis(self):
         """detect_clis returns configs for detected known CLIs."""
         mock_result = MagicMock()
