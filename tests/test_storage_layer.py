@@ -14,7 +14,6 @@ import pytest
 from team_cli.database import DatabaseManager
 from team_cli.models import Task
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
