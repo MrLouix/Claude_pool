@@ -256,3 +256,129 @@ class TestPromptInjectionSafety:
             )
             tasks = client.get("/api/tasks").json()
         assert any(t["prompt"] == dangerous_prompt for t in tasks)
+
+
+# ---------------------------------------------------------------------------
+# CSRF protection — form-encoded bodies are rejected
+# ---------------------------------------------------------------------------
+
+
+class TestCSRFProtection:
+    """Mutating endpoints only accept application/json — form-encoded bodies return 422."""
+
+    def test_post_tasks_rejects_form_encoding(self, tmp_path: Path) -> None:
+        """POST /api/tasks with form-encoded body → 422 (only JSON accepted)."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.post(
+                "/api/tasks",
+                data={"prompt": "test", "directory": str(Path.home())},
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+        assert resp.status_code == 422
+
+    def test_patch_task_rejects_form_encoding(self, tmp_path: Path) -> None:
+        """PATCH /api/tasks/{id} with form-encoded body → 422."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.patch(
+                "/api/tasks/task_nonexistent_0000",
+                data={"priority": "3"},
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+        assert resp.status_code == 422
+
+    def test_delete_task_is_not_form_exploitable(self, tmp_path: Path) -> None:
+        """DELETE /api/tasks/{id} carries no body — a form POST cannot trigger it accidentally."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.delete(
+                "/api/tasks/task_nonexistent_0000",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+        # 404 means the route was reached but the task was not found —
+        # i.e. a DELETE with an arbitrary content-type header is not rejected outright,
+        # but the body is irrelevant (DELETE has no body schema).
+        assert resp.status_code == 404
+
+    def test_post_projects_rejects_form_encoding(self, tmp_path: Path) -> None:
+        """POST /api/projects with form-encoded body → 422."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.post(
+                "/api/projects",
+                data={"name": "bad", "directory": str(Path.home())},
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+        assert resp.status_code == 422
+
+    def test_post_chats_rejects_form_encoding(self, tmp_path: Path) -> None:
+        """POST /api/chats with form-encoded body → 422."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.post(
+                "/api/chats",
+                data={"directory": str(Path.home()), "label": "bad"},
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+        assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# CORS headers — disallowed origins are not echoed back
+# ---------------------------------------------------------------------------
+
+
+class TestCORSHeaders:
+    """Responses must not grant cross-origin access to arbitrary origins."""
+
+    def test_disallowed_origin_not_echoed(self, tmp_path: Path) -> None:
+        """GET /api/tasks with Origin: http://evil.example.com → no ACAO header for that origin."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.get(
+                "/api/tasks",
+                headers={"Origin": "http://evil.example.com"},
+            )
+        acao = resp.headers.get("access-control-allow-origin", "")
+        assert acao != "http://evil.example.com"
+        assert acao != "*"
+
+    def test_disallowed_origin_on_post_not_echoed(self, tmp_path: Path) -> None:
+        """POST /api/tasks with a disallowed Origin is not granted CORS access."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.post(
+                "/api/tasks",
+                json={"prompt": "cors test", "directory": str(Path.home())},
+                headers={"Origin": "http://evil.example.com"},
+            )
+        acao = resp.headers.get("access-control-allow-origin", "")
+        assert acao != "http://evil.example.com"
+        assert acao != "*"
+
+    def test_allowed_origin_receives_acao_header(self, tmp_path: Path) -> None:
+        """GET /api/tasks from localhost:8000 does receive an ACAO header."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.get(
+                "/api/tasks",
+                headers={"Origin": "http://localhost:8000"},
+            )
+        acao = resp.headers.get("access-control-allow-origin", "")
+        assert acao == "http://localhost:8000"
+
+    def test_preflight_disallowed_origin_rejected(self, tmp_path: Path) -> None:
+        """OPTIONS preflight from a disallowed origin is not granted CORS access."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.options(
+                "/api/tasks",
+                headers={
+                    "Origin": "http://evil.example.com",
+                    "Access-Control-Request-Method": "POST",
+                },
+            )
+        acao = resp.headers.get("access-control-allow-origin", "")
+        assert acao != "http://evil.example.com"
+        assert acao != "*"
