@@ -1,12 +1,19 @@
-"""Unit tests for the router modules.
+"""Tests for the router modules.
 
-Verifies that:
-- Each router module is independently importable
-- create_router(server) returns an APIRouter with the expected routes
-- Route paths are unchanged from the original api.py
+Part 1 (TestRouters*): unit checks — importability and route-structure.
+Part 2 (TestIntegration*): full HTTP request/response cycles via TestClient.
 """
 
-from unittest.mock import MagicMock, AsyncMock
+from contextlib import contextmanager
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+from team_cli.api import ApiServer
+from team_cli.models import PoolState
+from team_cli.storage import save_pool
 
 
 def _make_server():
@@ -186,3 +193,235 @@ class TestRouterTotalRouteCoverage:
         )
         # 9 task + 6 pools + 5 chats + 10 projects + 5 skills + 1 admin = 36
         assert total >= 36
+
+
+# ===========================================================================
+# Integration helpers
+# ===========================================================================
+
+@contextmanager
+def _make_api(pool_file: Path):
+    """Yield a (TestClient, ApiServer) with run_pool and signal patched out."""
+    with (
+        patch("team_cli.executor.TaskExecutor.run_pool", new=AsyncMock(return_value=None)),
+        patch("team_cli.executor.signal.signal"),
+    ):
+        server = ApiServer(pool_file)
+        with TestClient(server.app, raise_server_exceptions=True) as client:
+            yield client, server
+
+
+def _pool(tmp_path: Path) -> Path:
+    """Create an empty pool DB and return its path."""
+    pf = tmp_path / "pool.db"
+    save_pool(PoolState(tasks=[], pool_file=pf))
+    return pf
+
+
+# ===========================================================================
+# Part 2 — full HTTP request/response cycles
+# ===========================================================================
+
+
+class TestIntegrationTasksRouter:
+    """Full request/response cycles for team_cli/routers/tasks.py."""
+
+    def test_post_task_returns_id_and_priority(self, tmp_path: Path) -> None:
+        """POST /api/tasks with valid directory → 200, contains 'id' and 'priority'."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.post(
+                "/api/tasks",
+                json={"prompt": "hello world", "directory": str(Path.home())},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "id" in data
+        assert "priority" in data
+
+    def test_get_tasks_returns_list(self, tmp_path: Path) -> None:
+        """GET /api/tasks → 200 and a JSON list."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.get("/api/tasks")
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
+
+    def test_patch_task_priority(self, tmp_path: Path) -> None:
+        """PATCH /api/tasks/{id} with priority=3 → 200, priority field updated."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            task_id = client.post(
+                "/api/tasks",
+                json={"prompt": "patch me", "directory": str(Path.home())},
+            ).json()["id"]
+            resp = client.patch(f"/api/tasks/{task_id}", json={"priority": 3})
+        assert resp.status_code == 200
+        assert resp.json()["priority"] == 3
+
+    def test_delete_task_returns_200_for_existing(self, tmp_path: Path) -> None:
+        """DELETE /api/tasks/{id} on a known task → 200."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            task_id = client.post(
+                "/api/tasks",
+                json={"prompt": "delete me", "directory": str(Path.home())},
+            ).json()["id"]
+            resp = client.delete(f"/api/tasks/{task_id}")
+        assert resp.status_code == 200
+
+    def test_delete_task_returns_404_for_unknown(self, tmp_path: Path) -> None:
+        """DELETE /api/tasks/{id} on a nonexistent task → 404."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.delete("/api/tasks/task_nonexistent_0000")
+        assert resp.status_code == 404
+
+    def test_get_tasks_after_create(self, tmp_path: Path) -> None:
+        """A task created via POST appears in GET /api/tasks."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            client.post(
+                "/api/tasks",
+                json={"prompt": "visible task", "directory": str(Path.home())},
+            )
+            tasks = client.get("/api/tasks").json()
+        assert any(t["prompt"] == "visible task" for t in tasks)
+
+
+class TestIntegrationPoolsRouter:
+    """Full request/response cycles for team_cli/routers/pools.py."""
+
+    def test_get_status_returns_claude_status(self, tmp_path: Path) -> None:
+        """GET /api/status → 200, response contains 'claude_status' key."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.get("/api/status")
+        assert resp.status_code == 200
+        assert "claude_status" in resp.json()
+
+    def test_instant_retry_returns_200(self, tmp_path: Path) -> None:
+        """POST /api/pool/instant-retry → 200."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.post("/api/pool/instant-retry")
+        assert resp.status_code == 200
+
+    def test_get_status_shape(self, tmp_path: Path) -> None:
+        """GET /api/status response contains all required PoolStatusResponse fields."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            data = client.get("/api/status").json()
+        for field in ("total_tasks", "pending_tasks", "pool_suspended", "claude_status"):
+            assert field in data, f"missing field: {field}"
+
+
+class TestIntegrationChatsRouter:
+    """Full request/response cycles for team_cli/routers/chats.py."""
+
+    def test_post_chat_returns_201(self, tmp_path: Path) -> None:
+        """POST /api/chats with valid directory → 201."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.post(
+                "/api/chats",
+                json={"directory": str(Path.home()), "label": "Test Chat"},
+            )
+        assert resp.status_code == 201
+
+    def test_get_chats_returns_list(self, tmp_path: Path) -> None:
+        """GET /api/chats → 200 and a JSON list."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.get("/api/chats")
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
+
+    def test_delete_chat_returns_200(self, tmp_path: Path) -> None:
+        """DELETE /api/chats/{id} on a chat that exists → 200."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            chat_id = client.post(
+                "/api/chats",
+                json={"directory": str(Path.home()), "label": "To Delete"},
+            ).json()["id"]
+            resp = client.delete(f"/api/chats/{chat_id}")
+        assert resp.status_code == 200
+
+    def test_created_chat_appears_in_list(self, tmp_path: Path) -> None:
+        """A chat created via POST appears in GET /api/chats."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            label = "Unique Label XYZ"
+            client.post(
+                "/api/chats",
+                json={"directory": str(Path.home()), "label": label},
+            )
+            chats = client.get("/api/chats").json()
+        assert any(c["label"] == label for c in chats)
+
+
+class TestIntegrationProjectsRouter:
+    """Full request/response cycles for team_cli/routers/projects.py."""
+
+    def test_post_project_returns_201(self, tmp_path: Path) -> None:
+        """POST /api/projects → 201."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.post(
+                "/api/projects",
+                json={"name": "My Project", "directory": str(Path.home())},
+            )
+        assert resp.status_code == 201
+
+    def test_get_project_returns_200(self, tmp_path: Path) -> None:
+        """GET /api/projects/{id} on an existing project → 200."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            proj_id = client.post(
+                "/api/projects",
+                json={"name": "Fetch Me", "directory": str(Path.home())},
+            ).json()["id"]
+            resp = client.get(f"/api/projects/{proj_id}")
+        assert resp.status_code == 200
+        assert resp.json()["id"] == proj_id
+
+    def test_post_project_message_returns_201(self, tmp_path: Path) -> None:
+        """POST /api/projects/{id}/messages with role='assistant' → 201."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            proj_id = client.post(
+                "/api/projects",
+                json={"name": "Msg Project", "directory": str(Path.home())},
+            ).json()["id"]
+            resp = client.post(
+                f"/api/projects/{proj_id}/messages",
+                json={"content": "hello", "role": "assistant", "priority": 1},
+            )
+        assert resp.status_code == 201
+
+    def test_get_project_404_for_unknown(self, tmp_path: Path) -> None:
+        """GET /api/projects/{id} on an unknown ID → 404."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.get("/api/projects/proj_does_not_exist")
+        assert resp.status_code == 404
+
+
+class TestIntegrationAdminRouter:
+    """Full request/response cycles for team_cli/routers/admin.py."""
+
+    def test_get_migration_status_returns_200(self, tmp_path: Path) -> None:
+        """GET /api/admin/migration-status → 200."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            resp = client.get("/api/admin/migration-status")
+        assert resp.status_code == 200
+
+    def test_migration_status_has_required_keys(self, tmp_path: Path) -> None:
+        """GET /api/admin/migration-status response contains db_path, applied_migrations, pending_migrations."""
+        pool_file = _pool(tmp_path)
+        with _make_api(pool_file) as (client, _):
+            data = client.get("/api/admin/migration-status").json()
+        for key in ("db_path", "applied_migrations", "pending_migrations", "backup_exists"):
+            assert key in data, f"missing key: {key}"
