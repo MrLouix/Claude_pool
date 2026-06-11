@@ -106,3 +106,55 @@ class TestCIWorkflow:
 
     def test_install_step_present(self):
         assert "pip install" in self._yaml_text()
+
+
+class TestCIWorkflowYAMLParsed:
+    """Parse ci.yml as structured YAML and assert on the object graph.
+
+    These complement the string-matching tests above with structural checks
+    that survive whitespace/formatting changes.
+    """
+
+    def _parsed(self) -> dict:
+        import yaml  # PyYAML is always available in the dev venv
+
+        path = ROOT / ".github" / "workflows" / "ci.yml"
+        with open(path) as fh:
+            return yaml.safe_load(fh)
+
+    def _steps(self) -> list:
+        return self._parsed()["jobs"]["test"]["steps"]
+
+    def test_on_push_trigger_present(self):
+        """The workflow triggers on push events.
+
+        PyYAML parses the bare `on:` key as boolean True (YAML 1.1 compat).
+        """
+        parsed = self._parsed()
+        triggers = parsed.get("on") or parsed.get(True)  # handle both representations
+        assert triggers is not None and "push" in triggers
+
+    def test_on_pull_request_trigger_present(self):
+        """The workflow triggers on pull_request events."""
+        parsed = self._parsed()
+        triggers = parsed.get("on") or parsed.get(True)
+        assert triggers is not None and "pull_request" in triggers
+
+    def test_steps_contain_ruff_check(self):
+        """At least one step runs `ruff check`."""
+        run_cmds = [s.get("run", "") for s in self._steps()]
+        assert any("ruff check" in cmd for cmd in run_cmds)
+
+    def test_steps_contain_pytest(self):
+        """At least one step runs `pytest`."""
+        run_cmds = [s.get("run", "") for s in self._steps()]
+        assert any("pytest" in cmd for cmd in run_cmds)
+
+    def test_python_version_is_311(self):
+        """The setup-python step pins Python 3.11."""
+        for step in self._steps():
+            with_block = step.get("with", {})
+            if "python-version" in with_block:
+                assert str(with_block["python-version"]) == "3.11"
+                return
+        raise AssertionError("No step sets python-version")
