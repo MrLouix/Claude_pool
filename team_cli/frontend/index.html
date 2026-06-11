@@ -297,10 +297,6 @@
         font-size: 11px; padding: 2px 8px; border-radius: 12px;
         margin-left: 6px; font-weight: 600; vertical-align: middle; color: #fff;
     }
-    /* legacy short classes used by task list */
-    .priority-badge.p1 { background: var(--color-danger-bg); color: #b91c1c; }
-    .priority-badge.p2 { background: var(--color-code-text); color: #555; }
-    .priority-badge.p3 { background: var(--color-info-bg); color: #1d4ed8; }
     /* canonical 1-5 classes */
     .priority-badge.priority-1 { background: #6c757d; color: #fff; }
     .priority-badge.priority-2 { background: #0d6efd; color: #fff; }
@@ -1575,6 +1571,18 @@
             <button type="button" class="btn-run-plan" id="btn-run-plan" style="width:100%;padding:14px 20px;font-size:15px;">⚙ Run Dev Plan</button>
         </div>
 
+        <div class="section" role="region" aria-labelledby="chats-heading">
+            <div class="section-header">
+                <span id="chats-heading">Chats</span>
+                <button type="button" class="btn-primary" id="btn-new-chat" style="font-size:13px;padding:7px 14px;">+ New Chat</button>
+            </div>
+            <div class="section-content">
+                <div class="chat-list" id="chat-list">
+                    <div class="empty-state">No chats yet. Create a new chat to get started.</div>
+                </div>
+            </div>
+        </div>
+
         <div class="section" role="region" aria-labelledby="projects-heading">
             <div class="section-header">
                 <span id="projects-heading">Projects</span>
@@ -2116,6 +2124,7 @@
         });
 
         let ws = null;
+        let _wsReconnectDelay = 1000;
         const wsStatus = document.getElementById('ws-status');
         const eventLog = document.getElementById('event-log');
         const taskList = document.getElementById('task-list');
@@ -2132,6 +2141,8 @@
             ws = new WebSocket(getWebSocketURL());
 
             ws.onopen = () => {
+                if (wsPingInterval) clearInterval(wsPingInterval);
+                _wsReconnectDelay = 1000;
                 wsStatus.textContent = 'Connected';
                 wsStatus.className = 'status-badge connected';
                 logEvent('WebSocket connected', 'info');
@@ -2142,8 +2153,12 @@
 
             ws.onmessage = (event) => {
                 if (event.data === 'pong') return;
-                const message = JSON.parse(event.data);
-                handleWebSocketMessage(message);
+                try {
+                    const message = JSON.parse(event.data);
+                    handleWebSocketMessage(message);
+                } catch (e) {
+                    logEvent(`WebSocket message parse error: ${e}`, 'error');
+                }
             };
 
             ws.onerror = () => {
@@ -2155,7 +2170,8 @@
                 wsStatus.textContent = 'Disconnected';
                 wsStatus.className = 'status-badge disconnected';
                 logEvent('WebSocket disconnected. Reconnecting...', 'warning');
-                setTimeout(connectWebSocket, 3000);
+                setTimeout(connectWebSocket, _wsReconnectDelay);
+                _wsReconnectDelay = Math.min(_wsReconnectDelay * 2, 30000);
             };
         }
 
@@ -2224,7 +2240,7 @@
                     const doneCount = card.querySelectorAll('.step-task-item[data-status="success"]').length;
                     const totalCount = card.querySelectorAll('.step-task-item').length;
                     const statusLabel = card.querySelector('.step-plan-header span:last-child');
-                    if (statusLabel) statusLabel.textContent = `En cours (${doneCount}/${totalCount})`;
+                    if (statusLabel) statusLabel.textContent = `Running (${doneCount}/${totalCount})`;
                 }
             } else if (message.event === 'plan_completed') {
                 const data = message.data;
@@ -2235,10 +2251,10 @@
                     const statusLabel = header.querySelector('span:last-child');
                     if (data.status === 'completed') {
                         statusIcon.textContent = getStatusIcon('success');
-                        if (statusLabel) statusLabel.textContent = 'Terminé';
+                        if (statusLabel) statusLabel.textContent = 'Completed';
                     } else {
                         statusIcon.textContent = getStatusIcon('failed');
-                        if (statusLabel) statusLabel.textContent = 'Échoué';
+                        if (statusLabel) statusLabel.textContent = 'Failed';
                     }
                     if (data.final_evaluation) {
                         const evalDiv = document.createElement('div');
@@ -2498,8 +2514,11 @@
         fetchChats().then(fetchTasks).then(fetchPoolStatus);
         connectWebSocket();
 
-        // Refresh every 5 seconds (chats first so chatLabelMap stays fresh)
-        setInterval(() => { if (!currentChatId) { fetchChats().then(fetchTasks); fetchPoolStatus(); } }, 5000);
+        // Fallback polling every 30 seconds (skipped when WebSocket is connected)
+        setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) return;
+            if (!currentChatId) { fetchChats().then(fetchTasks); fetchPoolStatus(); }
+        }, 30000);
 
         /* ---- Directory Browser Modal ---- */
         const dirModal = document.getElementById('dir-modal');
@@ -2767,6 +2786,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         }
 
         function showChatView(chatId) {
+            if (_projectPollInterval) { clearInterval(_projectPollInterval); _projectPollInterval = null; }
             currentChatId = chatId;
             currentTaskId = null;
             currentProjectId = null;
@@ -2779,6 +2799,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         }
 
         function showTaskView(taskId) {
+            if (_projectPollInterval) { clearInterval(_projectPollInterval); _projectPollInterval = null; }
             taskSourceChatId = currentChatId;
             currentTaskId = taskId;
             currentChatId = null;
@@ -2806,9 +2827,10 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             if (input) setTimeout(() => input.focus(), 50);
             if (_projectPollInterval) clearInterval(_projectPollInterval);
             _projectPollInterval = setInterval(() => {
-                if (currentProjectId === projectId) fetchProjectMessages(projectId);
-                else clearInterval(_projectPollInterval);
-            }, 5000);
+                if (!currentProjectId || currentProjectId !== projectId) { clearInterval(_projectPollInterval); return; }
+                if (ws && ws.readyState === WebSocket.OPEN) return;
+                fetchProjectMessages(projectId);
+            }, 30000);
         }
 
         async function loadTaskView(taskId) {
@@ -3173,6 +3195,8 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             if (runPlanModal.classList.contains('active')) { closeRunPlanModal(); return; }
             if (newChatModal.classList.contains('active')) { closeNewChatModal(); return; }
             if (chatRunPlanModal.classList.contains('active')) { closeChatRunPlanModal(); return; }
+            if (newProjectModal && newProjectModal.classList.contains('active')) { closeNewProjectModal(); return; }
+            if (editProjectModal && editProjectModal.classList.contains('active')) { closeEditProjectModal(); return; }
         });
 
         chatPlanSpecInput.addEventListener('input', () => {
@@ -4042,10 +4066,10 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             const planStatusToIcon = { completed: 'success', failed: 'failed', running: 'running' };
             const statusIcon = getStatusIcon(planStatusToIcon[plan.status] || 'pending');
             const statusLabels = {
-                pending: 'En attente',
-                running: `En cours (${doneCount}/${stepCount})`,
-                completed: 'Terminé',
-                failed: 'Échoué',
+                pending: 'Pending',
+                running: `Running (${doneCount}/${stepCount})`,
+                completed: 'Completed',
+                failed: 'Failed',
             };
             const statusLabel = statusLabels[plan.status] || plan.status;
 
@@ -4064,7 +4088,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             }).join('');
 
             const retryBtn = anyFailed
-                ? `<button class="btn-msg-action" onclick="retryFailedSteps('${escapeHtml(plan.id)}')">↺ Relancer les échouées</button>`
+                ? `<button class="btn-msg-action" onclick="retryFailedSteps('${escapeHtml(plan.id)}')">↺ Retry failures</button>`
                 : '';
 
             const card = document.createElement('div');
@@ -4073,13 +4097,13 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
             card.innerHTML = `
                 <div class="step-plan-header">
                     <span>${statusIcon}</span>
-                    <span>Plan de codage (${stepCount} étapes)</span>
+                    <span>Coding plan (${stepCount} steps)</span>
                     <span style="margin-left:auto;font-weight:normal;color:var(--color-text-muted)">${escapeHtml(statusLabel)}</span>
                 </div>
                 <div class="step-task-list">${stepsHtml}</div>
                 <div class="step-plan-actions">
                     ${retryBtn}
-                    <button class="btn-msg-action btn-msg-delete" onclick="deleteStepPlan('${escapeHtml(plan.id)}',this.closest('.step-plan-card'))">🗑 Supprimer</button>
+                    <button class="btn-msg-action btn-msg-delete" onclick="deleteStepPlan('${escapeHtml(plan.id)}',this.closest('.step-plan-card'))">🗑 Delete</button>
                 </div>`;
             return card;
         }
@@ -4087,7 +4111,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         function renderFinalEvaluation(evaluation) {
             const ok = evaluation.success;
             const icon = ok ? '🟢' : '🔴';
-            const title = ok ? 'Succès !' : 'Échec partiel';
+            const title = ok ? 'Success!' : 'Partial failure';
             const bg = ok ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
             let html = `<div style="margin-top:12px;padding:12px;border-radius:8px;background:${bg}">
                 <div style="font-weight:600;margin-bottom:6px">${icon} ${escapeHtml(title)}</div>
@@ -4096,7 +4120,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
                 html += `<ul style="margin:8px 0 0 16px">${evaluation.missing.map(m => `<li>${escapeHtml(String(m))}</li>`).join('')}</ul>`;
             }
             if (!ok && evaluation.suggestions && evaluation.suggestions.length) {
-                html += `<div style="margin-top:6px;font-weight:600">Suggestions :</div>
+                html += `<div style="margin-top:6px;font-weight:600">Suggestions:</div>
                     <ul style="margin:4px 0 0 16px">${evaluation.suggestions.map(s => `<li>${escapeHtml(String(s))}</li>`).join('')}</ul>`;
             }
             html += '</div>';
@@ -4130,7 +4154,7 @@ Do NOT implement any code yourself. Only plan and enqueue.`;
         }
 
         async function deleteStepPlan(planId, cardEl) {
-            if (!confirm('Supprimer ce plan ?')) return;
+            if (!confirm('Delete this plan?')) return;
             try {
                 const res = await fetch(`/api/skills/multi_step_planner/plans/${planId}`, { method: 'DELETE' });
                 if (res.ok && cardEl) cardEl.remove();
