@@ -1,4 +1,10 @@
-"""Unit tests for BaseCLIExecutor, ClaudeExecutor, and create_executor."""
+"""Unit tests for BaseCLIExecutor, ClaudeExecutor, and create_executor.
+
+NOTE: Tests in this module use subprocess mocks for fast, isolated unit testing.
+They are supplemented by real-subprocess integration tests in
+tests/test_executor_real_subprocess.py, which verify end-to-end behaviour
+with an actual process — catching bugs that pure mocks cannot detect.
+"""
 
 import subprocess
 from unittest.mock import MagicMock, patch
@@ -44,7 +50,7 @@ class TestClaudeExecutorExecute:
 
         with patch("team_cli.executor.subprocess.run", return_value=mock_result) as mock_run:
             with patch("team_cli.executor.parse_claude_output", return_value={"result": "parsed"}):
-                result = executor.execute(
+                executor.execute(
                     prompt="test prompt",
                     context=[],
                     directory="/tmp",

@@ -1,4 +1,11 @@
-"""Tests for task executor."""
+"""Tests for task executor.
+
+NOTE: Tests in this module mock asyncio.create_subprocess_exec for fast,
+isolated unit testing of TaskExecutor logic. They are supplemented by
+real-subprocess integration tests in tests/test_executor_real_subprocess.py,
+which verify end-to-end behaviour with an actual process — catching bugs
+that pure mocks cannot detect.
+"""
 
 import asyncio
 from datetime import datetime, timedelta
@@ -7,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from team_cli.executor import TaskExecutor, _RATE_LIMIT_PATTERNS
+from team_cli.executor import _RATE_LIMIT_PATTERNS, TaskExecutor
 from team_cli.models import Bucket, PoolState, Task
 
 
@@ -205,7 +212,7 @@ async def test_pool_retry_count_exhaustion(temp_pool_file: Path, sample_task: Ta
     for t in executor.pool.tasks:
         if t.status in ("pending", "rate_limit_retry"):
             t.status = "failed"
-            t.json_output = {"result": f"Pool exhausted"}
+            t.json_output = {"result": "Pool exhausted"}
 
     assert task1.status == "failed"
     assert task2.status == "failed"
@@ -491,7 +498,7 @@ async def test_retry_count_reset_suspension_expires_no_task(temp_pool_file: Path
         executor.should_stop = True
         try:
             await asyncio.wait_for(task, timeout=3)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             executor.should_stop = True
 
     assert executor.pool.retry_count == 0
@@ -526,7 +533,7 @@ async def test_retry_count_reset_suspension_expired_with_pending(temp_pool_file:
         executor.should_stop = True
         try:
             await asyncio.wait_for(task_runner, timeout=3)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             executor.should_stop = True
 
     # retry_count should have been reset to 0 before executing pending task

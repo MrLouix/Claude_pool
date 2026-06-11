@@ -5,7 +5,10 @@ ClaudeExecutor correctly builds the command, captures output, and
 reports rate-limit status based on exit code and stderr content.
 """
 
+import json
 import stat
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -155,3 +158,102 @@ class TestClaudeExecutorRateLimit:
         executor_ok = ClaudeExecutor(_config(FAKE_CLAUDE))
         executor_ok.execute(prompt="succeed", context=[], directory=str(tmp_path), model="sonnet")
         assert executor_ok.check_rate_limit() is False
+
+
+# ---------------------------------------------------------------------------
+# Fixture script self-tests
+# ---------------------------------------------------------------------------
+
+
+class TestFakeCliFixtures:
+    """Verify the fixture scripts themselves produce the expected output and exit codes.
+
+    These tests run the scripts directly via sys.executable so they work
+    regardless of whether the scripts are chmod +x.
+    """
+
+    def test_fake_claude_exits_zero(self) -> None:
+        """fake_claude.py exits with code 0."""
+        result = subprocess.run(
+            [sys.executable, str(FAKE_CLAUDE), "-p", "hello"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+
+    def test_fake_claude_stdout_is_valid_json(self) -> None:
+        """fake_claude.py prints valid JSON to stdout."""
+        result = subprocess.run(
+            [sys.executable, str(FAKE_CLAUDE), "-p", "hello"],
+            capture_output=True,
+            text=True,
+        )
+        data = json.loads(result.stdout)
+        assert isinstance(data, dict)
+
+    def test_fake_claude_echoes_prompt(self) -> None:
+        """fake_claude.py includes the -p value in the 'result' field."""
+        result = subprocess.run(
+            [sys.executable, str(FAKE_CLAUDE), "-p", "my prompt"],
+            capture_output=True,
+            text=True,
+        )
+        data = json.loads(result.stdout)
+        assert "my prompt" in data["result"]
+
+    def test_fake_claude_tokens_used_42(self) -> None:
+        """fake_claude.py always returns tokens_used == 42."""
+        result = subprocess.run(
+            [sys.executable, str(FAKE_CLAUDE), "-p", "x"],
+            capture_output=True,
+            text=True,
+        )
+        data = json.loads(result.stdout)
+        assert data["tokens_used"] == 42
+
+    def test_fake_claude_model_flag_reflected(self) -> None:
+        """fake_claude.py reflects the --model flag value in the output."""
+        result = subprocess.run(
+            [sys.executable, str(FAKE_CLAUDE), "-p", "x", "--model", "opus"],
+            capture_output=True,
+            text=True,
+        )
+        data = json.loads(result.stdout)
+        assert data["model"] == "opus"
+
+    def test_fake_claude_default_model_is_sonnet(self) -> None:
+        """fake_claude.py defaults to model='sonnet' when --model is omitted."""
+        result = subprocess.run(
+            [sys.executable, str(FAKE_CLAUDE), "-p", "x"],
+            capture_output=True,
+            text=True,
+        )
+        data = json.loads(result.stdout)
+        assert data["model"] == "sonnet"
+
+    def test_fake_rate_limit_exits_one(self) -> None:
+        """fake_rate_limit.py exits with code 1."""
+        result = subprocess.run(
+            [sys.executable, str(FAKE_RATE_LIMIT)],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 1
+
+    def test_fake_rate_limit_writes_to_stderr(self) -> None:
+        """fake_rate_limit.py writes the rate-limit message to stderr."""
+        result = subprocess.run(
+            [sys.executable, str(FAKE_RATE_LIMIT)],
+            capture_output=True,
+            text=True,
+        )
+        assert "rate limit" in result.stderr.lower()
+
+    def test_fake_rate_limit_empty_stdout(self) -> None:
+        """fake_rate_limit.py produces no stdout output."""
+        result = subprocess.run(
+            [sys.executable, str(FAKE_RATE_LIMIT)],
+            capture_output=True,
+            text=True,
+        )
+        assert result.stdout.strip() == ""
