@@ -6,8 +6,6 @@ Verifies that pyproject.toml, .pre-commit-config.yaml, and
 
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).parent.parent
 
 
