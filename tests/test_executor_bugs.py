@@ -14,7 +14,6 @@ from pathlib import Path
 import pytest
 
 from team_cli.executor import (
-    MAX_RETRIES,
     MistralExecutor,
     TaskExecutor,
     _RATE_LIMIT_PATTERNS,
@@ -216,16 +215,15 @@ async def test_stop_task_signals_running_process(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# C3 – Exponential backoff and MAX_RETRIES enforcement
+# C3 – Fixed 30-minute retry interval (no exponential backoff, no max retries)
 # ---------------------------------------------------------------------------
 
 
-def test_rate_limit_backoff_sequence(tmp_path: Path) -> None:
-    """Backoff grows as min(60*2^n, 18000) for retry_count 0-4."""
+def test_rate_limit_fixed_delay(tmp_path: Path) -> None:
+    """Rate-limit suspension is always exactly 1800 seconds (30 min), regardless of retry count."""
     executor = TaskExecutor(tmp_path / "pool.db", install_signal_handlers=False)
 
-    expected_delays = [60, 120, 240, 480, 960]
-    for retry_count, expected in enumerate(expected_delays):
+    for retry_count in [0, 1, 5, 10]:
         executor.pool.retry_count = retry_count
         task = _make_task(tmp_path, f"t{retry_count}")
         task.status = "rate_limit_retry"
@@ -234,47 +232,35 @@ def test_rate_limit_backoff_sequence(tmp_path: Path) -> None:
         executor._on_rate_limit_detected(task)
         assert task.status == "rate_limit_retry"
         remaining = executor.pool.suspension_remaining
-        assert abs(remaining - expected) < 2, (
-            f"retry_count={retry_count}: expected ~{expected}s, got {remaining:.1f}s"
+        assert abs(remaining - 1800) < 2, (
+            f"retry_count={retry_count}: expected ~1800s, got {remaining:.1f}s"
         )
-        # Reset for next iteration
         executor.pool.suspended_until = None
 
 
-def test_rate_limit_backoff_caps_at_five_hours(tmp_path: Path) -> None:
-    """Delay never exceeds 18000 seconds (5 hours)."""
+def test_rate_limit_no_exhaustion(tmp_path: Path) -> None:
+    """Rate-limited tasks are never permanently failed — retries are unbounded."""
     executor = TaskExecutor(tmp_path / "pool.db", install_signal_handlers=False)
-    executor.pool.retry_count = 10  # Would be 60*1024 without cap
-    task = _make_task(tmp_path)
-    task.json_output = {}
-    executor._on_rate_limit_detected(task)
-    assert executor.pool.suspension_remaining <= 18001
-
-
-def test_rate_limit_exhausted_after_max_retries(tmp_path: Path) -> None:
-    """After MAX_RETRIES the task is permanently failed, not rate_limit_retry."""
-    executor = TaskExecutor(tmp_path / "pool.db", install_signal_handlers=False)
-    executor.pool.retry_count = MAX_RETRIES  # already at limit
+    executor.pool.retry_count = 100  # far beyond the old MAX_RETRIES
     task = _make_task(tmp_path)
     task.json_output = {}
     executor._on_rate_limit_detected(task)
 
-    assert task.status == "failed", f"Expected failed after exhaustion, got {task.status}"
-    assert task.json_output.get("rate_limit_exhausted") is True
-    # Pool should NOT be suspended
-    assert not executor.pool.is_suspended
+    assert task.status == "rate_limit_retry", (
+        f"Expected rate_limit_retry (not failed), got {task.status}"
+    )
+    assert executor.pool.is_suspended
 
 
 def test_rate_limit_retry_count_increments(tmp_path: Path) -> None:
     """pool.retry_count increments on each rate-limit event."""
     executor = TaskExecutor(tmp_path / "pool.db", install_signal_handlers=False)
-    for expected in range(1, MAX_RETRIES + 1):
+    for expected in range(1, 6):
         task = _make_task(tmp_path, f"t{expected}")
         task.json_output = {}
-        if executor.pool.retry_count < MAX_RETRIES:
-            executor._on_rate_limit_detected(task)
-            assert executor.pool.retry_count == expected
-            executor.pool.suspended_until = None  # reset so next call doesn't exit early
+        executor._on_rate_limit_detected(task)
+        assert executor.pool.retry_count == expected
+        executor.pool.suspended_until = None  # reset so next call doesn't exit early
 
 
 # ---------------------------------------------------------------------------

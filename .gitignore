@@ -76,3 +76,4 @@ data/
 
 # Distribution
 dist/
+restart_server.sh

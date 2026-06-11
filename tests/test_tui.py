@@ -572,10 +572,10 @@ class TestDetailedOutputScreen:
         with patch("team_cli.tui.TaskExecutor", return_value=mock_executor):
             app = PoolTUI(pool_file_with_tasks)
 
-            # Check that detail binding exists
+            # Check that detail binding exists (bound to activate_row which calls show_detail)
             bindings = [b for b in app.BINDINGS if b[0] == "enter"]
             assert len(bindings) > 0
-            assert bindings[0][1] == "show_detail"
+            assert bindings[0][1] == "activate_row"
 
     @pytest.mark.asyncio
     async def test_detailed_output_screen_title(self, pool_file_with_tasks: Path, mock_executor):

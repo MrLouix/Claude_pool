@@ -43,8 +43,21 @@ def _init_full_db(path: Path) -> None:
             id TEXT PRIMARY KEY,
             prompt TEXT NOT NULL,
             directory TEXT NOT NULL,
+            args TEXT NOT NULL DEFAULT '[]',
             status TEXT NOT NULL DEFAULT 'pending',
-            created_at TEXT NOT NULL
+            exit_code INTEGER,
+            duration_ms INTEGER,
+            json_output TEXT,
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            session_id TEXT,
+            bucket_id TEXT NOT NULL DEFAULT 'main',
+            priority INTEGER NOT NULL DEFAULT 2,
+            provider TEXT,
+            context_messages TEXT DEFAULT '[]',
+            rerouted_from TEXT,
+            rerouted_to TEXT,
+            model TEXT DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS projects (
             id TEXT PRIMARY KEY,

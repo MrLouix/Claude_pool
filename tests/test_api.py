@@ -541,13 +541,13 @@ def test_patch_task_priority_0_returns_422(api):
     assert r.status_code == 422
 
 
-def test_patch_task_priority_4_returns_422(api):
-    """PATCH /api/tasks/{id} with priority=4 returns 422."""
+def test_patch_task_priority_6_returns_422(api):
+    """PATCH /api/tasks/{id} with priority=6 returns 422."""
     client, server = api
     bid = _add_chat(server)
     task = _add_task(server, bid, status="pending")
 
-    r = client.patch(f"/api/tasks/{task.id}", json={"priority": 4})
+    r = client.patch(f"/api/tasks/{task.id}", json={"priority": 6})
     assert r.status_code == 422
 
 
@@ -578,10 +578,10 @@ def test_post_message_default_priority_is_2(api):
     assert task.priority == 2
 
 
-def test_post_message_priority_5_returns_422(api):
-    """POST /api/chats/{id}/messages with priority=5 returns 422."""
+def test_post_message_priority_6_returns_422(api):
+    """POST /api/chats/{id}/messages with priority=6 returns 422."""
     client, server = api
     bid = _add_chat(server)
 
-    r = client.post(f"/api/chats/{bid}/messages", json={"prompt": "bad", "priority": 5})
+    r = client.post(f"/api/chats/{bid}/messages", json={"prompt": "bad", "priority": 6})
     assert r.status_code == 422

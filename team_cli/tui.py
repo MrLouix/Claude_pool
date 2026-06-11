@@ -428,7 +428,17 @@ class JsonOutputWidget(Static):
         else:
             content += "Duration: - | "
 
-        content += f"Retry: {task.retry_count}"
+        content += f"Retry: {task.retry_count}\n\n"
+
+        if task.json_output is None:
+            content += "[dim]No output yet[/dim]"
+        else:
+            output = task.json_output
+            if "tokens_used" in output:
+                content += f"[bold]Tokens used:[/bold] {output['tokens_used']:,}\n"
+            result_value = output.get("result", "")
+            if result_value:
+                content += f"[bold]Result:[/bold]\n{str(result_value).strip()}\n"
 
         self.update(content)
 

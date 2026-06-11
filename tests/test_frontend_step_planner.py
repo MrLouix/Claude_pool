@@ -52,7 +52,7 @@ class TestStepTaskItemStatusColors:
 
     def test_running_color(self):
         block = self._css_block()
-        assert "#f59e0b" in block
+        assert "var(--color-warning)" in block or "#f59e0b" in block
 
     def test_success_color(self):
         block = self._css_block()
@@ -60,7 +60,7 @@ class TestStepTaskItemStatusColors:
 
     def test_failed_color(self):
         block = self._css_block()
-        assert "#ef4444" in block
+        assert "var(--color-danger)" in block or "#ef4444" in block
 
     def test_rate_limit_color(self):
         block = self._css_block()

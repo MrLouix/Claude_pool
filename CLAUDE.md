@@ -28,14 +28,14 @@ The app follows a sequential execution model with rate-limit awareness:
 
 1. Load tasks from `pool.db`
 2. For each pending task: `cd $directory && claude -p "$prompt" --output-format json --structured-output [args...]`
-3. Handle exit codes: 0=success, 1=rate-limit retry with exponential backoff, ≥2=failed
+3. Handle exit codes: 0=success, 1=rate-limit retry every 30 minutes, ≥2=failed
 4. Save updated state back to `pool.db`
 5. On SIGINT: graceful shutdown, save current state
 
 ### Rate-limit strategy
 
 - Trigger: exit_code==1 with rate-limit patterns, or session_usage_percent ≥ 80%
-- Retry: up to 5 times, delay = `min(60 * 2^retry_count, 5 hours)` seconds
+- Retry: indefinitely, fixed delay of 30 minutes between each attempt
 
 ## Key Files
 

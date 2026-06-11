@@ -80,7 +80,7 @@ def test_post_task_persists_to_db(tmp_path: Path) -> None:
     with _make_api(pool_file) as (client, _server):
         resp = client.post(
             "/api/tasks",
-            json={"prompt": "Do something", "directory": str(tmp_path)},
+            json={"prompt": "Do something", "directory": str(Path.home())},
         )
         assert resp.status_code == 200
         task_id = resp.json()["id"]

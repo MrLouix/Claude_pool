@@ -61,10 +61,9 @@ def test_generate_task_id_unique():
 # ── _validate_priority ────────────────────────────────────────────
 
 
-def test_validate_priority_accepts_1_2_3():
-    assert _validate_priority(1) == 1
-    assert _validate_priority(2) == 2
-    assert _validate_priority(3) == 3
+def test_validate_priority_accepts_1_through_5():
+    for i in range(1, 6):
+        assert _validate_priority(i) == i
 
 
 def test_validate_priority_rejects_0():
@@ -72,22 +71,23 @@ def test_validate_priority_rejects_0():
         _validate_priority(0)
 
 
-def test_validate_priority_rejects_4():
+def test_validate_priority_rejects_6():
     with pytest.raises(ValueError, match="priority"):
-        _validate_priority(4)
+        _validate_priority(6)
 
 
-# ── ProjectEntry is ProjectInput ──────────────────────────────────
+# ── ProjectEntry and ProjectInput ────────────────────────────────
 
 
-def test_project_entry_is_alias_of_project_input():
-    assert ProjectEntry is ProjectInput
-
-
-def test_project_entry_has_same_fields():
-    p = ProjectEntry(name="foo", github_url="https://github.com/x/y", directory="/home/x")
+def test_project_entry_has_required_fields():
+    p = ProjectEntry(id="proj_1", name="foo", directory="/home/x", created_at="2026-01-01T00:00:00")
     assert p.name == "foo"
-    assert p.github_url == "https://github.com/x/y"
+    assert p.id == "proj_1"
+
+
+def test_project_input_has_required_fields():
+    p = ProjectInput(name="bar", directory="/home/x")
+    assert p.name == "bar"
 
 
 # ── TaskInput priority validator ──────────────────────────────────
@@ -103,7 +103,7 @@ def test_task_input_priority_1():
 
 def test_task_input_priority_invalid():
     with pytest.raises(ValidationError):
-        TaskInput(prompt="p", priority=5)
+        TaskInput(prompt="p", priority=6)
 
 
 # ── MessageInput priority validator ──────────────────────────────
@@ -127,7 +127,7 @@ def test_task_patch_input_priority_none_is_allowed():
 
 def test_task_patch_input_priority_invalid():
     with pytest.raises(ValidationError):
-        TaskPatchInput(priority=4)
+        TaskPatchInput(priority=6)
 
 
 # ── _compute_pool_status ─────────────────────────────────────────

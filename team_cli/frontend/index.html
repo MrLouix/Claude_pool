@@ -294,7 +294,7 @@
 
     .priority-badge {
         display: inline-block;
-        font-size: 11px; padding: 2px 8px; border-radius: 12px;
+        font-size: 0.6875rem; padding: 2px 8px; border-radius: var(--radius-full);
         margin-left: 6px; font-weight: 600; vertical-align: middle; color: #fff;
     }
     /* canonical 1-5 classes */
@@ -367,7 +367,7 @@
         }
 
         .btn-promote {
-            font-size: 10px; padding: 1px 6px; border-radius: 8px;
+            font-size: 10px; padding: 1px 6px; border-radius: var(--radius-sm);
             border: 1px solid var(--color-border-dark); background: transparent;
             color: var(--color-text-muted); cursor: pointer; font-weight: 600;
             margin-left: 4px; vertical-align: middle; line-height: 1.4;
@@ -884,8 +884,8 @@
             border-radius: var(--radius-full);
             font-size: 0.6875rem;
             font-weight: 600;
-            background: #dbeafe;
-            color: #1e40af;
+            background: var(--color-info-bg);
+            color: var(--color-info-text);
         }
 
         /* Threaded messages indentation */
@@ -922,11 +922,11 @@
             align-items: center;
             gap: 8px;
             padding: 6px 10px;
-            background: #eff6ff;
-            border: 1px solid #bfdbfe;
+            background: var(--color-info-bg);
+            border: 1px solid var(--color-info-border);
             border-radius: var(--radius-sm);
             font-size: 0.8125rem;
-            color: #1e40af;
+            color: var(--color-info-text);
             margin-bottom: 6px;
         }
         .project-reply-banner.hidden { display: none; }
@@ -936,7 +936,7 @@
             border: none;
             cursor: pointer;
             font-size: 1rem;
-            color: #1e40af;
+            color: var(--color-info-text);
             line-height: 1;
             padding: 0 2px;
         }
@@ -1131,9 +1131,9 @@
             font-weight: 600;
             flex-shrink: 0;
         }
-        .cli-badge-auto   { background: #dcfce7; color: #166534; }
-        .cli-badge-named  { background: #dbeafe; color: #1e40af; }
-        .cli-badge-manual { background: #f3f4f6; color: #6b7280; }
+        .cli-badge-auto   { background: var(--color-success-bg); color: var(--color-success-text); }
+        .cli-badge-named  { background: var(--color-info-bg); color: var(--color-info-text); }
+        .cli-badge-manual { background: var(--color-inline-code-bg); color: var(--color-text-muted); }
 
         .chat-usage-dot {
             width: 10px;
@@ -1488,9 +1488,9 @@
             }
             .step-task-item:hover { background: var(--color-surface); }
             .step-task-item[data-status="pending"]    { border-left-color: #9ca3af; }
-            .step-task-item[data-status="running"]    { border-left-color: #f59e0b; }
+            .step-task-item[data-status="running"]    { border-left-color: var(--color-warning); }
             .step-task-item[data-status="success"]    { border-left-color: #22c55e; }
-            .step-task-item[data-status="failed"]     { border-left-color: #ef4444; }
+            .step-task-item[data-status="failed"]     { border-left-color: var(--color-danger); }
             .step-task-item[data-status="rate_limit"] { border-left-color: #f97316; }
             .step-status-icon {
                 font-size: 1rem;
@@ -1571,18 +1571,6 @@
             <button type="button" class="btn-run-plan" id="btn-run-plan" style="width:100%;padding:14px 20px;font-size:15px;">⚙ Run Dev Plan</button>
         </div>
 
-        <div class="section" role="region" aria-labelledby="chats-heading">
-            <div class="section-header">
-                <span id="chats-heading">Chats</span>
-                <button type="button" class="btn-primary" id="btn-new-chat" style="font-size:13px;padding:7px 14px;">+ New Chat</button>
-            </div>
-            <div class="section-content">
-                <div class="chat-list" id="chat-list">
-                    <div class="empty-state">No chats yet. Create a new chat to get started.</div>
-                </div>
-            </div>
-        </div>
-
         <div class="section" role="region" aria-labelledby="projects-heading">
             <div class="section-header">
                 <span id="projects-heading">Projects</span>
@@ -1591,6 +1579,18 @@
             <div class="section-content">
                 <div class="chat-list" id="project-list">
                     <div class="empty-state">No projects yet. Create a new project to get started.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section" role="region" aria-labelledby="chats-heading">
+            <div class="section-header">
+                <span id="chats-heading">Chats</span>
+                <button type="button" class="btn-primary" id="btn-new-chat" style="font-size:13px;padding:7px 14px;">+ New Chat</button>
+            </div>
+            <div class="section-content">
+                <div class="chat-list" id="chat-list">
+                    <div class="empty-state">No chats yet. Create a new chat to get started.</div>
                 </div>
             </div>
         </div>

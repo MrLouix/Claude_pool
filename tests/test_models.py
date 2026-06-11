@@ -154,34 +154,34 @@ def test_task_roundtrip_preserves_priority():
 
 
 def test_task_input_priority_validation():
-    """Pydantic TaskInput rejects priority values outside [1, 2, 3]."""
-    from team_cli.api import TaskInput
+    """Pydantic TaskInput rejects priority values outside [1, 2, 3, 4, 5]."""
+    from team_cli.api_models import TaskInput
 
     assert TaskInput(prompt="p", priority=1).priority == 1
     assert TaskInput(prompt="p", priority=2).priority == 2
-    assert TaskInput(prompt="p", priority=3).priority == 3
+    assert TaskInput(prompt="p", priority=5).priority == 5
     assert TaskInput(prompt="p").priority == 2  # default
 
     with pytest.raises(ValidationError):
         TaskInput(prompt="p", priority=0)
     with pytest.raises(ValidationError):
-        TaskInput(prompt="p", priority=4)
+        TaskInput(prompt="p", priority=6)
 
 
 def test_task_patch_input_priority_validation():
-    """Pydantic TaskPatchInput rejects priority values outside [1, 2, 3]."""
-    from team_cli.api import TaskPatchInput
+    """Pydantic TaskPatchInput rejects priority values outside [1, 2, 3, 4, 5]."""
+    from team_cli.api_models import TaskPatchInput
 
     assert TaskPatchInput(priority=None).priority is None  # optional
     assert TaskPatchInput(priority=1).priority == 1
 
     with pytest.raises(ValidationError):
-        TaskPatchInput(priority=5)
+        TaskPatchInput(priority=6)
 
 
 def test_message_input_priority_validation():
-    """Pydantic MessageInput rejects priority values outside [1, 2, 3]."""
-    from team_cli.api import MessageInput
+    """Pydantic MessageInput rejects priority values outside [1, 2, 3, 4, 5]."""
+    from team_cli.api_models import MessageInput
 
     assert MessageInput(prompt="p").priority == 2  # default
     assert MessageInput(prompt="p", priority=3).priority == 3

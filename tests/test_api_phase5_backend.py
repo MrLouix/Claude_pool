@@ -94,7 +94,7 @@ class TestPatchProject:
 
     def test_patch_updates_directory(self, tmp_path: Path):
         pool_file, proj = _setup(tmp_path)
-        new_dir = str(tmp_path)
+        new_dir = str(Path.home())
 
         with _make_api(pool_file) as (client, _):
             resp = client.patch(
