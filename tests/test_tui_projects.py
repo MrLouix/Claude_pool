@@ -9,14 +9,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from team_cli.models import Project, ProjectMessage
-from team_cli.priority_engine import PRIORITY_LABELS, promote_priority
+from team_cli.priority_engine import promote_priority
 from team_cli.tui import (
     ComposeMessageScreen,
     PoolTUI,
     ProjectDetailScreen,
     ProjectListWidget,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -50,7 +49,7 @@ def _make_message(mid: str = "msg_001", project_id: str = "proj_001",
 def _mock_executor(pool_file: Path):
     """Patch TaskExecutor so TUI doesn't actually run tasks."""
     with (
-        patch("team_cli.tui.TaskExecutor") as MockExec,
+        patch("team_cli.tui.TaskExecutor") as MockExec,  # noqa: N806
         patch("team_cli.executor.signal.signal"),
     ):
         mock_exec = MagicMock()
@@ -538,7 +537,7 @@ async def test_tui_mounts_with_both_tabs(tmp_path):
     save_pool(PoolState(tasks=[], pool_file=pool_file))
 
     with (
-        patch("team_cli.tui.TaskExecutor") as MockExec,
+        patch("team_cli.tui.TaskExecutor") as MockExec,  # noqa: N806
         patch("team_cli.tui.load_projects", return_value=[]),
         patch("team_cli.executor.signal.signal"),
     ):
@@ -556,7 +555,7 @@ async def test_tui_mounts_with_both_tabs(tmp_path):
         MockExec.return_value = mock_exec
 
         app = PoolTUI(pool_file)
-        async with app.run_test(headless=True) as pilot:
+        async with app.run_test(headless=True):
             from textual.widgets import TabbedContent
             tc = app.query_one(TabbedContent)
             assert tc is not None
@@ -575,7 +574,7 @@ async def test_projects_tab_calls_load_projects(tmp_path):
     save_pool(PoolState(tasks=[], pool_file=pool_file))
 
     with (
-        patch("team_cli.tui.TaskExecutor") as MockExec,
+        patch("team_cli.tui.TaskExecutor") as MockExec,  # noqa: N806
         patch("team_cli.tui.load_projects", return_value=[]) as mock_load,
         patch("team_cli.executor.signal.signal"),
     ):
@@ -595,7 +594,7 @@ async def test_projects_tab_calls_load_projects(tmp_path):
         app = PoolTUI(pool_file)
         async with app.run_test(headless=True) as pilot:
             from textual.widgets import TabbedContent
-            tc = app.query_one(TabbedContent)
+            app.query_one(TabbedContent)
             # Switch to Projects tab programmatically
             await pilot.pause()
             app._reload_project_list()

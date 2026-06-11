@@ -10,13 +10,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from team_cli.api import ApiServer
 from team_cli.models import PoolState
 from team_cli.storage import save_pool
-
 
 # ---------------------------------------------------------------------------
 # Fixture helpers (same pattern as test_api_phase5_backend.py)

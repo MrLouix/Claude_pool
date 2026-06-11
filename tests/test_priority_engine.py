@@ -8,7 +8,6 @@ from team_cli.priority_engine import (
     promote_priority,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -52,13 +51,13 @@ class TestUrgentKeywords:
     def test_urgent_returns_5(self):
         assert calculate_priority(_msg("urgent: deploy is failing")) == 5
 
-    def test_case_insensitive_Bug(self):
+    def test_case_insensitive_Bug(self):  # noqa: N802
         assert calculate_priority(_msg("Bug in production")) == 5
 
-    def test_case_insensitive_FIX(self):
+    def test_case_insensitive_FIX(self):  # noqa: N802
         assert calculate_priority(_msg("FIX the login issue")) == 5
 
-    def test_case_insensitive_ERROR(self):
+    def test_case_insensitive_ERROR(self):  # noqa: N802
         assert calculate_priority(_msg("ERROR: null pointer")) == 5
 
     def test_bug_keyword_beats_linked_message_id(self):

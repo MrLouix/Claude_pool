@@ -8,7 +8,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from team_cli.api import ApiServer
@@ -69,8 +68,9 @@ class TestRouterFactory:
         return result
 
     def test_tasks_router_has_all_routes(self):
-        from team_cli.routers.tasks import create_router
         from fastapi.routing import APIRouter
+
+        from team_cli.routers.tasks import create_router
 
         router = create_router(_make_server())
         assert isinstance(router, APIRouter)
@@ -87,8 +87,9 @@ class TestRouterFactory:
         assert "PATCH /api/tasks/{task_id}" in routes
 
     def test_pools_router_has_all_routes(self):
-        from team_cli.routers.pools import create_router
         from fastapi.routing import APIRouter
+
+        from team_cli.routers.pools import create_router
 
         router = create_router(_make_server())
         assert isinstance(router, APIRouter)
@@ -102,8 +103,9 @@ class TestRouterFactory:
         assert "GET /api/clis/detect" in routes
 
     def test_chats_router_has_all_routes(self):
-        from team_cli.routers.chats import create_router
         from fastapi.routing import APIRouter
+
+        from team_cli.routers.chats import create_router
 
         router = create_router(_make_server())
         assert isinstance(router, APIRouter)
@@ -116,8 +118,9 @@ class TestRouterFactory:
         assert "POST /api/chats/{chat_id}/messages" in routes
 
     def test_projects_router_has_all_routes(self):
-        from team_cli.routers.projects import create_router
         from fastapi.routing import APIRouter
+
+        from team_cli.routers.projects import create_router
 
         router = create_router(_make_server())
         assert isinstance(router, APIRouter)
@@ -135,8 +138,9 @@ class TestRouterFactory:
         assert "POST /api/projects/{project_id}/messages/{message_id}/promote" in routes
 
     def test_skills_router_has_all_routes(self):
-        from team_cli.routers.skills import create_router
         from fastapi.routing import APIRouter
+
+        from team_cli.routers.skills import create_router
 
         router = create_router(_make_server())
         assert isinstance(router, APIRouter)
@@ -149,8 +153,9 @@ class TestRouterFactory:
         assert "DELETE /api/skills/multi_step_planner/plans/{plan_id}" in routes
 
     def test_admin_router_has_all_routes(self):
-        from team_cli.routers.admin import create_router
         from fastapi.routing import APIRouter
+
+        from team_cli.routers.admin import create_router
 
         router = create_router(_make_server())
         assert isinstance(router, APIRouter)
@@ -160,8 +165,8 @@ class TestRouterFactory:
 
     def test_each_router_returns_independent_instance(self):
         """Two calls to create_router produce distinct router instances."""
+
         from team_cli.routers.tasks import create_router
-        from fastapi.routing import APIRouter
 
         server = _make_server()
         r1 = create_router(server)
@@ -179,12 +184,12 @@ class TestRouterTotalRouteCoverage:
         return total
 
     def test_total_route_count(self):
-        from team_cli.routers.tasks import create_router as tasks
-        from team_cli.routers.pools import create_router as pools
+        from team_cli.routers.admin import create_router as admin
         from team_cli.routers.chats import create_router as chats
+        from team_cli.routers.pools import create_router as pools
         from team_cli.routers.projects import create_router as projects
         from team_cli.routers.skills import create_router as skills
-        from team_cli.routers.admin import create_router as admin
+        from team_cli.routers.tasks import create_router as tasks
 
         server = _make_server()
         total = sum(

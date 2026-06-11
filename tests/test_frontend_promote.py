@@ -100,7 +100,7 @@ class TestRenderProjectMessagesPromote:
     def test_promote_button_rendered(self):
         assert re.search(r"Promote|promote", self._fn_body())
 
-    def test_promoteMessage_called_on_click(self):
+    def test_promoteMessage_called_on_click(self):  # noqa: N802
         assert "promoteMessage" in self._fn_body()
 
     def test_promote_button_only_shown_when_priority_lt_5(self):

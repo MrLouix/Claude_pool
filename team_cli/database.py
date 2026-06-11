@@ -281,7 +281,7 @@ class DatabaseManager:
         Emits a single targeted UPDATE — no DELETE+INSERT overhead.
         Immutable fields (id, prompt, directory, created_at) are silently ignored.
         """
-        _ALLOWED = frozenset({
+        _ALLOWED = frozenset({  # noqa: N806
             "status", "exit_code", "duration_ms", "json_output", "retry_count",
             "session_id", "bucket_id", "priority", "provider", "context_messages",
             "rerouted_from", "rerouted_to", "model",
@@ -408,7 +408,7 @@ class DatabaseManager:
     async def upsert_project_message(self, message_dict: dict[str, Any]) -> None:
         """Insert or replace a project message row. Metadata is JSON-serialized."""
         metadata = message_dict.get("metadata", {})
-        
+
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
                 """
@@ -631,7 +631,7 @@ class DatabaseManager:
 
         Only keys present in *fields* are written; all others are untouched.
         """
-        _ALLOWED = frozenset({
+        _ALLOWED = frozenset({  # noqa: N806
             "status", "cli_used", "model_used", "output", "error",
             "tokens_used", "duration_ms", "started_at", "completed_at",
         })
