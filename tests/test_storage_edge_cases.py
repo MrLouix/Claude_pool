@@ -3,17 +3,14 @@
 from datetime import datetime
 from pathlib import Path
 
-import pytest
-
 from team_cli.models import Project, ProjectMessage
 from team_cli.storage import (
     build_context,
     load_project,
+    load_project_messages,
     save_project,
     save_project_message,
-    load_project_messages,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -21,8 +18,9 @@ from team_cli.storage import (
 
 def _make_db(tmp_path: Path) -> Path:
     """Return an initialised DB path (migrations applied via DatabaseManager.init)."""
-    from team_cli.database import DatabaseManager
     import asyncio
+
+    from team_cli.database import DatabaseManager
     db_path = tmp_path / "pool.db"
     asyncio.run(DatabaseManager(db_path).init())
     return db_path

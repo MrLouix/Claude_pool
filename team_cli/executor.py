@@ -8,33 +8,37 @@ All executor logic lives in:
 
 # Module-level imports preserved so that `patch("team_cli.executor.signal.signal")`,
 # `patch("team_cli.executor.subprocess.run")`, etc. continue to work in tests.
-import asyncio   # noqa: F401 — patchable via team_cli.executor.asyncio
-import signal    # noqa: F401 — patchable via team_cli.executor.signal
+import asyncio  # noqa: F401 — patchable via team_cli.executor.asyncio
+import signal  # noqa: F401 — patchable via team_cli.executor.signal
 import subprocess  # noqa: F401 — patchable via team_cli.executor.subprocess
 import tempfile  # noqa: F401 — patchable via team_cli.executor.tempfile
 
-from .parser import parse_claude_output  # noqa: F401 — patchable via team_cli.executor.parse_claude_output
-from .storage import build_context, save_pool  # noqa: F401 — patchable via team_cli.executor.build_context etc.
-
 from .cli_executors import (
+    _RATE_LIMIT_PATTERNS,
+    MAX_RETRIES,
     BaseCLIExecutor,
     ClaudeExecutor,
     CLIManager,
-    create_executor,
     GemmaExecutor,
     GenericCLIExecutor,
     LlamaExecutor,
-    MAX_RETRIES,
     MistralExecutor,
     NoCLIAvailableError,
     NormalizedOutput,
-    _RATE_LIMIT_PATTERNS,
+    create_executor,
     truncate_context_messages,
 )
+from .parser import (
+    parse_claude_output,  # noqa: F401 — patchable via team_cli.executor.parse_claude_output
+)
 from .pool_driver import (
+    TaskExecutor,
     _meta_hash,
     execute_message,
-    TaskExecutor,
+)
+from .storage import (  # noqa: F401 — patchable via team_cli.executor.build_context etc.
+    build_context,
+    save_pool,
 )
 
 __all__ = [

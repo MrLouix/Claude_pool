@@ -1,13 +1,12 @@
 """Tests for the TUI components."""
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from textual.containers import Container
-from textual.widgets import Button, DataTable, Input, Label
+from textual.widgets import Button, DataTable
 
-from team_cli.models import PoolState, Task
+from team_cli.models import Task
 from team_cli.tui import AddTaskScreen, ConfirmDialog, JsonOutputWidget, LogWidget, PoolTUI
 
 
@@ -595,7 +594,6 @@ class TestDetailedOutputScreen:
                 )
 
                 # Detailed output screen should work with task data
-                from team_cli.tui import DetailedOutputScreen
 
                 # Just verify we can instantiate it within app context
                 assert task.id == "task_001"
@@ -642,7 +640,7 @@ class TestDataTableRowSelection:
             async with app.run_test() as pilot:
                 await pilot.pause()
 
-                table = app.query_one("#task_list_widget DataTable", DataTable)
+                app.query_one("#task_list_widget DataTable", DataTable)
                 json_widget = app.query_one("#json_output", JsonOutputWidget)
 
                 # Use the task at row 2 (which is the success task)

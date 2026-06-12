@@ -8,7 +8,6 @@ Covers:
 - _thread_pool is a module-level singleton, not re-created per call
 """
 
-import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -18,7 +17,6 @@ import pytest
 import team_cli.database as db_module
 import team_cli.storage as storage_module
 from team_cli.database import DatabaseManager
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -241,6 +239,5 @@ class TestThreadPoolSingleton:
 
     def test_same_object_across_multiple_imports(self):
         """Re-importing storage must return the same _thread_pool instance."""
-        import importlib
         import team_cli.storage as s2
         assert storage_module._thread_pool is s2._thread_pool

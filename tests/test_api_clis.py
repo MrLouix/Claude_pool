@@ -3,7 +3,6 @@
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from team_cli.api import create_app
@@ -150,8 +149,8 @@ class TestTaskExecutorFallback:
 
     def test_uses_provided_cli_manager(self, tmp_path):
         """TaskExecutor uses provided CLIManager instead of creating fallback."""
-        from team_cli.executor import TaskExecutor
         from team_cli.cli_executors import CLIManager
+        from team_cli.executor import TaskExecutor
 
         pool_file = tmp_path / "test.db"
         custom_config = CLIConfig(

@@ -3,7 +3,6 @@
 import logging
 from copy import deepcopy
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
@@ -18,7 +17,7 @@ def create_router(server) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/tasks")
-    async def get_tasks(status: Optional[str] = None) -> list[TaskResponse]:
+    async def get_tasks(status: str | None = None) -> list[TaskResponse]:
         if not server.executor:
             raise HTTPException(status_code=503, detail="Executor not initialized")
         tasks = server.executor.pool.tasks

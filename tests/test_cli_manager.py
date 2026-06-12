@@ -1,6 +1,5 @@
 """Unit tests for CLIManager and related executors."""
 
-import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
@@ -8,7 +7,6 @@ import pytest
 
 from team_cli.executor import (
     CLIManager,
-    ClaudeExecutor,
     GenericCLIExecutor,
     MistralExecutor,
     create_executor,
@@ -35,7 +33,7 @@ class TestMistralExecutor:
         mock_result.stderr = ""
 
         with patch("team_cli.executor.subprocess.run", return_value=mock_result):
-            result = executor.execute(
+            executor.execute(
                 prompt="test prompt",
                 context=[],
                 directory="/tmp",
@@ -71,7 +69,7 @@ class TestMistralExecutor:
                 mock_file.name = "/tmp/test_ctx.json"
                 mock_temp.return_value = mock_file
 
-                result = executor.execute(
+                executor.execute(
                     prompt="test",
                     context=[{"key": "value"}],
                     directory="/tmp",
@@ -296,7 +294,7 @@ class TestCLIManager:
         with patch("team_cli.executor.subprocess.run") as mock_run:
             # First call (Claude) returns rate limit, second call (Mistral) succeeds
             mock_run.side_effect = [mock_result_rl, mock_result_ok]
-            
+
             with patch("team_cli.executor.parse_claude_output", return_value={"result": "ok"}):
                 manager = CLIManager([config1, config2])
                 result = manager.execute(
@@ -325,7 +323,7 @@ class TestCLIManager:
         with patch("team_cli.executor.subprocess.run", return_value=mock_result):
             with patch("team_cli.executor.parse_claude_output", return_value={}):
                 manager = CLIManager([config1])
-                
+
                 # First, the executor is not rate-limited yet
                 # But after execute, it will be
                 with pytest.raises(RuntimeError, match="All CLI executors are rate-limited"):
@@ -389,12 +387,12 @@ class TestCLIManager:
         with patch("team_cli.executor.subprocess.run", return_value=mock_result):
             with patch("team_cli.executor.parse_claude_output", return_value={"result": "ok"}) as mock_parse:
                 manager = CLIManager([config])
-                result = manager.execute(
+                manager.execute(
                     prompt="test",
                     context=[],
                     directory="/tmp",
                     model="",  # Empty model
                 )
-                
+
                 # Verify parse_claude_output was called (meaning execute was called)
                 assert mock_parse.called

@@ -75,7 +75,7 @@ def create_router(server) -> APIRouter:
 
     @router.post("/api/skills/multi_step_planner/steps/{step_id}/retry")
     async def retry_step(step_id: str) -> dict:
-        from ..storage import load_step_task, load_step_plan, update_step_task_status
+        from ..storage import load_step_plan, load_step_task, update_step_task_status
 
         step = await asyncio.to_thread(load_step_task, step_id, server.pool_file)
         if step is None:
@@ -96,7 +96,7 @@ def create_router(server) -> APIRouter:
 
     @router.delete("/api/skills/multi_step_planner/plans/{plan_id}", status_code=204)
     async def delete_plan(plan_id: str) -> None:
-        from ..storage import load_step_plan, delete_step_plan
+        from ..storage import delete_step_plan, load_step_plan
 
         plan = await asyncio.to_thread(load_step_plan, plan_id, server.pool_file)
         if plan is None:

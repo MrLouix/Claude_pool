@@ -1,8 +1,7 @@
 """Unit tests for execute_message() — Phase 3 Step 2."""
 
 import asyncio
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -12,7 +11,6 @@ from team_cli.executor import (
     execute_message,
 )
 from team_cli.models import CLIConfig, Project, ProjectMessage
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -10,8 +10,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from team_cli.executor import _RATE_LIMIT_PATTERNS
 from team_cli.storage import (
@@ -95,7 +96,7 @@ class StepTaskExecutor:
                 exit_code = proc.returncode
                 stdout_text = stdout_b.decode("utf-8", errors="replace")
                 stderr_text = stderr_b.decode("utf-8", errors="replace")
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
                 await proc.communicate()
                 exit_code = -1

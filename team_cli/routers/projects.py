@@ -4,7 +4,6 @@ import logging
 import uuid as _uuid
 from copy import copy as _copy
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -30,7 +29,7 @@ def create_router(server) -> APIRouter:
         if not server.executor:
             raise HTTPException(status_code=503, detail="Executor not initialized")
 
-        from ..storage import load_projects, load_project_messages
+        from ..storage import load_project_messages, load_projects
 
         db_path = server.executor.pool.pool_file.with_suffix(".db")
         projects = load_projects(db_path)
@@ -123,7 +122,8 @@ def create_router(server) -> APIRouter:
         if not server.executor:
             raise HTTPException(status_code=503, detail="Executor not initialized")
 
-        from ..storage import delete_project as delete_project_db, load_project
+        from ..storage import delete_project as delete_project_db
+        from ..storage import load_project
 
         db_path = server.executor.pool.pool_file.with_suffix(".db")
         project = load_project(db_path, project_id)
@@ -147,7 +147,7 @@ def create_router(server) -> APIRouter:
         if not server.executor:
             raise HTTPException(status_code=503, detail="Executor not initialized")
 
-        from ..storage import load_project, save_project, load_project_messages
+        from ..storage import load_project, load_project_messages, save_project
 
         db_path = server.executor.pool.pool_file.with_suffix(".db")
         project = load_project(db_path, project_id)
@@ -181,7 +181,7 @@ def create_router(server) -> APIRouter:
     @router.get("/api/projects/{project_id}/messages")
     async def list_project_messages(
         project_id: str,
-        linked_to: Optional[str] = Query(default=None),
+        linked_to: str | None = Query(default=None),
     ) -> list[ProjectMessageResponse]:
         if not server.executor:
             raise HTTPException(status_code=503, detail="Executor not initialized")
@@ -248,7 +248,7 @@ def create_router(server) -> APIRouter:
         if not server.executor:
             raise HTTPException(status_code=503, detail="Executor not initialized")
 
-        from ..storage import load_project_message, delete_project_message
+        from ..storage import delete_project_message, load_project_message
 
         db_path = server.executor.pool.pool_file.with_suffix(".db")
         message = load_project_message(db_path, message_id)
@@ -380,8 +380,8 @@ def create_router(server) -> APIRouter:
         if not server.executor:
             raise HTTPException(status_code=503, detail="Executor not initialized")
 
-        from ..storage import load_project_message, save_project_message
         from ..priority_engine import promote_priority
+        from ..storage import load_project_message, save_project_message
 
         db_path = server.executor.pool.pool_file.with_suffix(".db")
         message = load_project_message(db_path, message_id)

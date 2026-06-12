@@ -1,22 +1,17 @@
 """Tests for DB migration script and /api/admin/migration-status endpoint."""
 
-import asyncio
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from team_cli.migrations import (
     MIGRATIONS,
-    apply_migrations,
-    check_migration_status,
     _column_exists,
     _parse_alter_add_column,
+    apply_migrations,
+    check_migration_status,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

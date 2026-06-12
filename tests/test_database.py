@@ -1,12 +1,10 @@
 """Unit tests for team_cli.database.DatabaseManager."""
 
-from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from team_cli.database import DatabaseManager
-
 
 # ---------------------------------------------------------------------------
 # Helpers

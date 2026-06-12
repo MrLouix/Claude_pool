@@ -1,7 +1,6 @@
 """Frontend tests for the new project creation modal (Phase 3 Step 4)."""
 
 import re
-from html.parser import HTMLParser
 from pathlib import Path
 
 FRONTEND = Path(__file__).parent.parent / "team_cli" / "frontend" / "index.html"

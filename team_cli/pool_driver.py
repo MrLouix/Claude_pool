@@ -3,21 +3,21 @@
 import asyncio
 import logging
 import time
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Callable, Optional
 
 from .cli_executors import (
-    CLIManager,
-    MAX_RETRIES,
-    NoCLIAvailableError,
     _RATE_LIMIT_PATTERNS,
+    MAX_RETRIES,
+    CLIManager,
+    NoCLIAvailableError,
     truncate_context_messages,
 )
 from .concurrency import TaskSemaphore
 from .models import CLIConfig, PoolState, Project, ProjectMessage, Task
 from .parser import parse_claude_output
-from .storage import build_context, cleanup_old_tasks, load_pool, save_pool
+from .storage import cleanup_old_tasks, load_pool
 
 logger = logging.getLogger(__name__)
 

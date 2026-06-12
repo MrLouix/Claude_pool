@@ -12,7 +12,6 @@ from typing import Any
 
 from .models import StepPlan, StepTask
 from .utils import (
-    MAX_PROMPT_LENGTH,
     generate_id,
     now_utc,
     validate_and_parse_plan_json,
@@ -128,7 +127,7 @@ class PlanGenerator:
                 proc.communicate(),
                 timeout=_GENERATION_TIMEOUT,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.communicate()
             raise RuntimeError(

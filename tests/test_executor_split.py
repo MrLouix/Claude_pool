@@ -17,19 +17,8 @@ class TestCliExecutorsModule:
 
     def test_importable(self):
         from team_cli.cli_executors import (
-            BaseCLIExecutor,
-            CLIManager,
-            ClaudeExecutor,
-            GemmaExecutor,
-            GenericCLIExecutor,
-            LlamaExecutor,
-            MAX_RETRIES,
-            MistralExecutor,
-            NoCLIAvailableError,
-            NormalizedOutput,
             _RATE_LIMIT_PATTERNS,
-            create_executor,
-            truncate_context_messages,
+            MAX_RETRIES,
         )
         assert MAX_RETRIES == 5
         assert isinstance(_RATE_LIMIT_PATTERNS, tuple)
@@ -102,13 +91,13 @@ class TestPoolDriverModule:
     """pool_driver.py is importable and exposes TaskExecutor and execute_message."""
 
     def test_importable(self):
-        from team_cli.pool_driver import TaskExecutor, _meta_hash, execute_message
+        from team_cli.pool_driver import _meta_hash, execute_message
         assert callable(execute_message)
         assert callable(_meta_hash)
 
     def test_meta_hash_stable(self):
-        from team_cli.pool_driver import _meta_hash
         from team_cli.models import PoolState
+        from team_cli.pool_driver import _meta_hash
 
         pool = PoolState(pool_file=Path("pool.db"))
         h1 = _meta_hash(pool)
@@ -116,8 +105,8 @@ class TestPoolDriverModule:
         assert h1 == h2
 
     def test_meta_hash_changes_on_retry_count(self):
-        from team_cli.pool_driver import _meta_hash
         from team_cli.models import PoolState
+        from team_cli.pool_driver import _meta_hash
 
         pool = PoolState(pool_file=Path("pool.db"))
         h_before = _meta_hash(pool)
@@ -135,8 +124,8 @@ class TestPoolDriverModule:
 
     def test_task_executor_accepts_cli_manager(self):
         from team_cli.cli_executors import CLIManager
-        from team_cli.pool_driver import TaskExecutor
         from team_cli.models import CLIConfig
+        from team_cli.pool_driver import TaskExecutor
 
         cfg = CLIConfig(name="claude", path="claude", models=[], cli_type="anthropic")
         mgr = CLIManager([cfg])
@@ -182,28 +171,13 @@ class TestExecutorShim:
 
     def test_all_symbols_importable_from_shim(self):
         from team_cli.executor import (
-            BaseCLIExecutor,
-            CLIManager,
-            ClaudeExecutor,
-            GemmaExecutor,
-            GenericCLIExecutor,
-            LlamaExecutor,
             MAX_RETRIES,
-            MistralExecutor,
-            NoCLIAvailableError,
-            NormalizedOutput,
-            TaskExecutor,
-            _RATE_LIMIT_PATTERNS,
-            _meta_hash,
-            create_executor,
-            execute_message,
-            truncate_context_messages,
         )
         assert MAX_RETRIES == 5
 
     def test_shim_clim_is_same_class_as_direct(self):
-        from team_cli.executor import CLIManager as ShimCLIManager
         from team_cli.cli_executors import CLIManager as DirectCLIManager
+        from team_cli.executor import CLIManager as ShimCLIManager
 
         assert ShimCLIManager is DirectCLIManager
 

@@ -86,7 +86,7 @@ class PlanEvaluator:
                 proc.communicate(),
                 timeout=_EVALUATION_TIMEOUT,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.communicate()
             raise RuntimeError(

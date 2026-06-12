@@ -3,7 +3,6 @@
 import logging
 import shutil
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
@@ -53,7 +52,7 @@ def create_router(server) -> APIRouter:
         }
 
     @router.get("/api/directories")
-    async def list_directories(path: Optional[str] = None) -> dict:
+    async def list_directories(path: str | None = None) -> dict:
         target = Path(path) if path else Path.home()
         try:
             resolved = target.resolve()

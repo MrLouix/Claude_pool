@@ -1,24 +1,20 @@
 """Tests for API layer with DB-backed storage (step 4/5)."""
 
 import asyncio
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from team_cli.api import ApiServer
 from team_cli.database import DatabaseManager
 from team_cli.models import PoolState, Task
 from team_cli.storage import save_pool
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-from contextlib import contextmanager
 
 
 @contextmanager

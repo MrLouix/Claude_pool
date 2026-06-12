@@ -17,7 +17,6 @@ from team_cli.api_models import (
 )
 from team_cli.models import PoolState, Task
 
-
 # ── _is_allowed_path ──────────────────────────────────────────────
 
 

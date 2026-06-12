@@ -5,8 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from team_cli.migrations import MIGRATIONS, apply_migrations, _column_exists
-
+from team_cli.migrations import MIGRATIONS, apply_migrations
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -352,6 +351,7 @@ class TestMigrationsListHasNewEntries:
 class TestDatabaseManagerCreatesNewTables:
     def test_init_creates_step_plans(self, tmp_path):
         import asyncio
+
         from team_cli.database import DatabaseManager
 
         db_path = tmp_path / "pool.db"
@@ -364,6 +364,7 @@ class TestDatabaseManagerCreatesNewTables:
 
     def test_init_creates_step_tasks(self, tmp_path):
         import asyncio
+
         from team_cli.database import DatabaseManager
 
         db_path = tmp_path / "pool.db"
@@ -376,6 +377,7 @@ class TestDatabaseManagerCreatesNewTables:
 
     def test_init_is_idempotent(self, tmp_path):
         import asyncio
+
         from team_cli.database import DatabaseManager
 
         db_path = tmp_path / "pool.db"

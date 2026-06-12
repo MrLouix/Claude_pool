@@ -4,9 +4,6 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import pytest
-
-from team_cli.database import DatabaseManager
 from team_cli.models import Bucket, PoolState, Task
 from team_cli.storage import (
     _should_keep_task,
@@ -15,7 +12,6 @@ from team_cli.storage import (
     migrate_from_json,
     save_pool,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

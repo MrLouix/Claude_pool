@@ -3,10 +3,9 @@
 import logging
 import subprocess
 from abc import ABC, abstractmethod
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 from .models import CLIConfig
-from .parser import parse_claude_output
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +31,10 @@ class NormalizedOutput(TypedDict):
     """Standard output shape returned by every CLI executor's execute()."""
 
     content: str          # Main text response
-    model: Optional[str]  # Model name used, if available
+    model: str | None  # Model name used, if available
     cli_name: str         # Name of the CLI that produced this output
-    tokens_used: Optional[int]   # Token count if available
-    duration_ms: Optional[int]   # Execution duration if available
+    tokens_used: int | None   # Token count if available
+    duration_ms: int | None   # Execution duration if available
     raw: dict             # Original unmodified output from the CLI
 
 
@@ -130,8 +129,8 @@ class ClaudeExecutor(BaseCLIExecutor):
     ) -> dict:
         """Run Claude CLI and return raw parsed output dict."""
         import json
-        import tempfile
         import os
+        import tempfile
 
         # Build command as specified
         cmd = [
@@ -250,8 +249,8 @@ class MistralExecutor(BaseCLIExecutor):
     ) -> dict:
         """Run Mistral CLI and return raw parsed output dict."""
         import json
-        import tempfile
         import os
+        import tempfile
 
         cmd = [self.config.path, "--prompt", prompt]
 
@@ -321,7 +320,7 @@ class MistralExecutor(BaseCLIExecutor):
         """Normalize Mistral's output to the standard shape."""
         content = str(raw_output.get("result", raw_output.get("content", "")))
         usage = raw_output.get("usage", {})
-        tokens: Optional[int] = None
+        tokens: int | None = None
         if isinstance(usage, dict):
             t = usage.get("total_tokens") or usage.get("tokens_used")
             tokens = int(t) if t else None

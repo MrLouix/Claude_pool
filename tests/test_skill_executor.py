@@ -4,32 +4,31 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from team_cli.database import DatabaseManager
 from team_cli.models import Project, ProjectMessage
+from team_cli.skills.multi_step_planner.evaluator import PlanEvaluator
+from team_cli.skills.multi_step_planner.executor import StepTaskExecutor
+from team_cli.skills.multi_step_planner.models import StepPlan, StepTask
 from team_cli.storage import (
+    load_step_plan,
+    load_step_tasks_for_plan,
     save_project,
     save_project_message,
     save_step_plan,
     save_step_task,
-    load_step_plan,
-    load_step_tasks_for_plan,
 )
-from team_cli.skills.multi_step_planner.evaluator import PlanEvaluator
-from team_cli.skills.multi_step_planner.executor import StepTaskExecutor
-from team_cli.skills.multi_step_planner.models import StepPlan, StepTask
-
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
 
-NOW = datetime(2026, 6, 6, 12, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 6, 6, 12, 0, 0, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -108,7 +107,7 @@ def _run(coro):
 
 class TestExecuteStepSuccess:
     def test_returns_step_task_object(self, seeded_db):
-        plan = _make_plan(seeded_db)
+        _make_plan(seeded_db)
         task = _make_task(seeded_db, "t-1", step_number=1)
         proc = _mock_proc(stdout=b'{"result": "done"}', returncode=0)
 
@@ -410,7 +409,7 @@ class TestExecutePlan:
     def test_plan_status_running_at_start(self, seeded_db):
         plan = _make_plan(seeded_db)
         plan = plan.model_copy(update={"steps": [_make_task(seeded_db, "t-1")]})
-        proc = _mock_proc(stdout=b"ok", returncode=0)
+        _mock_proc(stdout=b"ok", returncode=0)
 
         status_snapshots: list[str] = []
 

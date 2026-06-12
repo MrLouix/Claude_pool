@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -13,15 +13,14 @@ from fastapi.testclient import TestClient
 from team_cli.api import ApiServer
 from team_cli.database import DatabaseManager
 from team_cli.models import PoolState, Project, ProjectMessage
-from team_cli.storage import save_pool, save_project, save_project_message
 from team_cli.skills.multi_step_planner.models import StepPlan, StepTask
-
+from team_cli.storage import save_pool, save_project, save_project_message
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
-NOW = datetime(2026, 6, 6, 12, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 6, 6, 12, 0, 0, tzinfo=UTC)
 
 _PLAN_ID = "plan-abc"
 _PROJECT_ID = "proj-abc"

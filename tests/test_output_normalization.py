@@ -1,22 +1,20 @@
 """Tests for Risk Mitigation Step 1: Standardized CLI output normalization."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from team_cli.executor import (
     BaseCLIExecutor,
-    CLIManager,
     ClaudeExecutor,
+    CLIManager,
+    GemmaExecutor,
     GenericCLIExecutor,
     LlamaExecutor,
-    GemmaExecutor,
     MistralExecutor,
     NormalizedOutput,
 )
 from team_cli.models import CLIConfig
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -407,12 +405,14 @@ class TestCLIManagerNormalizedResult:
 class TestExecuteMessageCliUsed:
     def test_cli_used_set_from_cli_name(self):
         import inspect
+
         import team_cli.executor as mod
         src = inspect.getsource(mod.execute_message)
         assert 'result["cli_used"] = result.get("cli_name"' in src
 
     def test_execute_message_returns_cli_used(self):
         import asyncio
+
         from team_cli.executor import execute_message
         from team_cli.models import Project, ProjectMessage
 
@@ -442,6 +442,7 @@ class TestExecuteMessageCliUsed:
 
     def test_execute_message_result_has_content(self):
         import asyncio
+
         from team_cli.executor import execute_message
         from team_cli.models import Project, ProjectMessage
 
@@ -473,7 +474,6 @@ class TestExecuteMessageCliUsed:
 
 class TestAbstractMethodEnforcement:
     def test_cannot_instantiate_base_without_run_raw(self):
-        from abc import ABC
         with pytest.raises(TypeError):
             class Incomplete(BaseCLIExecutor):
                 def check_rate_limit(self): return False

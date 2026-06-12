@@ -31,7 +31,7 @@ class EmbeddingClassifier:
     def __init__(self) -> None:
         """Initialise with no model loaded; loading is deferred to first classify() call."""
         self._model = None
-        self._prototype_embeddings: dict[int, "np.ndarray"] | None = None
+        self._prototype_embeddings: dict[int, np.ndarray] | None = None
 
     def _load_model(self) -> None:
         """Lazily import and load the SentenceTransformer model."""
@@ -49,7 +49,7 @@ class EmbeddingClassifier:
         except (ImportError, Exception):
             return False
 
-    def _get_prototype_embeddings(self) -> dict[int, "np.ndarray"]:
+    def _get_prototype_embeddings(self) -> dict[int, np.ndarray]:
         """Encode prototype texts once and cache the results."""
         if self._prototype_embeddings is None:
             import numpy as np

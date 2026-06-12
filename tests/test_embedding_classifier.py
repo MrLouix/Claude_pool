@@ -1,14 +1,12 @@
 """Tests for EmbeddingClassifier and the updated calculate_priority() integration."""
 
 import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from team_cli.embedding_classifier import EmbeddingClassifier
 from team_cli.models import Project, ProjectMessage
-
 
 # ---------------------------------------------------------------------------
 # Helpers

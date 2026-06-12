@@ -193,7 +193,7 @@ class TestIconButtonLabels:
         body = _body()
         close_btns = re.findall(r'<button[^>]*class="[^"]*modal-close[^"]*"[^>]*>', body)
         assert close_btns, "No .modal-close buttons found"
-        labelled = [b for b in close_btns if "aria-label" in b]
+        [b for b in close_btns if "aria-label" in b]
         # At least the static modal-close buttons (excluding the cancel-style ones)
         icon_close = [b for b in close_btns if "id=" in b and "cancel" not in b]
         for btn in icon_close:

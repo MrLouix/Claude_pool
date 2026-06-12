@@ -3,11 +3,9 @@
 import functools
 import shutil
 import subprocess
-from typing import Any
 
 from team_cli.config import load_cli_configs
 from team_cli.models import CLIConfig
-
 
 KNOWN_CLIS = [
     {"name": "claude", "cli_type": "anthropic", "probe_args": ["--version"]},
@@ -31,10 +29,10 @@ MODEL_MAP = {
 
 def find_binary(name: str) -> str | None:
     """Find the absolute path to a binary.
-    
+
     Args:
         name: The binary name to search for.
-    
+
     Returns:
         Absolute path string if found, None otherwise.
     """
@@ -42,25 +40,25 @@ def find_binary(name: str) -> str | None:
     path = shutil.which(name)
     if path:
         return path
-    
+
     # Try common paths
     for p in COMMON_PATHS:
         candidate = f"{p}/{name}"
         if shutil.os.path.exists(candidate) and shutil.os.path.isfile(candidate):
             if shutil.os.access(candidate, shutil.os.X_OK):
                 return candidate
-    
+
     return None
 
 
 def probe_cli(name: str, path: str, cli_type: str) -> CLIConfig | None:
     """Probe a CLI binary to verify it works.
-    
+
     Args:
         name: The CLI name.
         path: Absolute path to the binary.
         cli_type: The CLI type (e.g., "anthropic", "mistral").
-    
+
     Returns:
         CLIConfig if the CLI is valid, None otherwise.
     """
@@ -82,11 +80,11 @@ def probe_cli(name: str, path: str, cli_type: str) -> CLIConfig | None:
             )
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         pass
-    
+
     return None
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def detect_clis() -> list[CLIConfig]:
     """Detect installed AI CLI binaries on the system.
 
@@ -98,7 +96,7 @@ def detect_clis() -> list[CLIConfig]:
         List of CLIConfig objects for detected CLIs, merged with custom configs.
     """
     detected: dict[str, CLIConfig] = {}
-    
+
     # Probe known CLIs
     for known in KNOWN_CLIS:
         path = find_binary(known["name"])
@@ -106,12 +104,12 @@ def detect_clis() -> list[CLIConfig]:
             config = probe_cli(known["name"], path, known["cli_type"])
             if config:
                 detected[config.name] = config
-    
+
     # Load custom configs
     custom_configs = load_cli_configs()
     for config in custom_configs:
         if config.enabled:
             # Custom config overrides detected entry
             detected[config.name] = config
-    
+
     return list(detected.values())

@@ -1,21 +1,18 @@
 """Tests for per-CLI context formatting and truncation (Risk Mitigation Step 2)."""
 
-import asyncio
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from team_cli.executor import (
-    CLIManager,
     ClaudeExecutor,
+    CLIManager,
     GenericCLIExecutor,
     LlamaExecutor,
     MistralExecutor,
     truncate_context_messages,
 )
 from team_cli.models import CLIConfig, Project, ProjectMessage
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -306,7 +303,7 @@ class TestExecuteMessageContextPrepend:
             "team_cli.executor.build_context",
             return_value=context_messages,
         ):
-            result = await execute_message(
+            await execute_message(
                 message=message,
                 project=project,
                 cli_manager=mock_manager,

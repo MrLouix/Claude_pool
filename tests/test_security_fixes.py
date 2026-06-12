@@ -7,10 +7,7 @@ C8 – POST /api/tasks rejects form-encoded bodies (CSRF protection)
 C9 – POST /api/tasks validates the directory field
 """
 
-import json
 import os
-import stat
-import textwrap
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -19,7 +16,6 @@ from fastapi.testclient import TestClient
 
 from team_cli.executor import GenericCLIExecutor
 from team_cli.models import CLIConfig
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -87,8 +83,6 @@ def test_generic_executor_prompt_is_separate_argument():
 
     captured_cmd: list[list[str]] = []
 
-    import subprocess as _sp
-    original_run = _sp.run
 
     def fake_run(cmd, **kw):
         captured_cmd.append(list(cmd))
@@ -136,7 +130,7 @@ def test_generic_executor_metacharacters_not_injected():
     # The evil prompt must be exactly one argument
     assert evil_prompt in cmd, "Prompt not in cmd"
     # Must NOT have split into multiple arguments due to the shell metacharacter
-    prompt_idx = cmd.index(evil_prompt)
+    cmd.index(evil_prompt)
     # Verify no extra args were injected around it
     assert "rm" not in cmd, f"Injection succeeded: 'rm' appeared in cmd {cmd}"
     assert "-rf" not in cmd, f"Injection succeeded: '-rf' appeared in cmd {cmd}"

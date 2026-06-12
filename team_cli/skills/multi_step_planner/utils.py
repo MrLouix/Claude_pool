@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 MAX_PROMPT_LENGTH = 10_000
@@ -18,7 +18,7 @@ def generate_id() -> str:
 
 def now_utc() -> datetime:
     """Return the current UTC datetime (timezone-aware)."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def validate_prompt_length(prompt: str) -> None:

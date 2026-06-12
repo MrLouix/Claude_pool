@@ -6,14 +6,12 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from team_cli.api import ApiServer
 from team_cli.database import DatabaseManager
 from team_cli.models import PoolState, Project, ProjectMessage
 from team_cli.storage import save_pool, save_project_message
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers (mirrors test_api_phase3 fixtures)

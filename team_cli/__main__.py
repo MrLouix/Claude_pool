@@ -8,9 +8,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .executor import CLIManager, TaskExecutor
 from .cli_detector import detect_clis
 from .config import load_cli_configs
+from .executor import CLIManager, TaskExecutor
 
 
 def check_claude_cli() -> bool:
@@ -126,7 +126,7 @@ async def run_cli(pool_file: Path, max_concurrent: int = 1) -> int:
     all_configs = {c.name: c for c in detected}
     all_configs.update({c.name: c for c in custom})
     cli_manager = CLIManager(list(all_configs.values()))
-    
+
     if not cli_manager._executors:
         print(
             "[WARNING] No CLI executors detected or configured. "
@@ -163,7 +163,7 @@ async def run_tui_mode(pool_file: Path, max_concurrent: int = 1) -> int:
     all_configs = {c.name: c for c in detected}
     all_configs.update({c.name: c for c in custom})
     cli_manager = CLIManager(list(all_configs.values()))
-    
+
     if not cli_manager._executors:
         print(
             "[WARNING] No CLI executors detected or configured. "

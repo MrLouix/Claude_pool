@@ -19,7 +19,6 @@ from team_cli.skills.multi_step_planner.utils import (
     validate_prompt_length,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -82,7 +81,7 @@ class TestNowUtc:
     def test_is_timezone_aware(self):
         import datetime as dt
         assert now_utc().tzinfo is not None
-        assert now_utc().tzinfo == dt.timezone.utc
+        assert now_utc().tzinfo == dt.UTC
 
 
 # ---------------------------------------------------------------------------

@@ -35,7 +35,7 @@ _embedding_classifier = EmbeddingClassifier()
 EMBEDDING_AVAILABLE: bool = _embedding_classifier.is_available()
 
 
-def calculate_priority(message: "ProjectMessage", project: "Project | None" = None) -> int:
+def calculate_priority(message: ProjectMessage, project: Project | None = None) -> int:
     """Return a priority 1–5 for *message* based on content heuristics.
 
     Precedence (highest wins):

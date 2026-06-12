@@ -10,7 +10,6 @@ from team_cli.api import ApiServer
 from team_cli.models import PoolState, Task
 from team_cli.storage import save_pool
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 

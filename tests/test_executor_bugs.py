@@ -5,10 +5,8 @@ Uses real subprocesses via tiny fake-claude shell scripts — no mocks.
 
 import asyncio
 import json
-import os
 import stat
 import textwrap
-from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -16,11 +14,9 @@ import pytest
 from team_cli.executor import (
     MistralExecutor,
     TaskExecutor,
-    _RATE_LIMIT_PATTERNS,
 )
-from team_cli.models import CLIConfig, PoolState, Task
+from team_cli.models import CLIConfig, Task
 from team_cli.parser import parse_claude_output
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -60,7 +56,7 @@ def _make_task(tmp_path: Path, task_id: str = "t1") -> Task:
 
 def _make_executor(tmp_path: Path, fake_claude: Path) -> TaskExecutor:
     """Build a TaskExecutor wired to *fake_claude* with signal handlers off."""
-    cfg = CLIConfig(
+    CLIConfig(
         name="claude",
         path=str(fake_claude),
         models=["sonnet"],

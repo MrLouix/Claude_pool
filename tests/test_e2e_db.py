@@ -6,13 +6,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from team_cli.database import DatabaseManager
 from team_cli.executor import TaskExecutor
 from team_cli.models import PoolState, Task
 from team_cli.storage import cleanup_old_tasks, load_pool, save_pool
-
 
 # ---------------------------------------------------------------------------
 # test_full_pool_lifecycle

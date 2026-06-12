@@ -5,8 +5,6 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from team_cli.config import (
     DEFAULT_CLIS_PATH,
     get_clis_path,
@@ -41,7 +39,7 @@ class TestLoadCliConfigs:
         """load_cli_configs returns empty list when file doesn't exist."""
         clis_path = tmp_path / "clis.json"
         monkeypatch.setenv("TEAM_CLI_CLIS_PATH", str(clis_path))
-        
+
         result = load_cli_configs()
         assert result == []
 
@@ -64,18 +62,18 @@ class TestLoadCliConfigs:
             },
         }))
         monkeypatch.setenv("TEAM_CLI_CLIS_PATH", str(clis_path))
-        
+
         result = load_cli_configs()
-        
+
         assert len(result) == 2
-        
+
         custom_cli = next(c for c in result if c.name == "custom_cli")
         assert custom_cli.path == "/usr/bin/my-ai-cli"
         assert custom_cli.models == ["my-model", "my-model-2"]
         assert custom_cli.cli_type == "custom"
         assert custom_cli.args_template == "--prompt {prompt} --context {context}"
         assert custom_cli.enabled is True
-        
+
         claude = next(c for c in result if c.name == "claude")
         assert claude.path == "/usr/bin/claude"
         assert claude.models == ["sonnet", "haiku"]
@@ -88,7 +86,7 @@ class TestLoadCliConfigs:
         clis_path = tmp_path / "clis.json"
         clis_path.write_text("not valid json {")
         monkeypatch.setenv("TEAM_CLI_CLIS_PATH", str(clis_path))
-        
+
         result = load_cli_configs()
         assert result == []
 
@@ -97,7 +95,7 @@ class TestLoadCliConfigs:
         clis_path = tmp_path / "clis.json"
         clis_path.write_text(json.dumps(["not", "a", "dict"]))
         monkeypatch.setenv("TEAM_CLI_CLIS_PATH", str(clis_path))
-        
+
         result = load_cli_configs()
         assert result == []
 
@@ -113,7 +111,7 @@ class TestLoadCliConfigs:
             "invalid": "not a dict",
         }))
         monkeypatch.setenv("TEAM_CLI_CLIS_PATH", str(clis_path))
-        
+
         result = load_cli_configs()
         assert len(result) == 1
         assert result[0].name == "valid"
@@ -126,7 +124,7 @@ class TestSaveCliConfigs:
         """save_cli_configs creates parent directories if needed."""
         clis_path = tmp_path / "nested" / "dir" / "clis.json"
         monkeypatch.setenv("TEAM_CLI_CLIS_PATH", str(clis_path))
-        
+
         configs = [
             CLIConfig(
                 name="test",
@@ -136,7 +134,7 @@ class TestSaveCliConfigs:
             ),
         ]
         save_cli_configs(configs)
-        
+
         assert clis_path.exists()
         assert clis_path.parent.exists()
 
@@ -144,7 +142,7 @@ class TestSaveCliConfigs:
         """save_cli_configs writes correct JSON format."""
         clis_path = tmp_path / "clis.json"
         monkeypatch.setenv("TEAM_CLI_CLIS_PATH", str(clis_path))
-        
+
         configs = [
             CLIConfig(
                 name="custom_cli",
@@ -155,7 +153,7 @@ class TestSaveCliConfigs:
             ),
         ]
         save_cli_configs(configs)
-        
+
         data = json.loads(clis_path.read_text())
         assert "custom_cli" in data
         assert data["custom_cli"]["path"] == "/usr/bin/my-ai-cli"
@@ -167,7 +165,7 @@ class TestSaveCliConfigs:
         """save_cli_configs omits default/empty values from JSON."""
         clis_path = tmp_path / "clis.json"
         monkeypatch.setenv("TEAM_CLI_CLIS_PATH", str(clis_path))
-        
+
         configs = [
             CLIConfig(
                 name="simple",
@@ -178,7 +176,7 @@ class TestSaveCliConfigs:
             ),
         ]
         save_cli_configs(configs)
-        
+
         data = json.loads(clis_path.read_text())
         assert "simple" in data
         assert "default_model" not in data["simple"]
@@ -189,7 +187,7 @@ class TestSaveCliConfigs:
         """save_cli_configs includes enabled=false when CLI is disabled."""
         clis_path = tmp_path / "clis.json"
         monkeypatch.setenv("TEAM_CLI_CLIS_PATH", str(clis_path))
-        
+
         configs = [
             CLIConfig(
                 name="disabled_cli",
@@ -200,6 +198,6 @@ class TestSaveCliConfigs:
             ),
         ]
         save_cli_configs(configs)
-        
+
         data = json.loads(clis_path.read_text())
         assert data["disabled_cli"]["enabled"] is False

@@ -105,8 +105,8 @@ def test_list_chats_returns_chat_buckets(api):
 def test_list_chats_message_count_and_last_activity(api):
     client, server = api
     bid = _add_chat(server)
-    t1 = _add_task(server, bid, created_at="2026-01-01T10:00:00")
-    t2 = _add_task(server, bid, created_at="2026-01-01T11:00:00")
+    _add_task(server, bid, created_at="2026-01-01T10:00:00")
+    _add_task(server, bid, created_at="2026-01-01T11:00:00")
 
     r = client.get("/api/chats")
     chat = next(c for c in r.json() if c["id"] == bid)

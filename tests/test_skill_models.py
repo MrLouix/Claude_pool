@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 from pydantic import ValidationError
 
-from team_cli.skills.multi_step_planner.models import StepPlan, StepTask, _parse_dt
 from team_cli.models import ProjectMessage
-
+from team_cli.skills.multi_step_planner.models import StepPlan, StepTask, _parse_dt
 
 # ---------------------------------------------------------------------------
 # Helpers

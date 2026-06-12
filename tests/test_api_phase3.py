@@ -3,17 +3,15 @@
 import asyncio
 from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from team_cli.api import ApiServer
 from team_cli.database import DatabaseManager
 from team_cli.executor import NoCLIAvailableError
 from team_cli.models import PoolState, Project
-from team_cli.storage import save_pool, save_project
-
+from team_cli.storage import save_pool
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers

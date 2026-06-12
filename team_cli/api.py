@@ -3,12 +3,12 @@
 import asyncio
 import json
 import logging
-from contextlib import asynccontextmanager
 import os
+import shutil  # noqa: F401 — kept for backward compat: tests patch team_cli.api.shutil.which
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional, Set
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -17,17 +17,24 @@ from .api_helpers import (
     _compute_pool_status,
     _generate_task_id,
     _is_allowed_path,
-    _validate_directory,
     _task_to_message,
+    _validate_directory,
 )
-import shutil  # noqa: F401 — kept for backward compat: tests patch team_cli.api.shutil.which
-
-from .executor import CLIManager, NoCLIAvailableError, TaskExecutor, execute_message  # noqa: F401 — re-exported for test patches
-from .api_models import TaskInput, TaskPatchInput, MessageInput  # noqa: F401 — re-exported for test patches
-from .priority_engine import calculate_priority  # noqa: F401 — re-exported for test patches
-from .models import Task
+from .api_models import (  # noqa: F401 — re-exported for test patches
+    MessageInput,
+    TaskInput,
+    TaskPatchInput,
+)
 from .cli_detector import detect_clis
 from .config import load_cli_configs
+from .executor import (  # noqa: F401 — re-exported for test patches
+    CLIManager,
+    NoCLIAvailableError,
+    TaskExecutor,
+    execute_message,
+)
+from .models import Task
+from .priority_engine import calculate_priority  # noqa: F401 — re-exported for test patches
 
 # Re-export helpers so existing imports like `from team_cli.api import _compute_pool_status` work.
 __all__ = [
@@ -51,7 +58,7 @@ class ApiServer:
         if pool_file.suffix == ".json":
             pool_file = pool_file.with_suffix(".db")
         self.pool_file = pool_file
-        self.executor: Optional[TaskExecutor] = None
+        self.executor: TaskExecutor | None = None
 
         @asynccontextmanager
         async def lifespan(app: FastAPI):
@@ -81,7 +88,7 @@ class ApiServer:
             version="1.0.0",
             lifespan=lifespan,
         )
-        self.ws_clients: Set[WebSocket] = set()
+        self.ws_clients: set[WebSocket] = set()
 
         _cors_raw = os.environ.get(
             "ALLOWED_ORIGINS",
@@ -141,12 +148,12 @@ class ApiServer:
         return None
 
     def _setup_routes(self) -> None:
-        from .routers.tasks import create_router as create_tasks_router
-        from .routers.pools import create_router as create_pools_router
+        from .routers.admin import create_router as create_admin_router
         from .routers.chats import create_router as create_chats_router
+        from .routers.pools import create_router as create_pools_router
         from .routers.projects import create_router as create_projects_router
         from .routers.skills import create_router as create_skills_router
-        from .routers.admin import create_router as create_admin_router
+        from .routers.tasks import create_router as create_tasks_router
 
         @self.app.get("/")
         async def root():

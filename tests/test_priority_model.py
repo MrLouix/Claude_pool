@@ -10,7 +10,6 @@ from team_cli.database import DatabaseManager
 from team_cli.models import ProjectMessage
 from team_cli.storage import load_project_messages, save_project_message
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -217,6 +216,7 @@ class TestApiModelsPriority:
 
     def test_project_message_input_rejects_invalid_priority(self):
         from pydantic import ValidationError
+
         from team_cli.api_models import ProjectMessageInput
         with pytest.raises(ValidationError):
             ProjectMessageInput(content="hi", priority=6)

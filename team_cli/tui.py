@@ -1,6 +1,5 @@
 """Text User Interface for TeamCLI."""
 
-import asyncio
 import json
 import logging
 import uuid
@@ -10,7 +9,7 @@ from pathlib import Path
 import httpx
 from textual import on, work
 from textual.app import App, ComposeResult
-from textual.containers import Container, ScrollableContainer, Vertical, VerticalScroll
+from textual.containers import Container, ScrollableContainer, VerticalScroll
 from textual.screen import ModalScreen, Screen
 from textual.widgets import (
     Button,
@@ -369,7 +368,7 @@ class TaskListWidget(Static):
             else:
                 status_display = f"[dim]{status_text}[/dim]"
 
-            row_key = table.add_row(task_id, prompt, directory, status_display)
+            table.add_row(task_id, prompt, directory, status_display)
             self.task_map[str(idx)] = task
 
 
@@ -735,7 +734,7 @@ class ProjectDetailScreen(Screen):
             self.notify("No message selected", severity="warning")
             return
         confirmed = await self.app.push_screen_wait(
-            ConfirmDialog(f"Delete this message?")
+            ConfirmDialog("Delete this message?")
         )
         if confirmed:
             delete_project_message(self.db_path, msg.id)

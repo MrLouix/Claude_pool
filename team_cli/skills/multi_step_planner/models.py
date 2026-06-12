@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -16,18 +16,18 @@ class StepTask(BaseModel):
     description: str
     prompt: str
     status: Literal["pending", "running", "rate_limit", "success", "failed"]
-    cli_used: Optional[str] = None
-    model_used: Optional[str] = None
-    output: Optional[str] = None
-    error: Optional[str] = None
-    tokens_used: Optional[int] = None
-    duration_ms: Optional[int] = None
+    cli_used: str | None = None
+    model_used: str | None = None
+    output: str | None = None
+    error: str | None = None
+    tokens_used: int | None = None
+    duration_ms: int | None = None
     created_at: datetime
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
     @classmethod
-    def from_db_row(cls, row: dict[str, Any]) -> "StepTask":
+    def from_db_row(cls, row: dict[str, Any]) -> StepTask:
         """Construct a StepTask from a SQLite row dict."""
         return cls(
             id=str(row["id"]),
@@ -55,12 +55,12 @@ class StepPlan(BaseModel):
     description: str
     status: Literal["pending", "running", "completed", "failed"]
     created_at: datetime
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
     steps: list[StepTask] = []
-    final_evaluation: Optional[dict[str, Any]] = None
+    final_evaluation: dict[str, Any] | None = None
 
     @classmethod
-    def from_db_row(cls, row: dict[str, Any], steps: list[StepTask] | None = None) -> "StepPlan":
+    def from_db_row(cls, row: dict[str, Any], steps: list[StepTask] | None = None) -> StepPlan:
         """Construct a StepPlan from a SQLite row dict.
 
         Args:

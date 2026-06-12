@@ -16,7 +16,7 @@ This script:
 import sys
 from pathlib import Path
 
-from .storage import migrate_chats_to_projects, load_projects
+from .storage import load_projects, migrate_chats_to_projects
 
 
 def main() -> None:

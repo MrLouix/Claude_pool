@@ -337,7 +337,7 @@ def delete_project_message(db_path: Path, message_id: str) -> None:
 
 def get_message_history(db_path: Path, message_id: str, limit: int = 3) -> list[ProjectMessage]:
     """Load message history following linked_message_id chain.
-    
+
     Returns up to `limit` messages from the chain, ordered from oldest to newest.
     """
     async def _load() -> list[ProjectMessage]:
@@ -351,10 +351,10 @@ def get_message_history(db_path: Path, message_id: str, limit: int = 3) -> list[
 
 def build_context(message: ProjectMessage, db_path: Path) -> list[dict[str, str]]:
     """Build context for a message from its linked history.
-    
+
     If linked_message_id is set, retrieves up to 3 previous messages from the thread.
     Otherwise returns empty list (new thread).
-    
+
     Returns:
         List of context messages as {"role": "user"|"assistant", "content": str} dicts,
         ordered from oldest to newest.

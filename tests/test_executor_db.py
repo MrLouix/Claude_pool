@@ -3,7 +3,7 @@
 import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -11,7 +11,6 @@ from team_cli.database import DatabaseManager
 from team_cli.executor import TaskExecutor, _meta_hash
 from team_cli.models import PoolState, Task
 from team_cli.storage import save_pool
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -3,12 +3,7 @@
 import subprocess
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from team_cli.cli_detector import (
-    COMMON_PATHS,
-    KNOWN_CLIS,
-    MODEL_MAP,
     detect_clis,
     find_binary,
     probe_cli,
@@ -44,7 +39,7 @@ class TestFindBinary:
                         # Mock exists to return True only for our test path
                         def mock_exists(path):
                             return path == "/usr/local/bin/custom-cli"
-                        
+
                         with patch("team_cli.cli_detector.shutil.os.path.exists", side_effect=mock_exists):
                             result = find_binary("custom-cli")
                             assert result == "/usr/local/bin/custom-cli"
@@ -70,10 +65,10 @@ class TestProbeCli:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "Claude CLI v1.0"
-        
+
         with patch("team_cli.cli_detector.subprocess.run", return_value=mock_result):
             result = probe_cli("claude", "/usr/bin/claude", "anthropic")
-            
+
             assert result is not None
             assert isinstance(result, CLIConfig)
             assert result.name == "claude"
@@ -86,10 +81,10 @@ class TestProbeCli:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "Mistral CLI v1.0"
-        
+
         with patch("team_cli.cli_detector.subprocess.run", return_value=mock_result):
             result = probe_cli("mistral", "/usr/bin/mistral", "mistral")
-            
+
             assert result is not None
             assert isinstance(result, CLIConfig)
             assert result.name == "mistral"
@@ -101,10 +96,10 @@ class TestProbeCli:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "Custom CLI v1.0"
-        
+
         with patch("team_cli.cli_detector.subprocess.run", return_value=mock_result):
             result = probe_cli("custom", "/usr/bin/custom", "custom")
-            
+
             assert result is not None
             assert isinstance(result, CLIConfig)
             assert result.models == []
@@ -114,10 +109,10 @@ class TestProbeCli:
         mock_result = MagicMock()
         mock_result.returncode = 1
         mock_result.stdout = "Some output"
-        
+
         with patch("team_cli.cli_detector.subprocess.run", return_value=mock_result):
             result = probe_cli("claude", "/usr/bin/claude", "anthropic")
-            
+
             assert result is not None
             assert isinstance(result, CLIConfig)
 
@@ -134,12 +129,12 @@ class TestDetectClis:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "v1.0"
-        
+
         with patch("team_cli.cli_detector.shutil.which", return_value="/usr/bin/claude"):
             with patch("team_cli.cli_detector.subprocess.run", return_value=mock_result):
                 with patch("team_cli.cli_detector.load_cli_configs", return_value=[]):
                     results = detect_clis()
-                    
+
                     names = [c.name for c in results]
                     assert "claude" in names
 
@@ -152,12 +147,12 @@ class TestDetectClis:
             cli_type="custom",
             enabled=True,
         )
-        
+
         with patch("team_cli.cli_detector.shutil.which", return_value=None):
             with patch("team_cli.cli_detector.subprocess.run", return_value=None):
                 with patch("team_cli.cli_detector.load_cli_configs", return_value=[custom_config]):
                     results = detect_clis()
-                    
+
                     names = [c.name for c in results]
                     assert "custom-cli" in names
 
@@ -167,7 +162,7 @@ class TestDetectClis:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "v1.0"
-        
+
         custom_claude = CLIConfig(
             name="claude",
             path="/custom/claude",
@@ -175,12 +170,12 @@ class TestDetectClis:
             cli_type="custom",
             enabled=True,
         )
-        
+
         with patch("team_cli.cli_detector.shutil.which", return_value="/usr/bin/claude"):
             with patch("team_cli.cli_detector.subprocess.run", return_value=mock_result):
                 with patch("team_cli.cli_detector.load_cli_configs", return_value=[custom_claude]):
                     results = detect_clis()
-                    
+
                     claude_configs = [c for c in results if c.name == "claude"]
                     assert len(claude_configs) == 1
                     # Should use custom config, not detected
@@ -196,11 +191,11 @@ class TestDetectClis:
             cli_type="custom",
             enabled=False,
         )
-        
+
         with patch("team_cli.cli_detector.shutil.which", return_value=None):
             with patch("team_cli.cli_detector.subprocess.run", return_value=None):
                 with patch("team_cli.cli_detector.load_cli_configs", return_value=[disabled_config]):
                     results = detect_clis()
-                    
+
                     names = [c.name for c in results]
                     assert "disabled-cli" not in names
