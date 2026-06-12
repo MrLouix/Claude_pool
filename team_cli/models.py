@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 TaskStatus = Literal["pending", "running", "success", "failed", "skipped", "rate_limit_retry", "stopped"]
 BucketType = Literal["cli", "chat"]
+TaskKind = Literal["request", "subtask"]
 
 MAIN_BUCKET_LABEL: str = "CLI / Dashboard"
 
@@ -25,7 +26,7 @@ class CLIConfig:
 
 
 # Project and Message types
-MessageRole = Literal["user", "assistant"]
+MessageRole = Literal["user", "assistant", "system"]
 
 
 @dataclass
@@ -38,6 +39,9 @@ class Project:
     created_at: datetime = field(default_factory=datetime.now)
     default_cli: str | None = None  # Default CLI to use (or None for dynamic selection)
     allow_cli_switch: bool = True  # Allow switching CLI on rate limit
+    # v2 fields
+    git_remote: str | None = None
+    archived: bool = False
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Project":
@@ -49,6 +53,8 @@ class Project:
             created_at=datetime.fromisoformat(data["created_at"]) if isinstance(data.get("created_at"), str) else datetime.now(),
             default_cli=str(data["default_cli"]) if data.get("default_cli") else None,
             allow_cli_switch=bool(data.get("allow_cli_switch", True)),
+            git_remote=str(data["git_remote"]) if data.get("git_remote") else None,
+            archived=bool(data.get("archived", False)),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -60,6 +66,8 @@ class Project:
             "created_at": self.created_at.isoformat(),
             "default_cli": self.default_cli,
             "allow_cli_switch": self.allow_cli_switch,
+            "git_remote": self.git_remote,
+            "archived": 1 if self.archived else 0,
         }
 
 
@@ -203,6 +211,12 @@ class Task:
     bucket_id: str = "main"
     priority: int = 2
     model: str = ""
+    # v2 fields
+    project_id: str | None = None
+    chat_id: str | None = None
+    parent_message_id: str | None = None
+    parent_task_id: str | None = None
+    kind: str = "request"  # 'request' | 'subtask'
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Task":
@@ -231,6 +245,11 @@ class Task:
             bucket_id=str(data.get("bucket_id", "main")),
             priority=_coerce_int(data.get("priority"), 2),
             model=str(data.get("model", "")),
+            project_id=str(data["project_id"]) if data.get("project_id") else None,
+            chat_id=str(data["chat_id"]) if data.get("chat_id") else None,
+            parent_message_id=str(data["parent_message_id"]) if data.get("parent_message_id") else None,
+            parent_task_id=str(data["parent_task_id"]) if data.get("parent_task_id") else None,
+            kind=str(data.get("kind", "request")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -250,4 +269,134 @@ class Task:
             "bucket_id": self.bucket_id,
             "priority": self.priority,
             "model": self.model,
+            "project_id": self.project_id,
+            "chat_id": self.chat_id,
+            "parent_message_id": self.parent_message_id,
+            "parent_task_id": self.parent_task_id,
+            "kind": self.kind,
+        }
+
+
+# ---------------------------------------------------------------------------
+# v2 Models: Chat, Message, CliCommand
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Chat:
+    """Represents a v2 chat session within a project."""
+
+    id: str
+    project_id: str
+    label: str
+    position: int = 0
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Chat":
+        """Construct a Chat from a database row dict."""
+        return cls(
+            id=str(data["id"]),
+            project_id=str(data["project_id"]),
+            label=str(data["label"]),
+            position=_coerce_int(data.get("position"), 0),
+            created_at=str(data.get("created_at") or datetime.now().isoformat()),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise to a dict suitable for database insertion."""
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "label": self.label,
+            "position": self.position,
+            "created_at": self.created_at,
+        }
+
+
+@dataclass
+class Message:
+    """Represents a v2 message within a chat (main thread or a reply thread)."""
+
+    id: str
+    chat_id: str
+    role: MessageRole
+    content: str
+    thread_root_id: str | None = None  # None = main chat; set = reply in a thread
+    task_id: str | None = None
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Message":
+        """Construct a Message from a database row dict."""
+        return cls(
+            id=str(data["id"]),
+            chat_id=str(data["chat_id"]),
+            role=str(data.get("role", "user")),  # type: ignore[arg-type]
+            content=str(data["content"]),
+            thread_root_id=str(data["thread_root_id"]) if data.get("thread_root_id") else None,
+            task_id=str(data["task_id"]) if data.get("task_id") else None,
+            created_at=str(data.get("created_at") or datetime.now().isoformat()),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise to a dict suitable for database insertion."""
+        return {
+            "id": self.id,
+            "chat_id": self.chat_id,
+            "role": self.role,
+            "content": self.content,
+            "thread_root_id": self.thread_root_id,
+            "task_id": self.task_id,
+            "created_at": self.created_at,
+        }
+
+
+@dataclass
+class CliCommand:
+    """Represents a v2 CLI command configuration for multi-CLI routing."""
+
+    id: str
+    name: str
+    binary: str
+    args_template: str  # JSON array, e.g. '["-p","{prompt}","--output-format","json"]'
+    resume_template: str | None = None  # JSON array, e.g. '["--resume","{session_id}"]'
+    model_flag: str | None = None  # e.g. '--model'
+    models: str = "[]"  # JSON array of available model names
+    default_model: str | None = None
+    enabled: bool = True
+    priority_requests: int = 100
+    priority_subtasks: int = 100
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CliCommand":
+        """Construct a CliCommand from a database row dict."""
+        return cls(
+            id=str(data["id"]),
+            name=str(data["name"]),
+            binary=str(data["binary"]),
+            args_template=str(data["args_template"]),
+            resume_template=str(data["resume_template"]) if data.get("resume_template") else None,
+            model_flag=str(data["model_flag"]) if data.get("model_flag") else None,
+            models=str(data.get("models", "[]")),
+            default_model=str(data["default_model"]) if data.get("default_model") else None,
+            enabled=bool(data.get("enabled", True)),
+            priority_requests=_coerce_int(data.get("priority_requests"), 100),
+            priority_subtasks=_coerce_int(data.get("priority_subtasks"), 100),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise to a dict suitable for database insertion."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "binary": self.binary,
+            "args_template": self.args_template,
+            "resume_template": self.resume_template,
+            "model_flag": self.model_flag,
+            "models": self.models,
+            "default_model": self.default_model,
+            "enabled": 1 if self.enabled else 0,
+            "priority_requests": self.priority_requests,
+            "priority_subtasks": self.priority_subtasks,
         }

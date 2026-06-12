@@ -7,7 +7,7 @@ from typing import Any
 
 import aiosqlite
 
-from .migrations import apply_migrations
+from .migrations import apply_migrations, run_migration_v2
 
 # Tracks DB paths that have already been fully initialised in this process.
 # init() is a no-op for any path already in this set.
@@ -34,35 +34,80 @@ CREATE TABLE IF NOT EXISTS buckets (
 
 _CREATE_TASKS = """
 CREATE TABLE IF NOT EXISTS tasks (
-    id               TEXT PRIMARY KEY,
-    prompt           TEXT NOT NULL,
-    directory        TEXT NOT NULL,
-    args             TEXT NOT NULL DEFAULT '[]',
-    status           TEXT NOT NULL DEFAULT 'pending',
-    exit_code        INTEGER,
-    duration_ms      INTEGER,
-    json_output      TEXT,
-    retry_count      INTEGER NOT NULL DEFAULT 0,
-    created_at       TEXT NOT NULL,
-    session_id       TEXT,
-    bucket_id        TEXT NOT NULL DEFAULT 'main',
-    priority         INTEGER NOT NULL DEFAULT 2,
-    provider         TEXT,
-    context_messages TEXT DEFAULT '[]',
-    rerouted_from    TEXT,
-    rerouted_to      TEXT,
-    model            TEXT DEFAULT ''
+    id                TEXT PRIMARY KEY,
+    prompt            TEXT NOT NULL,
+    directory         TEXT NOT NULL,
+    args              TEXT NOT NULL DEFAULT '[]',
+    status            TEXT NOT NULL DEFAULT 'pending',
+    exit_code         INTEGER,
+    duration_ms       INTEGER,
+    json_output       TEXT,
+    retry_count       INTEGER NOT NULL DEFAULT 0,
+    created_at        TEXT NOT NULL,
+    session_id        TEXT,
+    bucket_id         TEXT NOT NULL DEFAULT 'main',
+    priority          INTEGER NOT NULL DEFAULT 2,
+    provider          TEXT,
+    context_messages  TEXT DEFAULT '[]',
+    rerouted_from     TEXT,
+    rerouted_to       TEXT,
+    model             TEXT DEFAULT '',
+    project_id        TEXT,
+    chat_id           TEXT,
+    parent_message_id TEXT,
+    parent_task_id    TEXT,
+    kind              TEXT NOT NULL DEFAULT 'request'
 )
 """
 
 _CREATE_PROJECTS = """
 CREATE TABLE IF NOT EXISTS projects (
+    id               TEXT PRIMARY KEY,
+    name             TEXT NOT NULL,
+    directory        TEXT NOT NULL,
+    created_at       TEXT NOT NULL,
+    default_cli      TEXT,
+    allow_cli_switch INTEGER NOT NULL DEFAULT 1,
+    git_remote       TEXT,
+    archived         INTEGER NOT NULL DEFAULT 0
+)
+"""
+
+_CREATE_CHATS = """
+CREATE TABLE IF NOT EXISTS chats (
+    id          TEXT PRIMARY KEY,
+    project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    label       TEXT NOT NULL,
+    position    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL
+)
+"""
+
+_CREATE_MESSAGES = """
+CREATE TABLE IF NOT EXISTS messages (
     id              TEXT PRIMARY KEY,
-    name            TEXT NOT NULL,
-    directory       TEXT NOT NULL,
-    created_at      TEXT NOT NULL,
-    default_cli     TEXT,
-    allow_cli_switch INTEGER NOT NULL DEFAULT 1
+    chat_id         TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    thread_root_id  TEXT REFERENCES messages(id),
+    role            TEXT NOT NULL CHECK(role IN ('user','assistant','system')),
+    content         TEXT NOT NULL,
+    task_id         TEXT,
+    created_at      TEXT NOT NULL
+)
+"""
+
+_CREATE_CLI_COMMANDS = """
+CREATE TABLE IF NOT EXISTS cli_commands (
+    id                TEXT PRIMARY KEY,
+    name              TEXT NOT NULL,
+    binary            TEXT NOT NULL,
+    args_template     TEXT NOT NULL,
+    resume_template   TEXT,
+    model_flag        TEXT,
+    models            TEXT NOT NULL DEFAULT '[]',
+    default_model     TEXT,
+    enabled           INTEGER NOT NULL DEFAULT 1,
+    priority_requests INTEGER NOT NULL DEFAULT 100,
+    priority_subtasks INTEGER NOT NULL DEFAULT 100
 )
 """
 
@@ -123,14 +168,32 @@ VALUES (1, 0, NULL, 'claude')
 """
 
 _CREATE_INDEXES = [
-    "CREATE INDEX IF NOT EXISTS idx_tasks_status     ON tasks(status)",
-    "CREATE INDEX IF NOT EXISTS idx_tasks_bucket_id  ON tasks(bucket_id)",
-    "CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at)",
-    "CREATE INDEX IF NOT EXISTS idx_tasks_priority   ON tasks(priority)",
-    "CREATE INDEX IF NOT EXISTS idx_step_plans_status    ON step_plans(status)",
-    "CREATE INDEX IF NOT EXISTS idx_step_tasks_plan_id   ON step_tasks(plan_id)",
-    "CREATE INDEX IF NOT EXISTS idx_step_tasks_status    ON step_tasks(status)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_status        ON tasks(status)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_bucket_id     ON tasks(bucket_id)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_created_at    ON tasks(created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_priority      ON tasks(priority)",
+    "CREATE INDEX IF NOT EXISTS idx_step_plans_status   ON step_plans(status)",
+    "CREATE INDEX IF NOT EXISTS idx_step_tasks_plan_id  ON step_tasks(plan_id)",
+    "CREATE INDEX IF NOT EXISTS idx_step_tasks_status   ON step_tasks(status)",
+    "CREATE INDEX IF NOT EXISTS idx_messages_chat       ON messages(chat_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_messages_thread     ON messages(thread_root_id)",
+    "CREATE INDEX IF NOT EXISTS idx_chats_project       ON chats(project_id, position)",
 ]
+
+_SEED_CLAUDE_CLI = """
+INSERT OR IGNORE INTO cli_commands
+    (id, name, binary, args_template, resume_template, model_flag,
+     models, default_model, enabled, priority_requests, priority_subtasks)
+VALUES (
+    'claude', 'Claude Code', 'claude',
+    '["-p","{prompt}","--output-format","json","--dangerously-skip-permissions"]',
+    '["--resume","{session_id}"]',
+    '--model',
+    '["haiku","sonnet","opus"]',
+    'sonnet',
+    1, 1, 1
+)
+"""
 
 
 class DatabaseManager:
@@ -166,6 +229,10 @@ class DatabaseManager:
             await db.execute(_CREATE_PROJECT_MESSAGES)
             await db.execute(_CREATE_STEP_PLANS)
             await db.execute(_CREATE_STEP_TASKS)
+            # v2 tables
+            await db.execute(_CREATE_CHATS)
+            await db.execute(_CREATE_MESSAGES)
+            await db.execute(_CREATE_CLI_COMMANDS)
             for idx_sql in _CREATE_INDEXES:
                 await db.execute(idx_sql)
             await db.commit()
@@ -174,10 +241,14 @@ class DatabaseManager:
         # Must run before the INSERT so seeding uses the fully-migrated schema.
         await asyncio.to_thread(apply_migrations, str(self.db_path))
 
-        # Phase 3: seed the single pool_meta row (idempotent — INSERT OR IGNORE).
+        # Phase 3: seed the single pool_meta row and the default 'claude' CLI command.
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(_INSERT_DEFAULT_META)
+            await db.execute(_SEED_CLAUDE_CLI)
             await db.commit()
+
+        # Phase 4: data migration v1 → v2 (idempotent).
+        await asyncio.to_thread(run_migration_v2, str(self.db_path))
 
         _initialized_paths.add(path_key)
 
@@ -234,24 +305,31 @@ class DatabaseManager:
                 INSERT INTO tasks
                     (id, prompt, directory, args, status, exit_code, duration_ms,
                      json_output, retry_count, created_at, session_id, bucket_id,
-                     priority, provider, context_messages, rerouted_from, rerouted_to)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     priority, provider, context_messages, rerouted_from, rerouted_to,
+                     model, project_id, chat_id, parent_message_id, parent_task_id, kind)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
-                    prompt           = excluded.prompt,
-                    directory        = excluded.directory,
-                    args             = excluded.args,
-                    status           = excluded.status,
-                    exit_code        = excluded.exit_code,
-                    duration_ms      = excluded.duration_ms,
-                    json_output      = excluded.json_output,
-                    retry_count      = excluded.retry_count,
-                    session_id       = excluded.session_id,
-                    bucket_id        = excluded.bucket_id,
-                    priority         = excluded.priority,
-                    provider         = excluded.provider,
-                    context_messages = excluded.context_messages,
-                    rerouted_from    = excluded.rerouted_from,
-                    rerouted_to      = excluded.rerouted_to
+                    prompt            = excluded.prompt,
+                    directory         = excluded.directory,
+                    args              = excluded.args,
+                    status            = excluded.status,
+                    exit_code         = excluded.exit_code,
+                    duration_ms       = excluded.duration_ms,
+                    json_output       = excluded.json_output,
+                    retry_count       = excluded.retry_count,
+                    session_id        = excluded.session_id,
+                    bucket_id         = excluded.bucket_id,
+                    priority          = excluded.priority,
+                    provider          = excluded.provider,
+                    context_messages  = excluded.context_messages,
+                    rerouted_from     = excluded.rerouted_from,
+                    rerouted_to       = excluded.rerouted_to,
+                    model             = excluded.model,
+                    project_id        = excluded.project_id,
+                    chat_id           = excluded.chat_id,
+                    parent_message_id = excluded.parent_message_id,
+                    parent_task_id    = excluded.parent_task_id,
+                    kind              = excluded.kind
                 """,
                 (
                     task_dict["id"],
@@ -271,6 +349,12 @@ class DatabaseManager:
                     json.dumps(context_messages) if not isinstance(context_messages, str) else context_messages,
                     task_dict.get("rerouted_from"),
                     task_dict.get("rerouted_to"),
+                    task_dict.get("model", ""),
+                    task_dict.get("project_id"),
+                    task_dict.get("chat_id"),
+                    task_dict.get("parent_message_id"),
+                    task_dict.get("parent_task_id"),
+                    task_dict.get("kind", "request"),
                 ),
             )
             await db.commit()
@@ -285,6 +369,7 @@ class DatabaseManager:
             "status", "exit_code", "duration_ms", "json_output", "retry_count",
             "session_id", "bucket_id", "priority", "provider", "context_messages",
             "rerouted_from", "rerouted_to", "model",
+            "project_id", "chat_id", "parent_message_id", "parent_task_id", "kind",
         })
         updates = {k: v for k, v in fields.items() if k in _ALLOWED}
         if not updates:
@@ -361,8 +446,9 @@ class DatabaseManager:
             await db.execute(
                 """
                 INSERT OR REPLACE INTO projects
-                    (id, name, directory, created_at, default_cli, allow_cli_switch)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    (id, name, directory, created_at, default_cli, allow_cli_switch,
+                     git_remote, archived)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     project_dict["id"],
@@ -371,6 +457,8 @@ class DatabaseManager:
                     project_dict["created_at"],
                     project_dict.get("default_cli"),
                     1 if project_dict.get("allow_cli_switch", True) else 0,
+                    project_dict.get("git_remote"),
+                    1 if project_dict.get("archived", False) else 0,
                 ),
             )
             await db.commit()
@@ -489,6 +577,203 @@ class DatabaseManager:
             ) as cur:
                 rows = await cur.fetchall()
         return [_deserialize_project_message(dict(row)) for row in rows]
+
+    # ------------------------------------------------------------------
+    # Chats (v2)
+    # ------------------------------------------------------------------
+
+    async def upsert_chat(self, chat_dict: dict[str, Any]) -> None:
+        """Insert or replace a chat row."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT OR REPLACE INTO chats (id, project_id, label, position, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    chat_dict["id"],
+                    chat_dict["project_id"],
+                    chat_dict["label"],
+                    chat_dict.get("position", 0),
+                    chat_dict["created_at"],
+                ),
+            )
+            await db.commit()
+
+    async def get_chat(self, chat_id: str) -> dict[str, Any] | None:
+        """Get a single chat by ID."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM chats WHERE id = ?", (chat_id,)) as cur:
+                row = await cur.fetchone()
+        return dict(row) if row is not None else None
+
+    async def get_chats_for_project(self, project_id: str) -> list[dict[str, Any]]:
+        """Return all chats for a project ordered by position ASC."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM chats WHERE project_id = ? ORDER BY position ASC, created_at ASC",
+                (project_id,),
+            ) as cur:
+                rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def delete_chat(self, chat_id: str) -> None:
+        """Delete a chat (cascades to messages)."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("PRAGMA foreign_keys=ON")
+            await db.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
+            await db.commit()
+
+    # ------------------------------------------------------------------
+    # Messages (v2)
+    # ------------------------------------------------------------------
+
+    async def upsert_message(self, message_dict: dict[str, Any]) -> None:
+        """Insert or replace a message row."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT OR REPLACE INTO messages
+                    (id, chat_id, thread_root_id, role, content, task_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    message_dict["id"],
+                    message_dict["chat_id"],
+                    message_dict.get("thread_root_id"),
+                    message_dict["role"],
+                    message_dict["content"],
+                    message_dict.get("task_id"),
+                    message_dict["created_at"],
+                ),
+            )
+            await db.commit()
+
+    async def get_message(self, message_id: str) -> dict[str, Any] | None:
+        """Get a single message by ID."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM messages WHERE id = ?", (message_id,)) as cur:
+                row = await cur.fetchone()
+        return dict(row) if row is not None else None
+
+    async def get_messages_for_chat(
+        self,
+        chat_id: str,
+        thread_root_id: str | None = None,
+        limit: int | None = None,
+        before_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return messages for a chat, optionally filtered by thread.
+
+        thread_root_id=None   → main-thread messages (thread_root_id IS NULL).
+        thread_root_id=<id>   → reply messages for that thread root.
+        before_id             → return messages with created_at < that message's timestamp.
+        limit                 → cap number of results.
+        Results are ordered created_at ASC.
+        """
+        params: list[Any] = [chat_id]
+        where = "chat_id = ?"
+
+        if thread_root_id is None:
+            where += " AND thread_root_id IS NULL"
+        else:
+            where += " AND thread_root_id = ?"
+            params.append(thread_root_id)
+
+        if before_id is not None:
+            async with aiosqlite.connect(self.db_path) as db:
+                async with db.execute(
+                    "SELECT created_at FROM messages WHERE id = ?", (before_id,)
+                ) as cur:
+                    row = await cur.fetchone()
+            if row:
+                where += " AND created_at < ?"
+                params.append(row[0])
+
+        order = "ORDER BY created_at ASC"
+        if limit is not None:
+            order += f" LIMIT {int(limit)}"
+
+        sql = f"SELECT * FROM messages WHERE {where} {order}"  # noqa: S608
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(sql, params) as cur:
+                rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def count_thread_replies(self, thread_root_id: str) -> int:
+        """Return the number of reply messages for a given thread root."""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT COUNT(*) FROM messages WHERE thread_root_id = ?", (thread_root_id,)
+            ) as cur:
+                row = await cur.fetchone()
+        return int(row[0]) if row else 0
+
+    async def delete_message(self, message_id: str) -> None:
+        """Delete a single message."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+            await db.commit()
+
+    # ------------------------------------------------------------------
+    # CliCommands (v2)
+    # ------------------------------------------------------------------
+
+    async def upsert_cli_command(self, cmd_dict: dict[str, Any]) -> None:
+        """Insert or replace a cli_commands row."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT OR REPLACE INTO cli_commands
+                    (id, name, binary, args_template, resume_template, model_flag,
+                     models, default_model, enabled, priority_requests, priority_subtasks)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    cmd_dict["id"],
+                    cmd_dict["name"],
+                    cmd_dict["binary"],
+                    cmd_dict["args_template"],
+                    cmd_dict.get("resume_template"),
+                    cmd_dict.get("model_flag"),
+                    cmd_dict.get("models", "[]"),
+                    cmd_dict.get("default_model"),
+                    1 if cmd_dict.get("enabled", True) else 0,
+                    cmd_dict.get("priority_requests", 100),
+                    cmd_dict.get("priority_subtasks", 100),
+                ),
+            )
+            await db.commit()
+
+    async def get_cli_command(self, cmd_id: str) -> dict[str, Any] | None:
+        """Get a single cli_command by ID."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM cli_commands WHERE id = ?", (cmd_id,)
+            ) as cur:
+                row = await cur.fetchone()
+        return dict(row) if row is not None else None
+
+    async def get_all_cli_commands(self) -> list[dict[str, Any]]:
+        """Return all cli_commands ordered by priority_requests ASC."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM cli_commands ORDER BY priority_requests ASC, id ASC"
+            ) as cur:
+                rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def delete_cli_command(self, cmd_id: str) -> None:
+        """Delete a cli_command by ID."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM cli_commands WHERE id = ?", (cmd_id,))
+            await db.commit()
 
     async def close(self) -> None:
         """No-op: connections are opened/closed per operation."""

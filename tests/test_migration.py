@@ -18,7 +18,7 @@ from team_cli.migrations import (
 # ---------------------------------------------------------------------------
 
 def _init_full_db(path: Path) -> None:
-    """Create a current-schema database (all tables + all columns)."""
+    """Create a current-schema database (all tables + all columns, including v2)."""
     conn = sqlite3.connect(str(path))
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS pool_meta (
@@ -52,7 +52,12 @@ def _init_full_db(path: Path) -> None:
             context_messages TEXT DEFAULT '[]',
             rerouted_from TEXT,
             rerouted_to TEXT,
-            model TEXT DEFAULT ''
+            model TEXT DEFAULT '',
+            project_id TEXT,
+            chat_id TEXT,
+            parent_message_id TEXT,
+            parent_task_id TEXT,
+            kind TEXT NOT NULL DEFAULT 'request'
         );
         CREATE TABLE IF NOT EXISTS projects (
             id TEXT PRIMARY KEY,
@@ -60,7 +65,9 @@ def _init_full_db(path: Path) -> None:
             directory TEXT NOT NULL,
             created_at TEXT NOT NULL,
             default_cli TEXT,
-            allow_cli_switch INTEGER NOT NULL DEFAULT 1
+            allow_cli_switch INTEGER NOT NULL DEFAULT 1,
+            git_remote TEXT,
+            archived INTEGER NOT NULL DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS project_messages (
             id TEXT PRIMARY KEY,
@@ -103,6 +110,35 @@ def _init_full_db(path: Path) -> None:
             completed_at TEXT,
             FOREIGN KEY (plan_id) REFERENCES step_plans(id)
         );
+        CREATE TABLE IF NOT EXISTS chats (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            label TEXT NOT NULL,
+            position INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS messages (
+            id TEXT PRIMARY KEY,
+            chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+            thread_root_id TEXT REFERENCES messages(id),
+            role TEXT NOT NULL CHECK(role IN ('user','assistant','system')),
+            content TEXT NOT NULL,
+            task_id TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS cli_commands (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            binary TEXT NOT NULL,
+            args_template TEXT NOT NULL,
+            resume_template TEXT,
+            model_flag TEXT,
+            models TEXT NOT NULL DEFAULT '[]',
+            default_model TEXT,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            priority_requests INTEGER NOT NULL DEFAULT 100,
+            priority_subtasks INTEGER NOT NULL DEFAULT 100
+        );
         INSERT OR IGNORE INTO pool_meta (id) VALUES (1);
     """)
     conn.commit()
@@ -110,13 +146,39 @@ def _init_full_db(path: Path) -> None:
 
 
 def _init_old_db(path: Path) -> None:
-    """Create a Phase-1-style database missing Phase 2-3 columns."""
+    """Create a Phase-1-style database missing Phase 2-3 / v2 columns.
+
+    Includes the core tables (tasks, buckets, projects, project_messages) but
+    without any of the columns added in later migrations.
+    """
     conn = sqlite3.connect(str(path))
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS pool_meta (
             id INTEGER PRIMARY KEY DEFAULT 1,
             retry_count INTEGER NOT NULL DEFAULT 0,
             suspended_until TEXT
+        );
+        CREATE TABLE IF NOT EXISTS buckets (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            label TEXT NOT NULL,
+            directory TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS tasks (
+            id TEXT PRIMARY KEY,
+            prompt TEXT NOT NULL,
+            directory TEXT NOT NULL,
+            args TEXT NOT NULL DEFAULT '[]',
+            status TEXT NOT NULL DEFAULT 'pending',
+            exit_code INTEGER,
+            duration_ms INTEGER,
+            json_output TEXT,
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            session_id TEXT,
+            bucket_id TEXT NOT NULL DEFAULT 'main',
+            priority INTEGER NOT NULL DEFAULT 2
         );
         CREATE TABLE IF NOT EXISTS projects (
             id TEXT PRIMARY KEY,
