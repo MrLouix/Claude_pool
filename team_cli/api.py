@@ -160,6 +160,7 @@ class ApiServer:
         from .routers.messages import create_router as create_messages_router
         from .routers.pools import create_router as create_pools_router
         from .routers.projects import create_router as create_projects_router
+        from .routers.settings import create_router as create_settings_router
         from .routers.skills import create_router as create_skills_router
         from .routers.tasks import create_router as create_tasks_router
 
@@ -176,6 +177,7 @@ class ApiServer:
         self.app.include_router(create_projects_router(self))
         self.app.include_router(create_messages_router(self))
         self.app.include_router(create_cli_commands_router(self))
+        self.app.include_router(create_settings_router(self))
         self.app.include_router(create_skills_router(self))
         self.app.include_router(create_admin_router(self))
 

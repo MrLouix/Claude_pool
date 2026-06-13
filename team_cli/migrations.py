@@ -167,6 +167,13 @@ MIGRATIONS: list[dict[str, Any]] = [
             "ALTER TABLE tasks ADD COLUMN cli_id TEXT",
         ],
     },
+    {
+        "id": "013",
+        "description": "Create settings key-value table",
+        "sql": [
+            "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+        ],
+    },
 ]
 
 

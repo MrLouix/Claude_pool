@@ -328,4 +328,26 @@ def create_router(server) -> APIRouter:
             created_at=task.created_at,
         )
 
+    @router.delete("/api/tasks")
+    async def purge_tasks(status: str | None = None) -> dict:
+        if not server.executor:
+            raise HTTPException(status_code=503, detail="Executor not initialized")
+        if not status:
+            raise HTTPException(status_code=400, detail="'status' query parameter is required")
+        if status in ("running", "pending"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot purge tasks with status '{status}'",
+            )
+        from ..database import DatabaseManager
+        db = DatabaseManager(server.pool_file)
+        to_remove = [t for t in server.executor.pool.tasks if t.status == status]
+        for task in to_remove:
+            server.executor.pool.tasks.remove(task)
+            await db.delete_task(task.id)
+        if to_remove:
+            server.executor._save_state()
+            await server._broadcast_pool_status()
+        return {"deleted": len(to_remove)}
+
     return router

@@ -63,9 +63,18 @@ export const cliCommands = {
     test:    (id)     => _fetch('/api/settings/cli-commands/test', { method: 'POST', body: JSON.stringify({ id }) }),
 };
 
+// ── Settings: general key-value store ────────────────────────────────────────
+export const settings = {
+    get:    ()       => _fetch('/api/settings'),
+    update: (body)   => _fetch('/api/settings', { method: 'PUT', body: JSON.stringify(body) }),
+};
+
 // ── Pool ──────────────────────────────────────────────────────────────────────
 export const pool = {
     status:  ()       => _fetch('/api/pool'),
     suspend: ()       => _fetch('/api/pool/suspend',  { method: 'POST' }),
     resume:  ()       => _fetch('/api/pool/resume',   { method: 'POST' }),
 };
+
+// Purge tasks by status (DELETE /api/tasks?status=X)
+tasks.purge = (status) => _fetch(`/api/tasks?status=${encodeURIComponent(status)}`, { method: 'DELETE' });

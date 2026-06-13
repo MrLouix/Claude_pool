@@ -141,6 +141,10 @@ def _init_full_db(path: Path) -> None:
             priority_subtasks INTEGER NOT NULL DEFAULT 100,
             parser TEXT NOT NULL DEFAULT 'claude_json'
         );
+        CREATE TABLE IF NOT EXISTS settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
         INSERT OR IGNORE INTO pool_meta (id) VALUES (1);
     """)
     conn.commit()

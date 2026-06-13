@@ -164,10 +164,22 @@ CREATE TABLE IF NOT EXISTS step_tasks (
 )
 """
 
+_CREATE_SETTINGS = """
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+)
+"""
+
 _INSERT_DEFAULT_META = """
 INSERT OR IGNORE INTO pool_meta (id, retry_count, suspended_until, provider)
 VALUES (1, 0, NULL, 'claude')
 """
+
+_SEED_SETTINGS = [
+    "INSERT OR IGNORE INTO settings (key, value) VALUES ('max_subtasks_per_task', '10')",
+    "INSERT OR IGNORE INTO settings (key, value) VALUES ('auto_decompose', 'true')",
+]
 
 _CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_tasks_status        ON tasks(status)",
@@ -236,6 +248,7 @@ class DatabaseManager:
             await db.execute(_CREATE_CHATS)
             await db.execute(_CREATE_MESSAGES)
             await db.execute(_CREATE_CLI_COMMANDS)
+            await db.execute(_CREATE_SETTINGS)
             for idx_sql in _CREATE_INDEXES:
                 await db.execute(idx_sql)
             await db.commit()
@@ -244,10 +257,12 @@ class DatabaseManager:
         # Must run before the INSERT so seeding uses the fully-migrated schema.
         await asyncio.to_thread(apply_migrations, str(self.db_path))
 
-        # Phase 3: seed the single pool_meta row and the default 'claude' CLI command.
+        # Phase 3: seed the single pool_meta row, default CLI command, and settings.
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(_INSERT_DEFAULT_META)
             await db.execute(_SEED_CLAUDE_CLI)
+            for seed_sql in _SEED_SETTINGS:
+                await db.execute(seed_sql)
             await db.commit()
 
         # Phase 4: data migration v1 → v2 (idempotent).
@@ -792,6 +807,35 @@ class DatabaseManager:
                 (project_id,),
             )
             await db.commit()
+
+    # ------------------------------------------------------------------
+    # Settings (key-value store)
+    # ------------------------------------------------------------------
+
+    async def get_setting(self, key: str) -> str | None:
+        """Return the value for *key*, or None if not set."""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT value FROM settings WHERE key = ?", (key,)
+            ) as cur:
+                row = await cur.fetchone()
+        return row[0] if row is not None else None
+
+    async def set_setting(self, key: str, value: str) -> None:
+        """Upsert a single setting key-value pair."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+            await db.commit()
+
+    async def get_all_settings(self) -> dict[str, str]:
+        """Return all settings as a plain dict."""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("SELECT key, value FROM settings ORDER BY key ASC") as cur:
+                rows = await cur.fetchall()
+        return {row[0]: row[1] for row in rows}
 
     async def close(self) -> None:
         """No-op: connections are opened/closed per operation."""
