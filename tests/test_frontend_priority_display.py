@@ -4,7 +4,9 @@ import re
 from pathlib import Path
 
 FRONTEND = Path(__file__).parent.parent / "team_cli" / "frontend" / "index.html"
+_CSS_DIR = Path(__file__).parent.parent / "team_cli" / "frontend" / "css"
 HTML = FRONTEND.read_text(encoding="utf-8")
+CSS = "\n".join((_CSS_DIR / n).read_text(encoding="utf-8") for n in ["tokens.css", "layout.css", "components.css"])
 
 
 # ---------------------------------------------------------------------------
@@ -13,20 +15,19 @@ HTML = FRONTEND.read_text(encoding="utf-8")
 
 class TestPriorityBadgeBaseCss:
     def test_priority_badge_class_defined(self):
-        assert ".priority-badge" in HTML
+        assert ".priority-badge" in CSS
 
     def test_priority_badge_has_border_radius(self):
-        # Find the .priority-badge rule and check border-radius is present
-        assert re.search(r"\.priority-badge\s*\{[^}]*border-radius", HTML, re.DOTALL)
+        assert re.search(r"\.priority-badge\s*\{[^}]*border-radius", CSS, re.DOTALL)
 
     def test_priority_badge_has_font_weight(self):
-        assert re.search(r"\.priority-badge\s*\{[^}]*font-weight", HTML, re.DOTALL)
+        assert re.search(r"\.priority-badge\s*\{[^}]*font-weight", CSS, re.DOTALL)
 
     def test_priority_badge_has_display_inline_block(self):
-        assert re.search(r"\.priority-badge\s*\{[^}]*display\s*:\s*inline-block", HTML, re.DOTALL)
+        assert re.search(r"\.priority-badge\s*\{[^}]*display\s*:\s*inline-block", CSS, re.DOTALL)
 
     def test_priority_badge_has_padding(self):
-        assert re.search(r"\.priority-badge\s*\{[^}]*padding", HTML, re.DOTALL)
+        assert re.search(r"\.priority-badge\s*\{[^}]*padding", CSS, re.DOTALL)
 
 
 # ---------------------------------------------------------------------------
@@ -35,40 +36,40 @@ class TestPriorityBadgeBaseCss:
 
 class TestPriorityLevelCss:
     def test_priority_1_class_defined(self):
-        assert "priority-1" in HTML
+        assert "priority-1" in CSS
 
     def test_priority_2_class_defined(self):
-        assert "priority-2" in HTML
+        assert "priority-2" in CSS
 
     def test_priority_3_class_defined(self):
-        assert "priority-3" in HTML
+        assert "priority-3" in CSS
 
     def test_priority_4_class_defined(self):
-        assert "priority-4" in HTML
+        assert "priority-4" in CSS
 
     def test_priority_5_class_defined(self):
-        assert "priority-5" in HTML
+        assert "priority-5" in CSS
 
     def test_priority_1_color(self):
-        assert "#6c757d" in HTML
+        assert "#6c757d" in CSS
 
     def test_priority_2_color(self):
-        assert "#0d6efd" in HTML
+        assert "#0d6efd" in CSS
 
     def test_priority_3_uses_dark_text_for_readability(self):
         # Yellow background needs dark text
-        assert "#212529" in HTML
+        assert "#212529" in CSS
 
     def test_priority_4_color(self):
-        assert "#fd7e14" in HTML
+        assert "#fd7e14" in CSS
 
     def test_priority_5_color(self):
-        assert "#dc3545" in HTML
+        assert "#dc3545" in CSS
 
     def test_all_five_levels_in_css_block(self):
         # Each priority-N class must appear as a CSS selector
         for n in range(1, 6):
-            assert re.search(rf"\.priority-{n}\b", HTML), f".priority-{n} not found"
+            assert re.search(rf"\.priority-{n}\b", CSS), f".priority-{n} not found"
 
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,8 @@ from pathlib import Path
 
 FRONTEND = Path(__file__).parent.parent / "team_cli" / "frontend" / "index.html"
 HTML = FRONTEND.read_text(encoding="utf-8")
+_CSS_DIR = Path(__file__).parent.parent / "team_cli" / "frontend" / "css"
+CSS = "\n".join((_CSS_DIR / n).read_text(encoding="utf-8") for n in ["tokens.css", "layout.css", "components.css"])
 
 
 # ---------------------------------------------------------------------------
@@ -47,30 +49,30 @@ class TestReplyBannerHtml:
 
 class TestProjectDetailCss:
     def test_threaded_class_defined(self):
-        assert ".project-msg-threaded" in HTML
+        assert ".project-msg-threaded" in CSS
 
     def test_threaded_class_has_indent(self):
-        start = HTML.index(".project-msg-threaded")
-        block = HTML[start:start + 200]
+        start = CSS.index(".project-msg-threaded")
+        block = CSS[start:start + 200]
         assert "margin-left" in block or "padding-left" in block
 
     def test_msg_actions_class_defined(self):
-        assert ".project-msg-actions" in HTML
+        assert ".project-msg-actions" in CSS
 
     def test_btn_msg_action_class_defined(self):
-        assert ".btn-msg-action" in HTML
+        assert ".btn-msg-action" in CSS
 
     def test_btn_msg_delete_class_defined(self):
-        assert ".btn-msg-delete" in HTML
+        assert ".btn-msg-delete" in CSS
 
     def test_reply_banner_class_defined(self):
-        assert ".project-reply-banner" in HTML
+        assert ".project-reply-banner" in CSS
 
     def test_reply_excerpt_class_defined(self):
-        assert ".project-reply-excerpt" in HTML
+        assert ".project-reply-excerpt" in CSS
 
     def test_reply_close_class_defined(self):
-        assert ".project-reply-close" in HTML
+        assert ".project-reply-close" in CSS
 
 
 # ---------------------------------------------------------------------------

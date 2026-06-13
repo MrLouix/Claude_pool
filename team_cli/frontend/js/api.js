@@ -26,18 +26,23 @@ export const projects = {
 
 // ── Chats ─────────────────────────────────────────────────────────────────────
 export const chats = {
-    list:    (projectId) => _fetch(`/api/projects/${projectId}/chats`),
-    get:     (id)        => _fetch(`/api/chats/${id}`),
-    create:  (body)      => _fetch('/api/chats',       { method: 'POST', body: JSON.stringify(body) }),
-    update:  (id, body)  => _fetch(`/api/chats/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-    delete:  (id)        => _fetch(`/api/chats/${id}`, { method: 'DELETE' }),
+    list:            (projectId)       => _fetch(`/api/projects/${projectId}/chats`),
+    get:             (id)              => _fetch(`/api/chats/${id}`),
+    create:          (body)            => _fetch('/api/chats',                         { method: 'POST',   body: JSON.stringify(body) }),
+    createInProject: (projectId, body) => _fetch(`/api/projects/${projectId}/chats`,  { method: 'POST',   body: JSON.stringify(body) }),
+    update:          (id, body)        => _fetch(`/api/chats/${id}`,                  { method: 'PATCH',  body: JSON.stringify(body) }),
+    delete:          (id)              => _fetch(`/api/chats/${id}`,                  { method: 'DELETE' }),
 };
 
 // ── Messages ──────────────────────────────────────────────────────────────────
 export const messages = {
-    list:    (chatId)    => _fetch(`/api/chats/${chatId}/messages`),
-    create:  (body)      => _fetch('/api/messages',       { method: 'POST', body: JSON.stringify(body) }),
-    delete:  (id)        => _fetch(`/api/messages/${id}`, { method: 'DELETE' }),
+    list:     (chatId)              => _fetch(`/api/chats/${chatId}/messages`),
+    listPage: (chatId, params = {}) => {
+        const qs = new URLSearchParams({ paginate: 'true', ...params }).toString();
+        return _fetch(`/api/chats/${chatId}/messages?${qs}`);
+    },
+    create:   (chatId, body)        => _fetch(`/api/chats/${chatId}/messages`,  { method: 'POST',   body: JSON.stringify(body) }),
+    delete:   (id)                  => _fetch(`/api/messages/${id}`,            { method: 'DELETE' }),
 };
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────

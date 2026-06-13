@@ -5,6 +5,8 @@ from pathlib import Path
 
 FRONTEND = Path(__file__).parent.parent / "team_cli" / "frontend" / "index.html"
 HTML = FRONTEND.read_text(encoding="utf-8")
+_CSS_DIR = Path(__file__).parent.parent / "team_cli" / "frontend" / "css"
+CSS = "\n".join((_CSS_DIR / n).read_text(encoding="utf-8") for n in ["tokens.css", "layout.css", "components.css"])
 
 
 # ---------------------------------------------------------------------------
@@ -14,37 +16,37 @@ HTML = FRONTEND.read_text(encoding="utf-8")
 
 class TestStepPlanCss:
     def test_step_plan_card_class_defined(self):
-        assert ".step-plan-card" in HTML
+        assert ".step-plan-card" in CSS
 
     def test_step_plan_header_class_defined(self):
-        assert ".step-plan-header" in HTML
+        assert ".step-plan-header" in CSS
 
     def test_step_task_list_class_defined(self):
-        assert ".step-task-list" in HTML
+        assert ".step-task-list" in CSS
 
     def test_step_task_item_class_defined(self):
-        assert ".step-task-item" in HTML
+        assert ".step-task-item" in CSS
 
     def test_step_status_icon_class_defined(self):
-        assert ".step-status-icon" in HTML
+        assert ".step-status-icon" in CSS
 
     def test_step_plan_actions_class_defined(self):
-        assert ".step-plan-actions" in HTML
+        assert ".step-plan-actions" in CSS
 
     def test_step_details_modal_class_defined(self):
-        assert ".step-details-modal" in HTML
+        assert ".step-details-modal" in CSS
 
     def test_step_details_modal_content_class_defined(self):
-        assert ".step-details-modal-content" in HTML
+        assert ".step-details-modal-content" in CSS
 
 
 class TestStepTaskItemStatusColors:
     """Border-left colors for each status value."""
 
     def _css_block(self):
-        start = HTML.index(".step-task-item[data-status=")
-        end = HTML.index(".step-status-icon", start)
-        return HTML[start:end]
+        start = CSS.index(".step-task-item[data-status=")
+        end = CSS.index(".step-status-icon", start)
+        return CSS[start:end]
 
     def test_pending_color(self):
         block = self._css_block()

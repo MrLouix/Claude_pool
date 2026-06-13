@@ -4,7 +4,9 @@ import re
 from pathlib import Path
 
 FRONTEND = Path(__file__).parent.parent / "team_cli" / "frontend" / "index.html"
+_CSS_DIR = Path(__file__).parent.parent / "team_cli" / "frontend" / "css"
 HTML = FRONTEND.read_text(encoding="utf-8")
+CSS = "\n".join((_CSS_DIR / n).read_text(encoding="utf-8") for n in ["tokens.css", "layout.css", "components.css"])
 
 
 # ---------------------------------------------------------------------------
@@ -55,13 +57,13 @@ class TestComposePanelHtml:
 
 class TestComposePanelCss:
     def test_compose_panel_class_defined(self):
-        assert ".project-compose-panel" in HTML
+        assert ".project-compose-panel" in CSS
 
     def test_compose_controls_class_defined(self):
-        assert ".project-compose-controls" in HTML
+        assert ".project-compose-controls" in CSS
 
     def test_link_select_css_defined(self):
-        assert "#project-link-select" in HTML
+        assert "#project-link-select" in CSS
 
 
 # ---------------------------------------------------------------------------

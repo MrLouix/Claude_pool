@@ -15,6 +15,7 @@ from ..api_models import (
     MessageCreate,
     MessageInput,
     MessageResponse,
+    MessagesPageResponse,
     V2ChatResponse,
     V2MessageResponse,
 )
@@ -201,7 +202,8 @@ def create_router(server) -> APIRouter:
         thread_root_id: str | None = Query(default=None),
         limit: int | None = Query(default=None),
         before: str | None = Query(default=None),
-    ) -> list[V2MessageResponse] | list[MessageResponse]:
+        paginate: bool = Query(default=False),
+    ) -> MessagesPageResponse | list[V2MessageResponse] | list[MessageResponse]:
         if not server.executor:
             raise HTTPException(status_code=503, detail="Executor not initialized")
 
@@ -209,6 +211,31 @@ def create_router(server) -> APIRouter:
         v2_row = await db.get_chat(chat_id)
 
         if v2_row is not None:
+            if paginate:
+                fetch_limit = limit if limit is not None else 50
+                rows = await db.get_messages_for_chat(
+                    chat_id,
+                    thread_root_id=thread_root_id,
+                    limit=fetch_limit + 1,
+                    before_id=before,
+                )
+                has_more = len(rows) > fetch_limit
+                items = rows[:fetch_limit]
+                return MessagesPageResponse(
+                    items=[
+                        V2MessageResponse(
+                            id=r["id"],
+                            chat_id=r["chat_id"],
+                            thread_root_id=r.get("thread_root_id"),
+                            role=r["role"],
+                            content=r["content"],
+                            task_id=r.get("task_id"),
+                            created_at=r["created_at"],
+                        )
+                        for r in items
+                    ],
+                    has_more=has_more,
+                )
             rows = await db.get_messages_for_chat(
                 chat_id,
                 thread_root_id=thread_root_id,

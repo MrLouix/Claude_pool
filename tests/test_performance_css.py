@@ -106,9 +106,9 @@ class TestNoTransitionAll:
 class TestSafeAreasAndOverflow:
     def test_body_overflow_x_hidden(self):
         style = _style()
-        body_block = re.search(r"\bbody\s*\{([^}]+)\}", style, re.DOTALL)
-        assert body_block, "No body { } rule found"
-        assert "overflow-x: hidden" in body_block.group(1), (
+        body_blocks = re.findall(r"\bbody\s*\{([^}]+)\}", style, re.DOTALL)
+        assert body_blocks, "No body { } rule found"
+        assert any("overflow-x: hidden" in b for b in body_blocks), (
             "body rule missing overflow-x: hidden"
         )
 
@@ -189,13 +189,12 @@ class TestTouchOptimisation:
 
     def test_button_targeted_for_touch(self):
         style = _style()
-        touch_selector = re.search(
+        touch_selectors = re.findall(
             r"([^{]+)\{[^}]*touch-action:\s*manipulation[^}]*\}",
             style,
             re.DOTALL,
         )
-        assert touch_selector, "Could not find rule with touch-action: manipulation"
-        selector_text = touch_selector.group(1)
-        assert "button" in selector_text, (
-            "button not listed in touch-action: manipulation rule"
+        assert touch_selectors, "Could not find rule with touch-action: manipulation"
+        assert any("button" in sel for sel in touch_selectors), (
+            "button not listed in any touch-action: manipulation rule"
         )

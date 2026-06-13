@@ -337,6 +337,13 @@ class ThreadResponse(BaseModel):
     messages: list[V2MessageResponse]
 
 
+class MessagesPageResponse(BaseModel):
+    """Paginated messages response — returned when ?paginate=true is set."""
+
+    items: list[V2MessageResponse]
+    has_more: bool
+
+
 # ---------------------------------------------------------------------------
 # CLI commands settings API (Step 3)
 # ---------------------------------------------------------------------------

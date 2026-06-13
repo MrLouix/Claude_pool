@@ -10,9 +10,10 @@ def _html():
 
 
 def _body():
-    """Return everything after </style> (HTML + JS)."""
+    """Return everything after </head> (HTML body + JS)."""
     content = _html()
-    return content[content.find("</style>"):]
+    idx = content.find("</head>")
+    return content[idx:] if idx != -1 else content
 
 
 def _js():

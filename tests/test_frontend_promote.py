@@ -5,6 +5,8 @@ from pathlib import Path
 
 FRONTEND = Path(__file__).parent.parent / "team_cli" / "frontend" / "index.html"
 HTML = FRONTEND.read_text(encoding="utf-8")
+_CSS_DIR = Path(__file__).parent.parent / "team_cli" / "frontend" / "css"
+CSS = "\n".join((_CSS_DIR / n).read_text(encoding="utf-8") for n in ["tokens.css", "layout.css", "components.css"])
 
 
 # ---------------------------------------------------------------------------
@@ -13,16 +15,16 @@ HTML = FRONTEND.read_text(encoding="utf-8")
 
 class TestPromoteButtonCss:
     def test_btn_promote_class_defined(self):
-        assert ".btn-promote" in HTML
+        assert ".btn-promote" in CSS
 
     def test_btn_promote_has_border(self):
-        assert re.search(r"\.btn-promote\s*\{[^}]*border", HTML, re.DOTALL)
+        assert re.search(r"\.btn-promote\s*\{[^}]*border", CSS, re.DOTALL)
 
     def test_btn_promote_has_cursor_pointer(self):
-        assert re.search(r"\.btn-promote\s*\{[^}]*cursor\s*:\s*pointer", HTML, re.DOTALL)
+        assert re.search(r"\.btn-promote\s*\{[^}]*cursor\s*:\s*pointer", CSS, re.DOTALL)
 
     def test_btn_promote_disabled_state_defined(self):
-        assert re.search(r"\.btn-promote:disabled", HTML)
+        assert re.search(r"\.btn-promote:disabled", CSS)
 
 
 # ---------------------------------------------------------------------------

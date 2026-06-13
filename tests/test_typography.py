@@ -1,8 +1,9 @@
-"""Tests for Phase 5 — Typography & Content Improvements in frontend/index.html."""
+"""Tests for Phase 5 — Typography & Content Improvements in frontend/css/*.css."""
 import re
 from pathlib import Path
 
 HTML_PATH = Path(__file__).parent.parent / "team_cli" / "frontend" / "index.html"
+_CSS_DIR = Path(__file__).parent.parent / "team_cli" / "frontend" / "css"
 
 
 def _content():
@@ -10,16 +11,17 @@ def _content():
 
 
 def _style():
-    content = _content()
-    m = re.search(r"<style>(.*?)</style>", content, re.DOTALL)
-    assert m, "No <style> block found"
-    return m.group(1)
+    combined = ""
+    for name in ["tokens.css", "layout.css", "components.css"]:
+        combined += (_CSS_DIR / name).read_text(encoding="utf-8") + "\n"
+    return combined
 
 
 def _html_body():
-    """Return everything after </style>."""
+    """Return everything after </head> (body + JS)."""
     content = _content()
-    return content[content.find("</style>"):]
+    idx = content.find("</head>")
+    return content[idx:] if idx != -1 else content
 
 
 # ── 5.1 Tabular numbers ───────────────────────────────────────────────────────
@@ -86,12 +88,12 @@ class TestTextWrapBalance:
 
     def test_stat_card_h3_targeted(self):
         style = _style()
-        balance_rule = re.search(
+        balance_rules = re.findall(
             r"([^{]+)\{[^}]*text-wrap:\s*balance[^}]*\}",
             style, re.DOTALL,
         )
-        assert balance_rule
-        assert ".stat-card h3" in balance_rule.group(1), (
+        assert balance_rules, "Could not find any text-wrap: balance rule"
+        assert any(".stat-card h3" in sel for sel in balance_rules), (
             ".stat-card h3 not targeted by text-wrap: balance rule"
         )
 

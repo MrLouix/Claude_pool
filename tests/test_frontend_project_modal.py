@@ -5,6 +5,8 @@ from pathlib import Path
 
 FRONTEND = Path(__file__).parent.parent / "team_cli" / "frontend" / "index.html"
 HTML = FRONTEND.read_text(encoding="utf-8")
+_CSS_DIR = Path(__file__).parent.parent / "team_cli" / "frontend" / "css"
+CSS = "\n".join((_CSS_DIR / n).read_text(encoding="utf-8") for n in ["tokens.css", "layout.css", "components.css"])
 
 
 # ---------------------------------------------------------------------------
@@ -184,16 +186,16 @@ class TestProjectsSection:
 
 class TestCliBadges:
     def test_cli_badge_css_class_defined(self):
-        assert '.cli-badge' in HTML
+        assert '.cli-badge' in CSS
 
     def test_cli_badge_auto_class_defined(self):
-        assert 'cli-badge-auto' in HTML
+        assert 'cli-badge-auto' in CSS
 
     def test_cli_badge_named_class_defined(self):
-        assert 'cli-badge-named' in HTML
+        assert 'cli-badge-named' in CSS
 
     def test_cli_badge_manual_class_defined(self):
-        assert 'cli-badge-manual' in HTML
+        assert 'cli-badge-manual' in CSS
 
     def test_badge_rendered_in_project_list_js(self):
         # renderProjectList should use cli-badge classes
