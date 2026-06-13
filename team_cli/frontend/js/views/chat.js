@@ -289,6 +289,8 @@ function _msgHTML(msg) {
     const time   = msg.created_at
         ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : '';
+    const replyCount = msg.reply_count || 0;
+    const badgeText = replyCount > 0 ? `💬 ${replyCount}` : '💬';
 
     return `
         <div class="chat-msg-row chat-msg-${_esc(msg.role)}" data-msg-id="${_esc(msg.id)}">
@@ -299,8 +301,8 @@ function _msgHTML(msg) {
                     <span class="chat-msg-time">${time}</span>
                 </div>
                 <div class="chat-msg-content">${_renderMarkdown(msg.content || '')}</div>
-                <button class="chat-thread-btn" data-msg-id="${_esc(msg.id)}"
-                    aria-label="Open thread for this message">💬</button>
+                <button class="chat-thread-btn" data-msg-id="${_esc(msg.id)}" data-reply-count="${replyCount}"
+                    aria-label="Open thread for this message">${badgeText}</button>
             </div>
         </div>
     `;
@@ -461,12 +463,32 @@ function _onWsMsgCreated(ev) {
     if (data.chat_id !== _chatId) return;
     if (data.role !== 'user') _setRunning(false);
 
+    // Update badge counter for thread parent if this is a threaded reply
+    if (data.thread_root_id) {
+        _updateThreadBadge(data.thread_root_id);
+    }
+
     // Re-fetch latest messages from server
     api.messages.list(_chatId).then(items => {
         _messages = items.length > 100 ? items.slice(items.length - 100) : items;
         _renderMessages();
         _scrollBottom();
     }).catch(console.error);
+}
+
+function _updateThreadBadge(threadRootId) {
+    const list = document.getElementById('chat-msg-list');
+    if (!list) return;
+    
+    const parentRow = list.querySelector(`[data-msg-id="${_esc(threadRootId)}"]`);
+    if (parentRow) {
+        const btn = parentRow.querySelector('.chat-thread-btn');
+        if (btn) {
+            const current = parseInt(btn.dataset.replyCount || '0', 10);
+            btn.dataset.replyCount = current + 1;
+            btn.textContent = '💬 ' + (current + 1);
+        }
+    }
 }
 
 // ── Virtual keyboard adjustment ───────────────────────────────────────────────

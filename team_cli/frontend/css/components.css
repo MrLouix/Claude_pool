@@ -1078,6 +1078,68 @@ button,
     -webkit-tap-highlight-color: transparent;
 }
 
+/* Thread panel — desktop */
+body.thread-open .center-zone { margin-right: 360px; transition: margin-right var(--transition-base); }
+#thread-panel {
+    position: fixed; top: 0; right: -360px; width: 360px; height: 100vh;
+    background: var(--color-surface); box-shadow: var(--shadow-lg);
+    overflow-y: auto; z-index: 200;
+    transition: right var(--transition-base);
+    display: flex; flex-direction: column;
+}
+#thread-panel.thread-panel--visible { right: 0; }
+
+/* Thread panel — mobile (full-screen overlay) */
+@media (max-width: 767px) {
+    body.thread-open .center-zone { margin-right: 0; }
+    #thread-panel { width: 100%; right: -100%; }
+}
+
+.thread-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--space-3); border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+.thread-header-label { font-weight: 600; color: var(--color-text-primary); }
+.thread-close-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 1.5rem; color: var(--color-text-muted);
+    padding: 0 4px; line-height: 1;
+}
+.thread-close-btn:hover { color: var(--color-text-primary); }
+
+.thread-scroll-content { flex: 1; overflow-y: auto; }
+
+.thread-root-card { background: var(--color-surface-2); border-radius: var(--radius-md); padding: var(--space-3); margin: var(--space-3); }
+.thread-root-meta { display: flex; gap: var(--space-2); font-size: 0.75rem; color: var(--color-text-muted); }
+.thread-root-role { font-weight: 600; color: var(--color-text-secondary); }
+.thread-root-content { font-size: 0.875rem; line-height: 1.6; color: var(--color-text-primary); word-break: break-word; }
+.thread-root-content pre { background: var(--color-code-bg); padding: var(--space-2); border-radius: var(--radius-sm); overflow-x: auto; margin: var(--space-2) 0; }
+.thread-root-content code { font-family: var(--font-mono); font-size: 0.8125rem; }
+
+.thread-section { margin: 0 var(--space-3) var(--space-3); }
+.thread-section-header { font-size: 0.75rem; font-weight: 600; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--space-2); padding: 0 var(--space-2); }
+
+.thread-task-card { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-left: 3px solid var(--color-border); margin: var(--space-1) var(--space-3); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.thread-task-card.thread-task--subtask { margin-left: calc(var(--space-3) + 16px); }
+.thread-task-status { font-size: 1rem; flex-shrink: 0; }
+.thread-task-info { display: flex; flex-direction: column; gap: var(--space-1); flex: 1; }
+.thread-task-prompt { font-size: 0.8125rem; color: var(--color-text-primary); }
+.thread-task-badge { font-size: 0.6875rem; color: var(--color-text-muted); background: var(--color-inline-code-bg); padding: 1px 6px; border-radius: var(--radius-full); align-self: flex-start; }
+
+.thread-msg-row { display: flex; gap: var(--space-2); align-items: flex-start; padding: var(--space-2) var(--space-3); }
+.thread-msg-avatar { font-size: 1rem; flex-shrink: 0; width: 24px; text-align: center; }
+.thread-msg-body { display: flex; flex-direction: column; gap: var(--space-1); flex: 1; }
+.thread-msg-meta { display: flex; gap: var(--space-2); font-size: 0.6875rem; color: var(--color-text-muted); }
+.thread-msg-role { font-weight: 600; }
+.thread-msg-content { background: var(--color-surface-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-2); font-size: 0.8125rem; line-height: 1.55; color: var(--color-text-primary); word-break: break-word; }
+.thread-msg-content pre { background: var(--color-code-bg); padding: var(--space-2); border-radius: var(--radius-sm); overflow-x: auto; margin: var(--space-1) 0; }
+.thread-msg-content code { font-family: var(--font-mono); font-size: 0.75rem; }
+
+.thread-composer { padding: var(--space-3); border-top: 1px solid var(--color-border); display: flex; gap: var(--space-2); background: var(--color-surface); }
+.thread-composer-textarea { flex: 1; font: inherit; font-size: 0.875rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-2); resize: none; min-height: 2.75rem; max-height: 120px; overflow-y: auto; }
+.thread-send-btn { flex-shrink: 0; width: 2.5rem; height: 2.5rem; border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; padding: 0; }
+
 /* ── Sidebar component styles ── */
 .sidebar-header {
     padding: 16px;
