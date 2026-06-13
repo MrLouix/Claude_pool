@@ -437,4 +437,45 @@ Voir `docs/N8N_INTEGRATION.md` pour les instructions de configuration.
 
 **Dépôt** : [github.com/MrLouix/TeamCLI](https://github.com/MrLouix/TeamCLI)  
 **Licence** : MIT  
-**Version** : 1.2.7
+**Version** : 2.0.0
+
+---
+
+## What's New in v2.0.0
+
+### Projects › Chats › Threads hierarchy
+
+Tasks are now organized in a three-level hierarchy:
+
+- **Projects** — a codebase directory with optional Git remote
+- **Chats** — named conversation tabs inside a project
+- **Threads** — a root message plus its subtasks and follow-up replies
+
+The web dashboard reflects this hierarchy: navigate Projects → select a Chat → open the Thread panel on the right side.
+
+### Multi-CLI support with automatic fallback
+
+Configure multiple AI CLIs (Claude, Mistral, Gemma, OpenCode, …) via the Settings page. When a CLI hits a rate limit the pool automatically falls back to the next available CLI, resuming without manual intervention.
+
+### Setup
+
+```bash
+pip install team-cli          # or: pip install -e . from source
+python -m team_cli            # starts on http://localhost:8000
+```
+
+Open `http://localhost:8000` in your browser to access the web dashboard.
+
+### Key API endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET/POST` | `/api/projects` | List or create projects |
+| `GET/POST` | `/api/projects/{id}/chats` | List or create chats inside a project |
+| `GET` | `/api/tasks` | List tasks (filters: `?status=`, `?project_id=`, `?kind=`) |
+| `PATCH` | `/api/tasks/{id}` | Update a task (skip, change priority/model) |
+| `DELETE` | `/api/tasks` | Purge completed/failed/skipped tasks (`?status=completed`) |
+| `GET/PUT` | `/api/settings/cli-commands` | Read or update CLI command configuration |
+| `GET/PUT` | `/api/settings` | Read or update general settings (port, workers, …) |
+
+Full OpenAPI docs at `http://localhost:8000/docs`.

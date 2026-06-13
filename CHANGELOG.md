@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-06-13
+
+### Added
+
+- **Multi-project / chat / thread model**: tasks are now scoped to Projects → Chats → Threads; `project_id`, `chat_id`, `thread_root_id`, `parent_task_id`, and `kind` (request | subtask) fields added to tasks
+- **Multi-CLI routing**: configure multiple AI CLIs (Claude, Mistral, Gemma, OpenCode, …) via Settings page; pool automatically falls back to next available CLI on rate limit
+- **Settings page**: web UI to manage CLI command definitions (binary, args template, model list, priority), general settings (port, max workers, max subtasks, auto-decompose), and purge controls
+- **Queue view**: filterable task list (`?status=`, `?project_id=`, `?kind=`), subtask hierarchy with N/M done badge, skip button, bulk "Clear completed" action, real-time WS updates
+- **Mobile-first UI**: 44 px touch targets throughout, bottom navigation bar, thread panel slide-in with swipe-to-close, composer stays above virtual keyboard via `visualViewport`
+- **PWA support**: `manifest.json` with `display: standalone`, `favicon.svg` icon, `viewport-fit=cover` viewport meta
+- **TUI task row enhancements**: kind tag (`[req]`/`[sub]`), parent indicator (`↳`), and CLI name shown in each row
+- **API enhancements**: `GET /api/tasks` filter params (`status`, `project_id`, `kind`); `DELETE /api/tasks?status=completed` purge; `PATCH /api/tasks/{id}` skip (409 if non-pending); `GET/PUT /api/settings`; `GET/PUT /api/settings/cli-commands`
+- **SQLite migrations**: migrations 001–013 covering projects, chats, messages, tasks, settings tables
+
+### Changed
+
+- Upgraded from flat `pool.json` storage to SQLite (`pool.db`) with async aiosqlite layer
+- Web dashboard rebuilt as ES-module SPA with hash router (`#/`, `#/queue`, `#/settings`, `#/p/:id/c/:id`)
+- Thread panel moved from full-page route to persistent right-hand slide-in panel
+- Task `status=success` aliased as `completed` in all external API responses and filters
+
+### Deprecated
+
+- v1 flat endpoints (`GET /api/chats`, `POST /api/chats`, unfiltered `GET /api/tasks`); see `docs/N8N_INTEGRATION.md` for migration guide — these will be removed in v3.0.0
+
 ## [1.2.4] - 2026-05-29
 
 ### Changed

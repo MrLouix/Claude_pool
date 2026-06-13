@@ -344,8 +344,13 @@ class TaskListWidget(Static):
 
         for idx, task in enumerate(self.executor.pool.tasks):
             task_id = task.id
-            prompt = task.prompt[:20] + ("..." if len(task.prompt) > 20 else "")
+            kind = getattr(task, 'kind', 'request') or 'request'
+            kind_tag = "\\[sub]" if kind == 'subtask' else "\\[req]"
+            parent_prefix = "  ↳ " if getattr(task, 'parent_task_id', None) else ""
+            short_prompt = task.prompt[:20] + ("..." if len(task.prompt) > 20 else "")
+            prompt = f"{parent_prefix}{kind_tag} {short_prompt}"
             directory = str(task.directory)
+            cli_name = getattr(task, 'cli_id', None) or 'claude'
 
             status_emoji = {
                 "pending": "⏸",
@@ -360,13 +365,13 @@ class TaskListWidget(Static):
             status_text = f"{status_emoji} {task.status}"
 
             if task.status == "success":
-                status_display = f"[green]{status_text}[/green]"
+                status_display = f"[green]{status_text}[/green] {cli_name}"
             elif task.status in ("failed", "stopped"):
-                status_display = f"[bold red]{status_text}[/bold red]"
+                status_display = f"[bold red]{status_text}[/bold red] {cli_name}"
             elif task.status in ("running", "rate_limit_retry"):
-                status_display = f"[yellow]{status_text}[/yellow]"
+                status_display = f"[yellow]{status_text}[/yellow] {cli_name}"
             else:
-                status_display = f"[dim]{status_text}[/dim]"
+                status_display = f"[dim]{status_text}[/dim] {cli_name}"
 
             table.add_row(task_id, prompt, directory, status_display)
             self.task_map[str(idx)] = task
