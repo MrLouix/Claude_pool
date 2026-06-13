@@ -327,6 +327,8 @@ class TaskSummary(BaseModel):
     parent_message_id: str | None = None
     parent_task_id: str | None = None
     kind: str = "request"
+    subtask_count: int = 0
+    subtask_done_count: int = 0
 
 
 class ThreadResponse(BaseModel):

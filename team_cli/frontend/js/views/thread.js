@@ -1,7 +1,6 @@
 /** Thread panel view — displays subtasks and replies for a message thread. */
 
 import * as api from '../api.js';
-import { subscribe } from '../store.js';
 
 // ── Module state ──────────────────────────────────────────────────────────────
 
@@ -9,7 +8,6 @@ let _rootMessageId = null;
 let _chatId = null;
 let _panel = null;
 let _touchStartX = null;
-let _unsubs = [];
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -279,36 +277,27 @@ function _bindMobileSwipe() {
 
 // ── WebSocket events ─────────────────────────────────────────────────────────
 
+function _onTaskUpdated(ev) {
+    const task = ev.detail?.task;
+    if (!task) return;
+    _updateTaskStatus(task.id, task.status);
+}
+
+function _onMsgCreated(ev) {
+    const data = ev.detail?.data || ev.detail || {};
+    if (data.thread_root_id === _rootMessageId) {
+        _appendMessage(data);
+    }
+}
+
 function _bindWsEvents() {
-    _unsubs = [
-        subscribe('ws_event', (msg) => {
-            if (!msg || !msg.event) return;
-            
-            // Task status updates
-            if (msg.event === 'pool:task_started' || 
-                msg.event === 'pool:task_completed' || 
-                msg.event === 'pool:task_failed') {
-                const taskId = msg.data?.task_id || msg.data?.id;
-                if (taskId) {
-                    _updateTaskStatus(taskId, msg.data?.status || msg.event.split(':')[1]);
-                }
-            }
-        }),
-        window.addEventListener('pool:message_created', (ev) => {
-            const data = ev.detail?.data || {};
-            if (data.thread_root_id === _rootMessageId) {
-                _appendMessage(data);
-            }
-        })
-    ];
+    window.addEventListener('pool:task_updated', _onTaskUpdated);
+    window.addEventListener('pool:message_created', _onMsgCreated);
 }
 
 function _unbindWsEvents() {
-    _unsubs.forEach(fn => {
-        if (typeof fn === 'function') fn();
-    });
-    _unsubs = [];
-    window.removeEventListener('pool:message_created', () => {});
+    window.removeEventListener('pool:task_updated', _onTaskUpdated);
+    window.removeEventListener('pool:message_created', _onMsgCreated);
 }
 
 function _updateTaskStatus(taskId, status) {

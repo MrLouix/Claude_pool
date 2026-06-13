@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
+from uuid import uuid4
 
 from .cli_executors import (
     _RATE_LIMIT_PATTERNS,
@@ -22,6 +23,12 @@ from .routing import NoCLICommandError, build_command, resolve_command, resolve_
 from .storage import cleanup_old_tasks, load_pool
 
 logger = logging.getLogger(__name__)
+
+MAX_SUBTASKS_PER_TASK = 10
+
+
+def _make_subtask_id() -> str:
+    return f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
 
 
 def _meta_hash(state: PoolState) -> str:
@@ -148,6 +155,7 @@ class TaskExecutor:
         self._save_lock = asyncio.Lock()
 
         self._running_processes: dict[str, asyncio.subprocess.Process] = {}
+        self._chat_locks: dict[str, asyncio.Lock] = {}
 
         if cli_manager is not None:
             self.cli_manager = cli_manager
@@ -355,107 +363,149 @@ class TaskExecutor:
             self._save_state()
             return
 
-        start_time = time.time()
-        logger.info(f"Executing task {task.id}: {task.prompt[:50]}...")
-        logger.info(f"Working directory: {task.directory}")
-
-        stdout = b""
-        stderr = b""
-        exit_code = -1
-
-        current_cli: CliCommand | None = None
+        # Chat-level concurrency control
+        chat_lock = None
+        if task.chat_id is not None:
+            chat_lock = self._chat_locks.setdefault(task.chat_id, asyncio.Lock())
+            await chat_lock.acquire()
 
         try:
-            session_id = self._find_session_for_directory(task.directory, task.bucket_id)
-            if cli_commands:
-                current_cli = resolve_command(task.kind, task.cli_id, cli_commands)
-                task.session_id = session_id
-                cmd = build_command(task, current_cli)
-            else:
-                cmd = self._build_command(task, session_id)
-        except NoCLICommandError as e:
-            logger.warning("No CLI command available for task %s: %s", task.id, e)
-            task.status = "failed"
-            task.exit_code = -1
-            task.duration_ms = int((time.time() - start_time) * 1000)
-            task.json_output = {"result": str(e), "parse_error": True}
-            self._notify_update(task)
-            self._save_state()
-            self.current_task = None
-            return
+            start_time = time.time()
+            logger.info(f"Executing task {task.id}: {task.prompt[:50]}...")
+            logger.info(f"Working directory: {task.directory}")
 
-        try:
-            import shlex as _shlex
-            logger.info("[claude/pool] CLI command: %s", _shlex.join(cmd))
+            stdout = b""
+            stderr = b""
+            exit_code = -1
 
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(task.directory),
-            )
-            self._running_processes[task.id] = process
+            current_cli: CliCommand | None = None
 
-            stdout, stderr = await process.communicate()
-            exit_code = process.returncode
-            logger.info("[claude/pool] exit_code=%d stdout=%r stderr=%r",
-                        exit_code, stdout[:2000], stderr[:500])
+            try:
+                session_id = self._find_session_for_directory(task.directory, task.bucket_id)
+                if cli_commands:
+                    current_cli = resolve_command(task.kind, task.cli_id, cli_commands)
+                    task.session_id = session_id
+                    cmd = build_command(task, current_cli)
+                else:
+                    cmd = self._build_command(task, session_id)
+            except NoCLICommandError as e:
+                logger.warning("No CLI command available for task %s: %s", task.id, e)
+                task.status = "failed"
+                task.exit_code = -1
+                task.duration_ms = int((time.time() - start_time) * 1000)
+                task.json_output = {"result": str(e), "parse_error": True}
+                self._notify_update(task)
+                self._save_state()
+                self.current_task = None
+                return
 
-        except Exception as e:
-            logger.error(f"Error spawning subprocess for task {task.id}: {e}")
-            task.status = "failed"
-            task.exit_code = -1
-            task.duration_ms = int((time.time() - start_time) * 1000)
-            task.json_output = {"result": f"Execution error: {str(e)}", "parse_error": True}
-            self._running_processes.pop(task.id, None)
-            self._notify_update(task)
-            self._save_state()
-            self.current_task = None
-            return
+            try:
+                import shlex as _shlex
+                logger.info("[claude/pool] CLI command: %s", _shlex.join(cmd))
 
-        task.duration_ms = int((time.time() - start_time) * 1000)
-        task.exit_code = exit_code
-        self._running_processes.pop(task.id, None)
-
-        self._write_debug_log(task.id, exit_code, task.duration_ms, stdout, stderr)
-
-        if task.status == "stopped":
-            self._notify_update(task)
-            await self._save_state_async()
-            self.current_task = None
-            return
-
-        parser_type = current_cli.parser if current_cli else "claude_json"
-        json_output = parse_output(stdout, parser_type) if stdout else None
-        task.json_output = json_output
-
-        status, is_rate_limit = self._classify_exit(exit_code, stdout, stderr, json_output)
-        task.status = status
-
-        if status == "success":
-            sid = (json_output or {}).get("session_id")
-            if sid:
-                task.session_id = sid
-                logger.info(f"Persisted session_id for task {task.id}: {sid}")
-            usage = (json_output or {}).get("session_usage_percent", 0)
-            if usage >= 80:
-                logger.warning(
-                    f"Task {task.id} succeeded but session usage is {usage}% — "
-                    "next rate limit will use shorter initial backoff"
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=str(task.directory),
                 )
-            logger.info(f"Task {task.id} completed successfully")
-        elif is_rate_limit:
-            logger.warning(f"Task {task.id} hit rate limit (exit_code={exit_code})")
-            self._handle_rate_limit(task, current_cli, cli_commands)
-        else:
-            logger.error(
-                f"Task {task.id} failed (exit_code={exit_code}): "
-                f"{stderr.decode('utf-8', errors='replace')[:200]}"
-            )
+                self._running_processes[task.id] = process
 
-        self._notify_update(task)
-        self._save_state()
-        self.current_task = None
+                stdout, stderr = await process.communicate()
+                exit_code = process.returncode
+                logger.info("[claude/pool] exit_code=%d stdout=%r stderr=%r",
+                            exit_code, stdout[:2000], stderr[:500])
+
+            except Exception as e:
+                logger.error(f"Error spawning subprocess for task {task.id}: {e}")
+                task.status = "failed"
+                task.exit_code = -1
+                task.duration_ms = int((time.time() - start_time) * 1000)
+                task.json_output = {"result": f"Execution error: {str(e)}", "parse_error": True}
+                self._running_processes.pop(task.id, None)
+                self._notify_update(task)
+                self._save_state()
+                self.current_task = None
+                return
+
+            task.duration_ms = int((time.time() - start_time) * 1000)
+            task.exit_code = exit_code
+            self._running_processes.pop(task.id, None)
+
+            self._write_debug_log(task.id, exit_code, task.duration_ms, stdout, stderr)
+
+            if task.status == "stopped":
+                self._notify_update(task)
+                await self._save_state_async()
+                self.current_task = None
+                return
+
+            parser_type = current_cli.parser if current_cli else "claude_json"
+            json_output = parse_output(stdout, parser_type) if stdout else None
+            task.json_output = json_output
+
+            status, is_rate_limit = self._classify_exit(exit_code, stdout, stderr, json_output)
+            task.status = status
+
+            if status == "success":
+                sid = (json_output or {}).get("session_id")
+                if sid:
+                    task.session_id = sid
+                    logger.info(f"Persisted session_id for task {task.id}: {sid}")
+                usage = (json_output or {}).get("session_usage_percent", 0)
+                if usage >= 80:
+                    logger.warning(
+                        f"Task {task.id} succeeded but session usage is {usage}% — "
+                        "next rate limit will use shorter initial backoff"
+                    )
+                logger.info(f"Task {task.id} completed successfully")
+
+                # Spawn subtasks (depth limit: subtasks may not spawn sub-subtasks)
+                raw_subtasks = (json_output or {}).get("subtasks", [])
+                if raw_subtasks and task.parent_task_id is None:
+                    specs = raw_subtasks[:MAX_SUBTASKS_PER_TASK]
+                    created: list[Task] = []
+                    for spec in specs:
+                        if not isinstance(spec, dict) or not spec.get("prompt"):
+                            continue
+                        try:
+                            resolved_cli = resolve_command("subtask", spec.get("cli_id"), cli_commands)
+                            resolved_cli_id: str | None = resolved_cli.id
+                        except NoCLICommandError:
+                            resolved_cli_id = None
+                        subtask = Task(
+                            id=_make_subtask_id(),
+                            prompt=spec["prompt"],
+                            directory=task.directory,
+                            kind="subtask",
+                            parent_task_id=task.id,
+                            parent_message_id=task.parent_message_id,
+                            project_id=task.project_id,
+                            chat_id=task.chat_id,
+                            model=spec.get("model") or "",
+                            cli_id=resolved_cli_id,
+                            bucket_id=task.bucket_id,
+                            priority=task.priority,
+                        )
+                        self.pool.tasks.append(subtask)
+                        created.append(subtask)
+                    if created:
+                        logger.info("Spawned %d subtasks for task %s", len(created), task.id)
+            elif is_rate_limit:
+                logger.warning(f"Task {task.id} hit rate limit (exit_code={exit_code})")
+                self._handle_rate_limit(task, current_cli, cli_commands)
+            else:
+                logger.error(
+                    f"Task {task.id} failed (exit_code={exit_code}): "
+                    f"{stderr.decode('utf-8', errors='replace')[:200]}"
+                )
+
+            self._notify_update(task)
+            self._save_state()
+            self.current_task = None
+        finally:
+            if chat_lock is not None:
+                chat_lock.release()
 
     def _on_rate_limit_detected(self, task: Task) -> None:
         """Handle global pool suspension when a rate limit is detected."""

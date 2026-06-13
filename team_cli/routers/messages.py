@@ -39,6 +39,12 @@ def create_router(server) -> APIRouter:
         )
 
         # Subtasks: pool tasks whose parent_message_id == message_id
+        all_tasks = server.executor.pool.tasks
+
+        def _subtask_counts(task_id: str) -> tuple[int, int]:
+            children = [t for t in all_tasks if t.parent_task_id == task_id]
+            return len(children), sum(1 for t in children if t.status == "success")
+
         subtasks = [
             TaskSummary(
                 id=t.id,
@@ -48,8 +54,10 @@ def create_router(server) -> APIRouter:
                 parent_message_id=t.parent_message_id,
                 parent_task_id=t.parent_task_id,
                 kind=t.kind,
+                subtask_count=_subtask_counts(t.id)[0],
+                subtask_done_count=_subtask_counts(t.id)[1],
             )
-            for t in server.executor.pool.tasks
+            for t in all_tasks
             if t.parent_message_id == message_id
         ]
 
