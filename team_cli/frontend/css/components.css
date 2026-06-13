@@ -508,6 +508,7 @@ button:hover {
     cursor: pointer;
     gap: 8px;
     font-size: 0.875rem;
+    min-height: 44px;
 }
 
 .dir-item:hover { background: var(--color-surface-hover); }
@@ -1081,18 +1082,19 @@ button,
 /* Thread panel — desktop */
 body.thread-open .center-zone { margin-right: 360px; transition: margin-right var(--transition-base); }
 #thread-panel {
-    position: fixed; top: 0; right: -360px; width: 360px; height: 100vh;
+    position: fixed; top: 0; right: 0; width: 360px; height: 100vh;
     background: var(--color-surface); box-shadow: var(--shadow-lg);
     overflow-y: auto; z-index: 200;
-    transition: right var(--transition-base);
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
     display: flex; flex-direction: column;
 }
-#thread-panel.thread-panel--visible { right: 0; }
+#thread-panel.thread-panel--visible { transform: translateX(0); }
 
 /* Thread panel — mobile (full-screen overlay) */
 @media (max-width: 767px) {
     body.thread-open .center-zone { margin-right: 0; }
-    #thread-panel { width: 100%; right: -100%; }
+    #thread-panel { width: 100%; }
 }
 
 .thread-header {
