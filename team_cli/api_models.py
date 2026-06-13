@@ -113,12 +113,20 @@ class TaskPatchInput(BaseModel):
     model: str | None = None
     effort: str | None = None
     priority: int | None = None
+    status: str | None = None
 
     @field_validator("priority")
     @classmethod
     def priority_must_be_valid(cls, v: int | None) -> int | None:
         if v is not None:
             _validate_priority(v)
+        return v
+
+    @field_validator("status")
+    @classmethod
+    def status_must_be_skipped(cls, v: str | None) -> str | None:
+        if v is not None and v != "skipped":
+            raise ValueError("Only status='skipped' is supported via PATCH")
         return v
 
 

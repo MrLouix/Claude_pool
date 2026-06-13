@@ -16,13 +16,25 @@ logger = logging.getLogger(__name__)
 def create_router(server) -> APIRouter:
     router = APIRouter()
 
+    # "completed" is the external alias for internal status "success"
+    _STATUS_ALIAS = {"completed": "success"}
+
     @router.get("/api/tasks")
-    async def get_tasks(status: str | None = None) -> list[TaskResponse]:
+    async def get_tasks(
+        status: str | None = None,
+        project_id: str | None = None,
+        kind: str | None = None,
+    ) -> list[TaskResponse]:
         if not server.executor:
             raise HTTPException(status_code=503, detail="Executor not initialized")
         tasks = server.executor.pool.tasks
         if status:
-            tasks = [t for t in tasks if t.status == status]
+            internal = _STATUS_ALIAS.get(status, status)
+            tasks = [t for t in tasks if t.status == internal]
+        if project_id:
+            tasks = [t for t in tasks if t.project_id == project_id]
+        if kind:
+            tasks = [t for t in tasks if t.kind == kind]
         return [
             TaskResponse(
                 id=t.id,
@@ -281,6 +293,32 @@ def create_router(server) -> APIRouter:
         task = next((t for t in server.executor.pool.tasks if t.id == task_id), None)
         if not task:
             raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+        # Handle status=skipped separately — returns 409 if not pending
+        if patch.status == "skipped":
+            if task.status != "pending":
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Cannot skip task in {task.status} status",
+                )
+            task.status = "skipped"
+            server.executor._save_state()
+            await server._broadcast_event(
+                {"event": "task_skipped", "task": {"id": task.id, "status": "skipped"}}
+            )
+            await server._broadcast_pool_status()
+            return TaskResponse(
+                id=task.id,
+                prompt=task.prompt,
+                directory=str(task.directory),
+                status=task.status,
+                retry_count=task.retry_count,
+                bucket_id=task.bucket_id,
+                priority=task.priority,
+                created_at=task.created_at,
+            )
+
+        # All other field updates require pending status
         if task.status != "pending":
             raise HTTPException(
                 status_code=400, detail=f"Cannot update task in {task.status} status"
@@ -328,20 +366,29 @@ def create_router(server) -> APIRouter:
             created_at=task.created_at,
         )
 
+    _PURGEABLE_STATUSES = {"success", "completed", "failed", "skipped"}
+
     @router.delete("/api/tasks")
     async def purge_tasks(status: str | None = None) -> dict:
         if not server.executor:
             raise HTTPException(status_code=503, detail="Executor not initialized")
         if not status:
             raise HTTPException(status_code=400, detail="'status' query parameter is required")
-        if status in ("running", "pending"):
+        if status not in _PURGEABLE_STATUSES:
             raise HTTPException(
                 status_code=400,
-                detail=f"Cannot purge tasks with status '{status}'",
+                detail=f"Cannot purge tasks with status '{status}'. "
+                       f"Allowed: completed, failed, skipped",
             )
+        # "completed" is the external alias for internal "success"
+        internal_status = _STATUS_ALIAS.get(status, status)
         from ..database import DatabaseManager
         db = DatabaseManager(server.pool_file)
-        to_remove = [t for t in server.executor.pool.tasks if t.status == status]
+        # Skip running tasks even if they somehow match
+        to_remove = [
+            t for t in server.executor.pool.tasks
+            if t.status == internal_status and t.status != "running"
+        ]
         for task in to_remove:
             server.executor.pool.tasks.remove(task)
             await db.delete_task(task.id)
