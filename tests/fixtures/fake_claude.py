@@ -2,7 +2,7 @@
 """Fake claude CLI for real-subprocess executor tests.
 
 Mimics the flags the real claude binary accepts:
-  -p <prompt>  --output-format json  --structured-output  --model <model>
+  -p <prompt>  --output-format json  --model <model>
 Exits 0 and prints a valid legacy-format JSON response.
 """
 
@@ -13,7 +13,6 @@ import sys
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument("-p", dest="prompt", default="")
 parser.add_argument("--output-format", dest="output_format", default="json")
-parser.add_argument("--structured-output", action="store_true")
 parser.add_argument("--model", dest="model", default="sonnet")
 parser.add_argument("--dangerously-skip-permissions", action="store_true")
 parser.add_argument("--context", dest="context", default=None)

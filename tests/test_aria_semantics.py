@@ -10,9 +10,10 @@ def _html():
 
 
 def _body():
-    """Return everything after </style> (the HTML body + JS)."""
+    """Return everything after </head> (the HTML body + JS)."""
     content = _html()
-    return content[content.find("</style>"):]
+    idx = content.find("</head>")
+    return content[idx:] if idx != -1 else content
 
 
 # ── 6.1 Semantic HTML elements ────────────────────────────────────────────────

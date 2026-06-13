@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shlex
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from team_cli.cli_executors import build_claude_cmd
 from team_cli.executor import _RATE_LIMIT_PATTERNS
 from team_cli.storage import (
     load_step_tasks_for_plan,
@@ -66,17 +68,9 @@ class StepTaskExecutor:
             started_at=started_at,
         )
 
-        cmd = [
-            self.cli_path,
-            "-p",
-            task.prompt,
-            "--output-format",
-            "json",
-            "--structured-output",
-            "--model",
-            self.model,
-        ]
+        cmd = build_claude_cmd(self.cli_path, task.prompt, self.model)
 
+        logger.info("[planner/executor] CLI command: %s", shlex.join(cmd))
         t0 = time.monotonic()
         stdout_text = ""
         stderr_text = ""
@@ -96,6 +90,8 @@ class StepTaskExecutor:
                 exit_code = proc.returncode
                 stdout_text = stdout_b.decode("utf-8", errors="replace")
                 stderr_text = stderr_b.decode("utf-8", errors="replace")
+                logger.info("[planner/executor] exit_code=%s stdout=%r stderr=%r",
+                            exit_code, stdout_text[:2000], stderr_text[:500])
             except TimeoutError:
                 proc.kill()
                 await proc.communicate()

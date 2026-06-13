@@ -65,7 +65,6 @@ class TestClaudeExecutorExecute:
                 assert "test prompt" in args
                 assert "--output-format" in args
                 assert "json" in args
-                assert "--structured-output" in args
                 assert "--model" in args
                 assert "sonnet" in args
 

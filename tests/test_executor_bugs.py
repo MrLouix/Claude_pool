@@ -264,12 +264,13 @@ def test_rate_limit_retry_count_increments(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_build_command_includes_structured_output(tmp_path: Path) -> None:
-    """_build_command must include --structured-output."""
+def test_build_command_includes_output_format_json(tmp_path: Path) -> None:
+    """_build_command must include --output-format json."""
     executor = TaskExecutor(tmp_path / "pool.db", install_signal_handlers=False)
     task = _make_task(tmp_path)
     cmd = executor._build_command(task, None)
-    assert "--structured-output" in cmd
+    assert "--output-format" in cmd
+    assert "json" in cmd
 
 
 def test_parse_claude_output_strips_reasoning() -> None:

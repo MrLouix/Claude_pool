@@ -56,7 +56,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     chat_id           TEXT,
     parent_message_id TEXT,
     parent_task_id    TEXT,
-    kind              TEXT NOT NULL DEFAULT 'request'
+    kind              TEXT NOT NULL DEFAULT 'request',
+    cli_id            TEXT
 )
 """
 
@@ -107,7 +108,8 @@ CREATE TABLE IF NOT EXISTS cli_commands (
     default_model     TEXT,
     enabled           INTEGER NOT NULL DEFAULT 1,
     priority_requests INTEGER NOT NULL DEFAULT 100,
-    priority_subtasks INTEGER NOT NULL DEFAULT 100
+    priority_subtasks INTEGER NOT NULL DEFAULT 100,
+    parser            TEXT NOT NULL DEFAULT 'claude_json'
 )
 """
 
@@ -181,9 +183,9 @@ _CREATE_INDEXES = [
 ]
 
 _SEED_CLAUDE_CLI = """
-INSERT OR IGNORE INTO cli_commands
+INSERT INTO cli_commands
     (id, name, binary, args_template, resume_template, model_flag,
-     models, default_model, enabled, priority_requests, priority_subtasks)
+     models, default_model, enabled, priority_requests, priority_subtasks, parser)
 VALUES (
     'claude', 'Claude Code', 'claude',
     '["-p","{prompt}","--output-format","json","--dangerously-skip-permissions"]',
@@ -191,8 +193,9 @@ VALUES (
     '--model',
     '["haiku","sonnet","opus"]',
     'sonnet',
-    1, 1, 1
+    1, 1, 1, 'claude_json'
 )
+ON CONFLICT(id) DO UPDATE SET parser = 'claude_json'
 """
 
 
@@ -306,8 +309,9 @@ class DatabaseManager:
                     (id, prompt, directory, args, status, exit_code, duration_ms,
                      json_output, retry_count, created_at, session_id, bucket_id,
                      priority, provider, context_messages, rerouted_from, rerouted_to,
-                     model, project_id, chat_id, parent_message_id, parent_task_id, kind)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     model, project_id, chat_id, parent_message_id, parent_task_id, kind,
+                     cli_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     prompt            = excluded.prompt,
                     directory         = excluded.directory,
@@ -329,7 +333,8 @@ class DatabaseManager:
                     chat_id           = excluded.chat_id,
                     parent_message_id = excluded.parent_message_id,
                     parent_task_id    = excluded.parent_task_id,
-                    kind              = excluded.kind
+                    kind              = excluded.kind,
+                    cli_id            = excluded.cli_id
                 """,
                 (
                     task_dict["id"],
@@ -355,6 +360,7 @@ class DatabaseManager:
                     task_dict.get("parent_message_id"),
                     task_dict.get("parent_task_id"),
                     task_dict.get("kind", "request"),
+                    task_dict.get("cli_id"),
                 ),
             )
             await db.commit()
@@ -370,6 +376,7 @@ class DatabaseManager:
             "session_id", "bucket_id", "priority", "provider", "context_messages",
             "rerouted_from", "rerouted_to", "model",
             "project_id", "chat_id", "parent_message_id", "parent_task_id", "kind",
+            "cli_id",
         })
         updates = {k: v for k, v in fields.items() if k in _ALLOWED}
         if not updates:
@@ -730,8 +737,9 @@ class DatabaseManager:
                 """
                 INSERT OR REPLACE INTO cli_commands
                     (id, name, binary, args_template, resume_template, model_flag,
-                     models, default_model, enabled, priority_requests, priority_subtasks)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     models, default_model, enabled, priority_requests, priority_subtasks,
+                     parser)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     cmd_dict["id"],
@@ -745,6 +753,7 @@ class DatabaseManager:
                     1 if cmd_dict.get("enabled", True) else 0,
                     cmd_dict.get("priority_requests", 100),
                     cmd_dict.get("priority_subtasks", 100),
+                    cmd_dict.get("parser", "claude_json"),
                 ),
             )
             await db.commit()
@@ -773,6 +782,15 @@ class DatabaseManager:
         """Delete a cli_command by ID."""
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("DELETE FROM cli_commands WHERE id = ?", (cmd_id,))
+            await db.commit()
+
+    async def nullify_project_tasks(self, project_id: str) -> None:
+        """Set project_id = NULL on all tasks that belong to *project_id*."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "UPDATE tasks SET project_id = NULL WHERE project_id = ?",
+                (project_id,),
+            )
             await db.commit()
 
     async def close(self) -> None:

@@ -1,19 +1,21 @@
-"""Tests for Phase 1 — CSS Design Tokens in frontend/index.html."""
+"""Tests for Phase 1 — CSS Design Tokens in frontend/css/*.css."""
 import re
 from pathlib import Path
 
-HTML_PATH = Path(__file__).parent.parent / "team_cli" / "frontend" / "index.html"
+_CSS_DIR = Path(__file__).parent.parent / "team_cli" / "frontend" / "css"
 
 
 def _load():
-    return HTML_PATH.read_text(encoding="utf-8")
+    """Return combined content of all CSS files."""
+    combined = ""
+    for name in ["tokens.css", "layout.css", "components.css"]:
+        combined += (_CSS_DIR / name).read_text(encoding="utf-8") + "\n"
+    return combined
 
 
 def _style_block(content):
-    """Return the full text inside <style>...</style>."""
-    m = re.search(r"<style>(.*?)</style>", content, re.DOTALL)
-    assert m, "No <style> block found"
-    return m.group(1)
+    """CSS files have no <style> wrapper — return content directly."""
+    return content
 
 
 def _root_block(style):

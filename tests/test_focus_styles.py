@@ -1,15 +1,15 @@
-"""Tests for Phase 2.4 — Focus Visible Styles in frontend/index.html."""
+"""Tests for Phase 2.4 — Focus Visible Styles in frontend/css/*.css."""
 import re
 from pathlib import Path
 
-HTML_PATH = Path(__file__).parent.parent / "team_cli" / "frontend" / "index.html"
+_CSS_DIR = Path(__file__).parent.parent / "team_cli" / "frontend" / "css"
 
 
 def _style():
-    content = HTML_PATH.read_text(encoding="utf-8")
-    m = re.search(r"<style>(.*?)</style>", content, re.DOTALL)
-    assert m, "No <style> block found"
-    return m.group(1)
+    combined = ""
+    for name in ["tokens.css", "layout.css", "components.css"]:
+        combined += (_CSS_DIR / name).read_text(encoding="utf-8") + "\n"
+    return combined
 
 
 # ── :focus-visible rules ──────────────────────────────────────────────────────

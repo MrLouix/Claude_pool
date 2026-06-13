@@ -217,6 +217,10 @@ class Task:
     parent_message_id: str | None = None
     parent_task_id: str | None = None
     kind: str = "request"  # 'request' | 'subtask'
+    # Step 3 routing fields
+    cli_id: str | None = None
+    rerouted_from: str | None = None
+    rerouted_to: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Task":
@@ -250,6 +254,9 @@ class Task:
             parent_message_id=str(data["parent_message_id"]) if data.get("parent_message_id") else None,
             parent_task_id=str(data["parent_task_id"]) if data.get("parent_task_id") else None,
             kind=str(data.get("kind", "request")),
+            cli_id=str(data["cli_id"]) if data.get("cli_id") else None,
+            rerouted_from=str(data["rerouted_from"]) if data.get("rerouted_from") else None,
+            rerouted_to=str(data["rerouted_to"]) if data.get("rerouted_to") else None,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -274,6 +281,9 @@ class Task:
             "parent_message_id": self.parent_message_id,
             "parent_task_id": self.parent_task_id,
             "kind": self.kind,
+            "cli_id": self.cli_id,
+            "rerouted_from": self.rerouted_from,
+            "rerouted_to": self.rerouted_to,
         }
 
 
@@ -367,6 +377,7 @@ class CliCommand:
     enabled: bool = True
     priority_requests: int = 100
     priority_subtasks: int = 100
+    parser: str = "claude_json"  # 'claude_json' | 'plain'
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "CliCommand":
@@ -383,6 +394,7 @@ class CliCommand:
             enabled=bool(data.get("enabled", True)),
             priority_requests=_coerce_int(data.get("priority_requests"), 100),
             priority_subtasks=_coerce_int(data.get("priority_subtasks"), 100),
+            parser=str(data.get("parser", "claude_json")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -399,4 +411,5 @@ class CliCommand:
             "enabled": 1 if self.enabled else 0,
             "priority_requests": self.priority_requests,
             "priority_subtasks": self.priority_subtasks,
+            "parser": self.parser,
         }

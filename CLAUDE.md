@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TeamCLI TUI is a Python TUI application (built with Textual) that manages a sequential pool of requests forwarded to the `claude -p` CLI. It loads tasks from a SQLite database (`pool.db`), executes them sequentially via `claude -p <prompt> --output-format json --structured-output`, parses results, and saves state back to `pool.db`.
+TeamCLI TUI is a Python TUI application (built with Textual) that manages a sequential pool of requests forwarded to the `claude -p` CLI. It loads tasks from a SQLite database (`pool.db`), executes them sequentially via `claude -p <prompt> --output-format json`, parses results, and saves state back to `pool.db`.
 
 **Status:** Specification phase — the full spec is in `docs/spec.md`. No source code has been implemented yet.
 
@@ -27,7 +27,7 @@ The app follows a sequential execution model with rate-limit awareness:
 ### Execution flow
 
 1. Load tasks from `pool.db`
-2. For each pending task: `cd $directory && claude -p "$prompt" --output-format json --structured-output [args...]`
+2. For each pending task: `cd $directory && claude -p "$prompt" --output-format json [args...]`
 3. Handle exit codes: 0=success, 1=rate-limit retry every 30 minutes, ≥2=failed
 4. Save updated state back to `pool.db`
 5. On SIGINT: graceful shutdown, save current state

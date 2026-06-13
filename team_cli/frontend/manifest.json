@@ -1,0 +1,10 @@
+{
+  "name": "Claude Pool",
+  "short_name": "Claude Pool",
+  "display": "standalone",
+  "start_url": "/",
+  "background_color": "#1e1e2f",
+  "theme_color": "#1e1e2f",
+  "description": "Multi-agent Claude task pool manager",
+  "icons": []
+}

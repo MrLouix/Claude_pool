@@ -715,7 +715,6 @@ class TestBuildCommand:
         task = Task(id="t1", prompt="do something", directory=Path("/tmp"), args=[])
         cmd = ex._build_command(task, session_id=None)
         assert cmd[:5] == ["claude", "-p", "do something", "--output-format", "json"]
-        assert "--structured-output" in cmd
         assert "--dangerously-skip-permissions" in cmd
         assert "--resume" not in cmd
 

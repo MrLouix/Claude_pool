@@ -10,8 +10,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import shlex
 from typing import Any
 
+from team_cli.cli_executors import build_claude_cmd
 from .models import StepPlan, StepTask
 from .utils import _strip_code_fences
 
@@ -64,17 +66,9 @@ class PlanEvaluator:
         """
         prompt = self._build_prompt(plan, steps)
 
-        cmd = [
-            self.cli_path,
-            "-p",
-            prompt,
-            "--output-format",
-            "json",
-            "--structured-output",
-            "--model",
-            self.model,
-        ]
+        cmd = build_claude_cmd(self.cli_path, prompt, self.model)
 
+        logger.info("[planner/evaluator] CLI command: %s", shlex.join(cmd))
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -93,13 +87,16 @@ class PlanEvaluator:
                 f"Plan evaluation timed out after {_EVALUATION_TIMEOUT:.0f} seconds"
             )
 
+        stdout_text = stdout.decode("utf-8", errors="replace").strip()
+        stderr_text = stderr.decode("utf-8", errors="replace").strip()
+        logger.info("[planner/evaluator] exit_code=%s stdout=%r stderr=%r",
+                    proc.returncode, stdout_text[:2000], stderr_text[:500])
+
         if proc.returncode != 0:
-            stderr_text = stderr.decode("utf-8", errors="replace").strip()
             raise RuntimeError(
                 f"Evaluation CLI exited with code {proc.returncode}. stderr: {stderr_text!r}"
             )
 
-        stdout_text = stdout.decode("utf-8", errors="replace").strip()
         return self._parse_response(stdout_text)
 
     # ------------------------------------------------------------------

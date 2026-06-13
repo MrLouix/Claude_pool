@@ -57,7 +57,8 @@ def _init_full_db(path: Path) -> None:
             chat_id TEXT,
             parent_message_id TEXT,
             parent_task_id TEXT,
-            kind TEXT NOT NULL DEFAULT 'request'
+            kind TEXT NOT NULL DEFAULT 'request',
+            cli_id TEXT
         );
         CREATE TABLE IF NOT EXISTS projects (
             id TEXT PRIMARY KEY,
@@ -137,7 +138,8 @@ def _init_full_db(path: Path) -> None:
             default_model TEXT,
             enabled INTEGER NOT NULL DEFAULT 1,
             priority_requests INTEGER NOT NULL DEFAULT 100,
-            priority_subtasks INTEGER NOT NULL DEFAULT 100
+            priority_subtasks INTEGER NOT NULL DEFAULT 100,
+            parser TEXT NOT NULL DEFAULT 'claude_json'
         );
         INSERT OR IGNORE INTO pool_meta (id) VALUES (1);
     """)

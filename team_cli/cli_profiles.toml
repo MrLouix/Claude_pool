@@ -1,0 +1,49 @@
+# CLI command profiles
+#
+# Each section defines how to invoke a specific CLI in non-interactive mode.
+#
+# Fields:
+#   subcommand   - subcommand inserted after the binary (e.g. "run" for opencode); "" = none
+#   prompt_flag  - flag used to pass the prompt (e.g. "-p", "-z"); "" = prompt appended as last positional
+#   output_flags - flags that control output format (list)
+#   model_flag   - flag used to pass the model name (e.g. "--model", "-m"); "" = model not supported
+#   fixed_flags  - flags always appended after output_flags and model (list)
+#
+# Command construction order:
+#   binary [subcommand] [prompt_flag prompt] [output_flags] [--model_flag model] [fixed_flags] [extra_flags] [prompt if positional]
+
+[claude]
+subcommand   = ""
+prompt_flag  = "-p"
+output_flags = ["--output-format", "json"]
+model_flag   = "--model"
+fixed_flags  = []
+
+# Used by pool_driver (task queue): adds --dangerously-skip-permissions, no --model
+[claude_pool]
+subcommand   = ""
+prompt_flag  = "-p"
+output_flags = ["--output-format", "json"]
+model_flag   = ""
+fixed_flags  = ["--dangerously-skip-permissions"]
+
+[mistral]
+subcommand   = ""
+prompt_flag  = "-p"
+output_flags = ["--output", "json"]
+model_flag   = ""
+fixed_flags  = ["--trust", "--agent", "auto-approve"]
+
+[opencode]
+subcommand   = "run"
+prompt_flag  = ""
+output_flags = ["--format", "json"]
+model_flag   = "--model"
+fixed_flags  = []
+
+[hermes]
+subcommand   = ""
+prompt_flag  = "-z"
+output_flags = []
+model_flag   = "-m"
+fixed_flags  = ["--yolo"]

@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shlex
 from typing import Any
 
+from team_cli.cli_executors import build_claude_cmd
 from .models import StepPlan, StepTask
 from .utils import (
     generate_id,
@@ -80,24 +82,16 @@ class PlanGenerator:
 
         system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(user_request=user_request)
 
-        cmd = [
-            self.cli_path,
-            "-p",
-            system_prompt,
-            "--output-format",
-            "json",
-            "--structured-output",
-            "--model",
-            self.model,
-        ]
+        cmd = build_claude_cmd(self.cli_path, system_prompt, self.model)
 
-        logger.debug("PlanGenerator: running %s", " ".join(cmd[:3] + ["..."]))
+        logger.info("[planner/generator] CLI command: %s", shlex.join(cmd))
 
         stdout_bytes, stderr_bytes = await self._run_cli(cmd)
 
         stdout_text = stdout_bytes.decode("utf-8", errors="replace").strip()
+        stderr_text = stderr_bytes.decode("utf-8", errors="replace").strip()
+        logger.info("[planner/generator] stdout=%r stderr=%r", stdout_text[:2000], stderr_text[:500])
         if not stdout_text:
-            stderr_text = stderr_bytes.decode("utf-8", errors="replace").strip()
             raise RuntimeError(
                 f"CLI returned no output. stderr: {stderr_text!r}"
             )

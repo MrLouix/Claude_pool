@@ -1,0 +1,175 @@
+/* ── Reset ── */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* ── Base body (mobile-first single-column) ── */
+body {
+    font-family: var(--font-sans);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100dvh;
+    padding: 20px;
+    padding-bottom: calc(76px + var(--safe-area-bottom, 0px));
+    overflow-x: hidden;
+}
+
+/* ── Legacy single-column container ── */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(20px, env(safe-area-inset-right));
+}
+
+/* ── App shell: 3-zone layout (mobile base — single zone visible) ── */
+.app-shell {
+    display: flex;
+    height: 100dvh;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Sidebar: hidden on mobile */
+.sidebar {
+    width: 0;
+    flex-shrink: 0;
+    overflow: hidden;
+    display: none;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+}
+
+/* Center zone */
+.center-zone {
+    flex: 1;
+    overflow-y: auto;
+    min-width: 0;
+    padding-bottom: calc(56px + var(--safe-area-bottom, 0px));
+}
+
+/* Thread panel: hidden on mobile */
+.thread-panel {
+    width: 0;
+    flex-shrink: 0;
+    overflow: hidden;
+    display: none;
+    background: var(--color-surface);
+    border-left: 1px solid var(--color-border);
+}
+
+/* ── Bottom navigation bar (mobile only) ── */
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: calc(56px + var(--safe-area-bottom, 0px));
+    padding-bottom: var(--safe-area-bottom, 0px);
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    z-index: 100;
+}
+
+.bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: var(--touch-target-min, 44px);
+    font-size: 0.6875rem;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+    touch-action: manipulation;
+}
+
+.bottom-nav-item:hover,
+.bottom-nav-item.active {
+    color: var(--color-brand-primary);
+}
+
+.bottom-nav-item .nav-icon {
+    font-size: 1.25rem;
+    line-height: 1;
+}
+
+/* ── Tablet (768px+): sidebar + center, thread as overlay sheet ── */
+@media (min-width: 768px) {
+    body {
+        padding: 0;
+        min-height: 100dvh;
+    }
+
+    /* Hide mobile bottom nav on tablet+ */
+    .bottom-nav {
+        display: none;
+    }
+
+    .app-shell {
+        height: 100dvh;
+    }
+
+    .sidebar {
+        width: 240px;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        flex-shrink: 0;
+    }
+
+    .center-zone {
+        padding-bottom: 0;
+        padding: 20px;
+    }
+
+    /* Thread panel as full-height overlay sheet on tablet */
+    .thread-panel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: 480px;
+        display: none;
+        z-index: 50;
+        overflow-y: auto;
+    }
+
+    body.thread-open .thread-panel {
+        display: block;
+    }
+}
+
+/* ── Desktop (1100px+): full 3-column layout ── */
+@media (min-width: 1100px) {
+    .thread-panel {
+        position: static;
+        width: 0;
+        max-width: none;
+        overflow: hidden;
+        display: none;
+    }
+
+    body.thread-open .thread-panel {
+        display: block;
+        width: 320px;
+    }
+}
+
+/* ── Legacy responsive helpers (from original layout) ── */
+@media (max-width: 768px) {
+    body { padding: 10px; }
+}
+
+@media (max-width: 480px) {
+    /* small screen adjustments handled in components.css */
+}
+
+@media (max-width: 600px) {
+    /* small screen adjustments handled in components.css */
+}

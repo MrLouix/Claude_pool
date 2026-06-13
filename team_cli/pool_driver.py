@@ -12,11 +12,13 @@ from .cli_executors import (
     MAX_RETRIES,
     CLIManager,
     NoCLIAvailableError,
+    build_cmd_from_profile,
     truncate_context_messages,
 )
 from .concurrency import TaskSemaphore
-from .models import CLIConfig, PoolState, Project, ProjectMessage, Task
-from .parser import parse_claude_output
+from .models import CLIConfig, CliCommand, PoolState, Project, ProjectMessage, Task
+from .parser import parse_claude_output, parse_output
+from .routing import NoCLICommandError, build_command, resolve_command, resolve_command_chain
 from .storage import cleanup_old_tasks, load_pool
 
 logger = logging.getLogger(__name__)
@@ -268,20 +270,12 @@ class TaskExecutor:
 
     def _build_command(self, task: Task, session_id: str | None) -> list[str]:
         """Assemble the claude CLI command for *task*, optionally resuming *session_id*."""
-        cmd = [
-            "claude",
-            "-p",
-            task.prompt,
-            "--output-format",
-            "json",
-            "--structured-output",
-            "--dangerously-skip-permissions",
-        ]
+        extra: list[str] = []
         if session_id:
             logger.info(f"Resuming session {session_id} for directory {task.directory}")
-            cmd.extend(["--resume", session_id])
-        cmd.extend(task.args)
-        return cmd
+            extra.extend(["--resume", session_id])
+        extra.extend(task.args)
+        return build_cmd_from_profile("claude", "claude_pool", task.prompt, extra_flags=extra)
 
     def _find_session_for_directory(self, directory: Path, bucket_id: str) -> str | None:
         """Find the most recent session_id for tasks in the same directory and bucket."""
@@ -302,8 +296,50 @@ class TaskExecutor:
         matching_tasks.sort(key=lambda t: t.created_at, reverse=True)
         return matching_tasks[0].session_id
 
+    async def _load_cli_commands(self) -> list[CliCommand]:
+        """Load CliCommand rows from the database (returns [] on any error)."""
+        try:
+            from .database import DatabaseManager
+            db = DatabaseManager(self.pool_file)
+            rows = await db.get_all_cli_commands()
+            return [CliCommand.from_dict(r) for r in rows]
+        except Exception as e:
+            logger.debug("Could not load CLI commands from DB: %s", e)
+            return []
+
+    def _handle_rate_limit(
+        self,
+        task: Task,
+        current_cli: CliCommand | None,
+        cli_commands: list[CliCommand],
+    ) -> None:
+        """Try CLI fallback routing first; suspend pool only if all CLIs exhausted."""
+        if current_cli and cli_commands:
+            next_chain = resolve_command_chain(
+                task.kind, None, cli_commands, exclude_ids=[current_cli.id]
+            )
+            if next_chain:
+                next_cli = next_chain[0]
+                task.rerouted_from = current_cli.id
+                task.rerouted_to = next_cli.id
+                task.cli_id = next_cli.id
+                task.status = "pending"
+                logger.info(
+                    "Rate limit on %s; rerouting task %s to %s (no delay)",
+                    current_cli.id, task.id, next_cli.id,
+                )
+                return
+        # No fallback available — fall back to global pool suspension
+        self._on_rate_limit_detected(task)
+
     async def execute_task(self, task: Task) -> None:
         """Execute a single task using asyncio subprocess."""
+        # Load CLI commands BEFORE _save_state to avoid the DB seeding side-effect:
+        # _save_state → save_pool → db.init() seeds the 'claude' CLI, causing
+        # _load_cli_commands() to find a non-empty DB and ignore the monkey-patched
+        # _build_command in tests that haven't configured any CLI commands.
+        cli_commands = await self._load_cli_commands()
+
         self.current_task = task
         task.status = "running"
         self._notify_update(task)
@@ -327,10 +363,30 @@ class TaskExecutor:
         stderr = b""
         exit_code = -1
 
+        current_cli: CliCommand | None = None
+
         try:
             session_id = self._find_session_for_directory(task.directory, task.bucket_id)
-            cmd = self._build_command(task, session_id)
-            logger.info(f"Spawning: {' '.join(cmd[:4])} ...")
+            if cli_commands:
+                current_cli = resolve_command(task.kind, task.cli_id, cli_commands)
+                task.session_id = session_id
+                cmd = build_command(task, current_cli)
+            else:
+                cmd = self._build_command(task, session_id)
+        except NoCLICommandError as e:
+            logger.warning("No CLI command available for task %s: %s", task.id, e)
+            task.status = "failed"
+            task.exit_code = -1
+            task.duration_ms = int((time.time() - start_time) * 1000)
+            task.json_output = {"result": str(e), "parse_error": True}
+            self._notify_update(task)
+            self._save_state()
+            self.current_task = None
+            return
+
+        try:
+            import shlex as _shlex
+            logger.info("[claude/pool] CLI command: %s", _shlex.join(cmd))
 
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -342,6 +398,8 @@ class TaskExecutor:
 
             stdout, stderr = await process.communicate()
             exit_code = process.returncode
+            logger.info("[claude/pool] exit_code=%d stdout=%r stderr=%r",
+                        exit_code, stdout[:2000], stderr[:500])
 
         except Exception as e:
             logger.error(f"Error spawning subprocess for task {task.id}: {e}")
@@ -367,7 +425,8 @@ class TaskExecutor:
             self.current_task = None
             return
 
-        json_output = parse_claude_output(stdout) if stdout else None
+        parser_type = current_cli.parser if current_cli else "claude_json"
+        json_output = parse_output(stdout, parser_type) if stdout else None
         task.json_output = json_output
 
         status, is_rate_limit = self._classify_exit(exit_code, stdout, stderr, json_output)
@@ -387,7 +446,7 @@ class TaskExecutor:
             logger.info(f"Task {task.id} completed successfully")
         elif is_rate_limit:
             logger.warning(f"Task {task.id} hit rate limit (exit_code={exit_code})")
-            self._on_rate_limit_detected(task)
+            self._handle_rate_limit(task, current_cli, cli_commands)
         else:
             logger.error(
                 f"Task {task.id} failed (exit_code={exit_code}): "

@@ -199,3 +199,191 @@ class StepPlanGenerateRequest(BaseModel):
     project_id: str
     message_id: str
     prompt: str
+
+
+# ---------------------------------------------------------------------------
+# v2 Project models (old ProjectInput / ProjectEntry kept for backward compat)
+# ---------------------------------------------------------------------------
+
+
+class ProjectCreate(BaseModel):
+    """v2 input for creating a project."""
+
+    name: str
+    directory: str
+    git_remote: str | None = None
+    # backward-compat fields accepted but optional
+    default_cli: str | None = None
+    allow_cli_switch: bool = True
+
+
+class ProjectUpdate(BaseModel):
+    """v2 input for PATCH /api/projects/{id}. All fields optional."""
+
+    name: str | None = None
+    git_remote: str | None = None
+    archived: bool | None = None
+    # backward-compat fields
+    directory: str | None = None
+    default_cli: str | None = None
+    allow_cli_switch: bool | None = None
+
+
+class ProjectResponse(BaseModel):
+    """v2 response for a project (superset of legacy ProjectEntry)."""
+
+    id: str
+    name: str
+    directory: str
+    git_remote: str | None = None
+    created_at: str
+    archived: bool = False
+    active_task_count: int = 0
+    # backward-compat fields
+    default_cli: str | None = None
+    allow_cli_switch: bool = True
+    message_count: int = 0
+
+
+# ---------------------------------------------------------------------------
+# v2 Chat models (old ChatCreateInput / ChatResponse kept for backward compat)
+# ---------------------------------------------------------------------------
+
+
+class ChatCreate(BaseModel):
+    """v2 input for creating a chat within a project."""
+
+    label: str
+
+
+class ChatUpdate(BaseModel):
+    """v2 input for PATCH /api/chats/{id}."""
+
+    label: str | None = None
+    position: int | None = None
+
+
+class V2ChatResponse(BaseModel):
+    """v2 response for a project chat."""
+
+    id: str
+    project_id: str
+    label: str
+    position: int
+    created_at: str
+
+
+# ---------------------------------------------------------------------------
+# v2 Message models (old MessageInput / MessageResponse kept for backward compat)
+# ---------------------------------------------------------------------------
+
+
+class MessageCreate(BaseModel):
+    """v2 input for sending a message in a chat.
+
+    Accepts both v2 ``content`` and legacy ``prompt`` field so existing
+    clients continue to work without changes.
+    """
+
+    content: str | None = None
+    prompt: str | None = None  # legacy alias — resolved to content below
+    thread_root_id: str | None = None
+    cli_id: str | None = None
+    model: str | None = None
+    effort: str | None = None  # legacy
+    priority: int = 2  # legacy
+
+    @field_validator("priority")
+    @classmethod
+    def priority_must_be_valid(cls, v: int) -> int:
+        return _validate_priority(v)
+
+    def model_post_init(self, __context: object) -> None:
+        if self.content is None and self.prompt is not None:
+            self.content = self.prompt
+        if self.content is None:
+            raise ValueError("'content' (or legacy 'prompt') is required")
+
+
+class V2MessageResponse(BaseModel):
+    """v2 response for a message."""
+
+    id: str
+    chat_id: str
+    thread_root_id: str | None = None
+    role: str
+    content: str
+    task_id: str | None = None
+    created_at: str
+
+
+class TaskSummary(BaseModel):
+    """Compact task view used in thread listings."""
+
+    id: str
+    status: str
+    prompt: str
+    created_at: str
+    parent_message_id: str | None = None
+    parent_task_id: str | None = None
+    kind: str = "request"
+
+
+class ThreadResponse(BaseModel):
+    """Full thread view: root message + subtasks + reply messages."""
+
+    root: V2MessageResponse
+    subtasks: list[TaskSummary]
+    messages: list[V2MessageResponse]
+
+
+# ---------------------------------------------------------------------------
+# CLI commands settings API (Step 3)
+# ---------------------------------------------------------------------------
+
+
+class CliCommandResponse(BaseModel):
+    """Response model for a CLI command configuration."""
+
+    id: str
+    name: str
+    binary: str
+    args_template: str
+    resume_template: str | None = None
+    model_flag: str | None = None
+    models: list[str] = []
+    default_model: str | None = None
+    enabled: bool = True
+    priority_requests: int = 100
+    priority_subtasks: int = 100
+    parser: str = "claude_json"
+
+
+class CliCommandUpdate(BaseModel):
+    """Input model for PUT /api/settings/cli-commands (one entry in the list)."""
+
+    id: str
+    name: str
+    binary: str
+    args_template: str
+    resume_template: str | None = None
+    model_flag: str | None = None
+    models: list[str] = []
+    default_model: str | None = None
+    enabled: bool = True
+    priority_requests: int = 100
+    priority_subtasks: int = 100
+    parser: str = "claude_json"
+
+
+class CliCommandTestInput(BaseModel):
+    """Input model for POST /api/settings/cli-commands/test."""
+
+    id: str
+
+
+class CliCommandTestResult(BaseModel):
+    """Result of testing a CLI command binary."""
+
+    success: bool
+    output: str

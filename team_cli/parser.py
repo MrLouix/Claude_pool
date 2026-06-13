@@ -126,6 +126,34 @@ def _parse_legacy_format(data: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def parse_plain_output(stdout: bytes) -> dict[str, Any]:
+    """Parse plain-text stdout from a non-JSON CLI.
+
+    Returns a uniform result dict with the raw text in the 'result' field
+    and zeroed-out token / usage metrics.
+    """
+    text = stdout.decode("utf-8", errors="replace").strip()
+    return {
+        "result": text,
+        "code_blocks": [],
+        "files_changed": [],
+        "tokens_used": 0,
+        "session_usage_percent": 0.0,
+    }
+
+
+def parse_output(stdout: bytes, parser: str = "claude_json") -> dict[str, Any]:
+    """Route stdout to the correct parser based on *parser* type.
+
+    Supported values:
+    - 'claude_json' (default): structured JSON output from Claude CLI.
+    - 'plain': raw stdout as the result string.
+    """
+    if parser == "plain":
+        return parse_plain_output(stdout)
+    return parse_claude_output(stdout)
+
+
 def parse_claude_output(stdout: bytes) -> dict[str, Any]:
     """Parse Claude --output-format json structured output.
 

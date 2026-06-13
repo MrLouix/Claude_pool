@@ -1,8 +1,12 @@
 """CLI executor classes and manager — extracted from executor.py."""
 
 import logging
+import shlex
 import subprocess
+import tomllib
 from abc import ABC, abstractmethod
+from functools import lru_cache
+from pathlib import Path
 from typing import TypedDict
 
 from .models import CLIConfig
@@ -10,6 +14,67 @@ from .models import CLIConfig
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 5
+
+_PROFILES_PATH = Path(__file__).parent / "cli_profiles.toml"
+
+
+@lru_cache(maxsize=1)
+def _load_profiles() -> dict:
+    with open(_PROFILES_PATH, "rb") as f:
+        return tomllib.load(f)
+
+
+def build_cmd_from_profile(
+    cli_path: str,
+    profile_name: str,
+    prompt: str,
+    model: str = "",
+    extra_flags: list[str] | None = None,
+) -> list[str]:
+    """Build a CLI command list from a named profile in cli_profiles.toml.
+
+    Construction order:
+      binary [subcommand] [prompt_flag prompt] [output_flags]
+             [model_flag model] [fixed_flags] [extra_flags]
+             [prompt]  ← only when prompt_flag is empty (positional)
+    """
+    profiles = _load_profiles()
+    if profile_name not in profiles:
+        raise ValueError(
+            f"Unknown CLI profile {profile_name!r}. "
+            f"Available: {list(profiles)}"
+        )
+    p = profiles[profile_name]
+
+    cmd: list[str] = [cli_path]
+
+    if p.get("subcommand"):
+        cmd.append(p["subcommand"])
+
+    prompt_flag = p.get("prompt_flag", "")
+    if prompt_flag:
+        cmd.extend([prompt_flag, prompt])
+
+    cmd.extend(p.get("output_flags", []))
+
+    model_flag = p.get("model_flag", "")
+    if model and model_flag:
+        cmd.extend([model_flag, model])
+
+    cmd.extend(p.get("fixed_flags", []))
+
+    if extra_flags:
+        cmd.extend(extra_flags)
+
+    if not prompt_flag:  # positional: append last
+        cmd.append(prompt)
+
+    return cmd
+
+
+# Backward-compat alias used by the multi-step planner skills
+def build_claude_cmd(cli_path: str, prompt: str, model: str) -> list[str]:
+    return build_cmd_from_profile(cli_path, "claude", prompt, model)
 
 # Rate limit patterns (used by both pool_driver and CLI executors)
 _RATE_LIMIT_PATTERNS = (
@@ -76,6 +141,14 @@ class BaseCLIExecutor(ABC):
         raw = self._run_raw(prompt, context, directory, model)
         # Strip reasoning field once centrally (per spec)
         raw.pop("reasoning", None)
+        logger.info(
+            "[%s] CLI result — exit_code=%s content=%r",
+            self.config.name,
+            raw.get("exit_code", raw.get("returncode", "?")),
+            str(raw.get("result", raw.get("content", "")))[:2000],
+        )
+        if raw.get("parse_error"):
+            logger.warning("[%s] CLI output parse error — raw stdout: %r", self.config.name, str(raw.get("result", ""))[:500])
         norm = self.normalize_output(raw)
         # Merge: start with raw for backward compat, then overlay normalized fields.
         result = dict(raw)
@@ -132,17 +205,7 @@ class ClaudeExecutor(BaseCLIExecutor):
         import os
         import tempfile
 
-        # Build command as specified
-        cmd = [
-            self.config.path,
-            "-p",
-            prompt,
-            "--output-format",
-            "json",
-            "--structured-output",
-            "--model",
-            model,
-        ]
+        cmd = build_cmd_from_profile(self.config.path, "claude", prompt, model)
 
         # Add context if available (for multi-turn conversations)
         ctx_file = None
@@ -163,7 +226,7 @@ class ClaudeExecutor(BaseCLIExecutor):
                 ctx_file = None
 
         try:
-            logger.info(f"CLIManager executing: {' '.join(cmd)}")
+            logger.info("[claude] CLI command: %s", shlex.join(cmd))
 
             result = subprocess.run(
                 cmd,
@@ -175,6 +238,8 @@ class ClaudeExecutor(BaseCLIExecutor):
             self._last_exit_code = result.returncode
             self._last_stdout = result.stdout
             self._last_stderr = result.stderr
+            logger.info("[claude] exit_code=%d stdout=%r stderr=%r",
+                        result.returncode, result.stdout[:2000], result.stderr[:500])
 
             if result.stdout:
                 import team_cli.executor as _exec_mod
@@ -230,6 +295,36 @@ class ClaudeExecutor(BaseCLIExecutor):
         return False
 
 
+def parse_vibe_output(raw: str) -> dict:
+    """Parse a Mistral Vibe JSON output (list of conversation messages).
+
+    Extracts content and message_id from the last assistant message.
+
+    Returns a dict with:
+        result     - assistant text content
+        message_id - assistant message_id (UUID string)
+
+    # TODO: detect and surface error messages — unclear yet how vibe signals
+    # errors (non-zero exit code? error role? specific field?). Needs a real
+    # error sample to implement.
+    """
+    import json
+
+    messages: list[dict] = json.loads(raw)
+
+    assistant_msg = next(
+        (m for m in reversed(messages) if m.get("role") == "assistant"),
+        None,
+    )
+    if assistant_msg is None:
+        return {"result": "", "parse_error": True, "raw": raw}
+
+    return {
+        "result": assistant_msg.get("content") or "",
+        "message_id": assistant_msg.get("message_id"),
+    }
+
+
 class MistralExecutor(BaseCLIExecutor):
     """Executor for Mistral CLI."""
 
@@ -249,32 +344,9 @@ class MistralExecutor(BaseCLIExecutor):
     ) -> dict:
         """Run Mistral CLI and return raw parsed output dict."""
         import json
-        import os
-        import tempfile
+        cmd = build_cmd_from_profile(self.config.path, "mistral", prompt)
 
-        cmd = [self.config.path, "--prompt", prompt]
-
-        # Serialize context to temp JSON file
-        ctx_file = None
-        if context:
-            try:
-                ctx_file = tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".json", dir=directory, delete=False
-                )
-                json.dump(context, ctx_file)
-                ctx_file.close()
-                cmd.extend(["--context", ctx_file.name])
-            except Exception:
-                if ctx_file:
-                    try:
-                        os.unlink(ctx_file.name)
-                    except OSError:
-                        pass
-                ctx_file = None
-
-        if model:
-            cmd.extend(["--model", model])
-
+        logger.info("[vibe] CLI command: %s", shlex.join(cmd))
         try:
             result = subprocess.run(
                 cmd,
@@ -286,35 +358,22 @@ class MistralExecutor(BaseCLIExecutor):
             self._last_exit_code = result.returncode
             self._last_stdout = result.stdout
             self._last_stderr = result.stderr
+            logger.info("[vibe] exit_code=%d stdout=%r stderr=%r",
+                        result.returncode, result.stdout[:2000], result.stderr[:500])
 
             if result.stdout:
                 try:
-                    parsed = json.loads(result.stdout)
-                    normalized = {
-                        "result": parsed.get("result", ""),
-                        "model": parsed.get("model", model),
-                        "usage": parsed.get("usage", {}),
-                    }
-                    for key, value in parsed.items():
-                        if key not in normalized:
-                            normalized[key] = value
-                    return normalized
-                except json.JSONDecodeError:
-                    return {
-                        "result": result.stdout,
-                        "parse_error": True,
-                    }
+                    return parse_vibe_output(result.stdout)
+                except (json.JSONDecodeError, Exception):
+                    return {"result": result.stdout, "parse_error": True}
             else:
-                return {
-                    "result": result.stderr or "No output",
-                    "parse_error": True,
-                }
-        finally:
-            if ctx_file and os.path.exists(ctx_file.name):
-                try:
-                    os.unlink(ctx_file.name)
-                except OSError:
-                    pass
+                return {"result": result.stderr or "No output", "parse_error": True}
+        except subprocess.TimeoutExpired:
+            self._last_exit_code = -1
+            return {"result": "Task timed out after 30 minutes", "parse_error": True}
+        except Exception as e:
+            self._last_exit_code = -1
+            return {"result": f"Execution error: {str(e)}", "parse_error": True}
 
     def normalize_output(self, raw_output: dict) -> NormalizedOutput:
         """Normalize Mistral's output to the standard shape."""
@@ -389,6 +448,7 @@ class GenericCLIExecutor(BaseCLIExecutor):
         # Prompt is a separate argument, never interpolated into the template
         cmd = [self.config.path] + static_args + [prompt]
 
+        logger.info("[%s] CLI command: %s", self.config.name, shlex.join(cmd))
         try:
             result = subprocess.run(
                 cmd,
@@ -398,6 +458,9 @@ class GenericCLIExecutor(BaseCLIExecutor):
                 cwd=directory,
             )
             self._last_exit_code = result.returncode
+            logger.info("[%s] exit_code=%d stdout=%r stderr=%r",
+                        self.config.name, result.returncode,
+                        result.stdout[:2000], result.stderr[:500])
 
             if result.stdout:
                 try:
@@ -456,6 +519,158 @@ class GemmaExecutor(GenericCLIExecutor):
     pass
 
 
+class OpenCodeExecutor(BaseCLIExecutor):
+    """Executor for opencode CLI.
+
+    opencode's default positional is a project directory, not a prompt.
+    Prompts must be sent via the `run` subcommand: opencode run --format json <message..>
+    """
+
+    def __init__(self, config: CLIConfig):
+        super().__init__(config)
+        self._last_exit_code: int | None = None
+
+    def _run_raw(
+        self,
+        prompt: str,
+        context: list[dict],
+        directory: str,
+        model: str,
+    ) -> dict:
+        import json
+
+        cmd = build_cmd_from_profile(self.config.path, "opencode", prompt, model)
+
+        logger.info("[opencode] CLI command: %s", shlex.join(cmd))
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30 * 60,
+                cwd=directory,
+            )
+            self._last_exit_code = result.returncode
+            logger.info("[opencode] exit_code=%d stdout=%r stderr=%r",
+                        result.returncode, result.stdout[:2000], result.stderr[:500])
+
+            if result.stdout:
+                # opencode --format json emits newline-delimited JSON events;
+                # find the last non-empty line with a "content" or "text" key.
+                content = ""
+                for line in reversed(result.stdout.splitlines()):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                        text = event.get("content") or event.get("text") or event.get("result", "")
+                        if text:
+                            content = str(text)
+                            break
+                    except json.JSONDecodeError:
+                        continue
+                return {"result": content or result.stdout, "raw_stdout": result.stdout}
+            else:
+                return {"result": result.stderr or "No output", "parse_error": True}
+        except subprocess.TimeoutExpired:
+            self._last_exit_code = -1
+            return {"result": "Task timed out after 30 minutes", "parse_error": True}
+        except Exception as e:
+            self._last_exit_code = -1
+            return {"result": f"Execution error: {str(e)}", "parse_error": True}
+
+    def normalize_output(self, raw_output: dict) -> NormalizedOutput:
+        content = str(raw_output.get("result", raw_output.get("content", "")))
+        return NormalizedOutput(
+            content=content,
+            model=raw_output.get("model"),
+            cli_name=self.config.name,
+            tokens_used=None,
+            duration_ms=raw_output.get("duration_ms"),
+            raw=dict(raw_output),
+        )
+
+    def format_context(self, messages: list[dict[str, str]]) -> str:
+        if not messages:
+            return ""
+        lines = ["[Previous conversation:]"]
+        for msg in messages:
+            role = "User" if msg["role"] == "user" else "AI"
+            lines.append(f"{role}: {msg['content']}")
+        lines.append("[End of context]")
+        return "\n".join(lines) + "\n"
+
+    def check_rate_limit(self) -> bool:
+        return False
+
+
+class HermesExecutor(BaseCLIExecutor):
+    """Executor for Hermes CLI.
+
+    Hermes treats positional args as subcommands; prompts go via -z/--oneshot.
+    Command: hermes -z <prompt> [-m <model>] --yolo
+    """
+
+    def __init__(self, config: CLIConfig):
+        super().__init__(config)
+        self._last_exit_code: int | None = None
+
+    def _run_raw(
+        self,
+        prompt: str,
+        context: list[dict],
+        directory: str,
+        model: str,
+    ) -> dict:
+        cmd = build_cmd_from_profile(self.config.path, "hermes", prompt, model)
+
+        logger.info("[hermes] CLI command: %s", shlex.join(cmd))
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30 * 60,
+                cwd=directory,
+            )
+            self._last_exit_code = result.returncode
+            logger.info("[hermes] exit_code=%d stdout=%r stderr=%r",
+                        result.returncode, result.stdout[:2000], result.stderr[:500])
+            output = result.stdout.strip() if result.stdout else (result.stderr.strip() or "No output")
+            return {"result": output}
+        except subprocess.TimeoutExpired:
+            self._last_exit_code = -1
+            return {"result": "Task timed out after 30 minutes", "parse_error": True}
+        except Exception as e:
+            self._last_exit_code = -1
+            return {"result": f"Execution error: {str(e)}", "parse_error": True}
+
+    def normalize_output(self, raw_output: dict) -> NormalizedOutput:
+        content = str(raw_output.get("result", ""))
+        return NormalizedOutput(
+            content=content,
+            model=raw_output.get("model"),
+            cli_name=self.config.name,
+            tokens_used=None,
+            duration_ms=raw_output.get("duration_ms"),
+            raw=dict(raw_output),
+        )
+
+    def format_context(self, messages: list[dict[str, str]]) -> str:
+        if not messages:
+            return ""
+        lines = ["[Previous conversation:]"]
+        for msg in messages:
+            role = "User" if msg["role"] == "user" else "AI"
+            lines.append(f"{role}: {msg['content']}")
+        lines.append("[End of context]")
+        return "\n".join(lines) + "\n"
+
+    def check_rate_limit(self) -> bool:
+        return False
+
+
 def create_executor(config: CLIConfig) -> BaseCLIExecutor:
     """Factory function to create a CLI executor based on config type."""
     if config.cli_type == "anthropic":
@@ -466,9 +681,13 @@ def create_executor(config: CLIConfig) -> BaseCLIExecutor:
         return LlamaExecutor(config)
     elif config.cli_type == "gemma":
         return GemmaExecutor(config)
+    elif config.cli_type == "opencode":
+        return OpenCodeExecutor(config)
+    elif config.cli_type == "hermes":
+        return HermesExecutor(config)
     elif config.cli_type == "custom":
         return GenericCLIExecutor(config)
-    elif config.cli_type in ("antigravity", "hermes", "opencode", "openai"):
+    elif config.cli_type in ("antigravity", "openai"):
         return GenericCLIExecutor(config)
     raise ValueError(f"Unsupported CLI type: {config.cli_type}")
 

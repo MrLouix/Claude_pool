@@ -6,6 +6,7 @@ import logging
 import os
 import shutil  # noqa: F401 — kept for backward compat: tests patch team_cli.api.shutil.which
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -59,9 +60,14 @@ class ApiServer:
             pool_file = pool_file.with_suffix(".db")
         self.pool_file = pool_file
         self.executor: TaskExecutor | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
         @asynccontextmanager
         async def lifespan(app: FastAPI):
+            self._loop = asyncio.get_running_loop()
+            from .database import DatabaseManager
+            await DatabaseManager(self.pool_file).init()
+
             detected = detect_clis()
             custom = load_cli_configs()
             all_configs = {c.name: c for c in detected}
@@ -150,6 +156,8 @@ class ApiServer:
     def _setup_routes(self) -> None:
         from .routers.admin import create_router as create_admin_router
         from .routers.chats import create_router as create_chats_router
+        from .routers.cli_commands import create_router as create_cli_commands_router
+        from .routers.messages import create_router as create_messages_router
         from .routers.pools import create_router as create_pools_router
         from .routers.projects import create_router as create_projects_router
         from .routers.skills import create_router as create_skills_router
@@ -166,6 +174,8 @@ class ApiServer:
         self.app.include_router(create_tasks_router(self))
         self.app.include_router(create_chats_router(self))
         self.app.include_router(create_projects_router(self))
+        self.app.include_router(create_messages_router(self))
+        self.app.include_router(create_cli_commands_router(self))
         self.app.include_router(create_skills_router(self))
         self.app.include_router(create_admin_router(self))
 
@@ -245,8 +255,22 @@ class ApiServer:
                 },
             })
 
+    def _schedule(self, coro) -> None:
+        """Schedule a coroutine, working whether called from within or outside the event loop."""
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(coro)
+        except RuntimeError:
+            loop = self._loop
+            if loop is not None and loop.is_running():
+                asyncio.run_coroutine_threadsafe(coro, loop)
+            else:
+                coro.close()
+
     def _on_task_update(self, task: Task) -> None:
-        asyncio.create_task(
+        import uuid as _uuid
+
+        self._schedule(
             self._broadcast_event(
                 {
                     "event": "task_updated",
@@ -259,11 +283,63 @@ class ApiServer:
                         "retry_count": task.retry_count,
                         "bucket_id": task.bucket_id,
                         "result": task.json_output.get("result") if task.json_output else None,
+                        # v2 fields
+                        "project_id": task.project_id,
+                        "chat_id": task.chat_id,
+                        "parent_message_id": task.parent_message_id,
+                        "parent_task_id": task.parent_task_id,
                     },
                 }
             )
         )
-        asyncio.create_task(self._broadcast_pool_status())
+        if task.status == "success" and task.chat_id and task.json_output:
+            result_text = task.json_output.get("result") or task.json_output.get("content", "")
+            if result_text:
+                msg_id = f"msg_{_uuid.uuid4().hex[:8]}"
+                # Broadcast message_created before pool_status to preserve event ordering
+                self._schedule(
+                    self._broadcast_event(
+                        {
+                            "event": "message_created",
+                            "data": {
+                                "message_id": msg_id,
+                                "chat_id": task.chat_id,
+                                "thread_root_id": task.parent_message_id,
+                                "role": "assistant",
+                            },
+                        }
+                    )
+                )
+                self._schedule(self._persist_v2_assistant_message(task, msg_id))
+        self._schedule(self._broadcast_pool_status())
+
+    async def _persist_v2_assistant_message(self, task: Task, msg_id: str) -> None:
+        """Persist an assistant message for a completed v2 task (fire-and-forget)."""
+        from .database import DatabaseManager
+
+        result_text = (
+            task.json_output.get("result") or task.json_output.get("content", "")
+            if task.json_output
+            else ""
+        )
+        if not result_text or not task.chat_id:
+            return
+
+        now = datetime.now().isoformat()
+        msg_dict = {
+            "id": msg_id,
+            "chat_id": task.chat_id,
+            "thread_root_id": task.parent_message_id,
+            "role": "assistant",
+            "content": result_text,
+            "task_id": task.id,
+            "created_at": now,
+        }
+        try:
+            db = DatabaseManager(self.pool_file)
+            await db.upsert_message(msg_dict)
+        except Exception as e:
+            logger.error(f"Failed to persist v2 assistant message for task {task.id}: {e}")
 
     async def _broadcast_event(self, message: dict) -> None:
         if not self.ws_clients:

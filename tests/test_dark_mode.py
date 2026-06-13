@@ -16,11 +16,11 @@ def _head():
     return m.group(1)
 
 
+_TOKENS_CSS = Path(__file__).parent.parent / "team_cli" / "frontend" / "css" / "tokens.css"
+
+
 def _style():
-    content = _html()
-    m = re.search(r"<style>(.*?)</style>", content, re.DOTALL)
-    assert m, "No <style> block found"
-    return m.group(1)
+    return _TOKENS_CSS.read_text(encoding="utf-8")
 
 
 def _dark_block():
@@ -30,7 +30,7 @@ def _dark_block():
         r"@media\s*\(prefers-color-scheme:\s*dark\)\s*\{(.+)\}\s*$",
         style, re.DOTALL
     )
-    assert m, "@media (prefers-color-scheme: dark) block not found in <style>"
+    assert m, "@media (prefers-color-scheme: dark) block not found in tokens.css"
     return m.group(1)
 
 

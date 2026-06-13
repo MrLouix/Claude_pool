@@ -153,6 +153,20 @@ MIGRATIONS: list[dict[str, Any]] = [
 )""",
         ],
     },
+    {
+        "id": "011",
+        "description": "Add parser column to cli_commands (Step 3 multi-CLI routing)",
+        "sql": [
+            "ALTER TABLE cli_commands ADD COLUMN parser TEXT NOT NULL DEFAULT 'claude_json'",
+        ],
+    },
+    {
+        "id": "012",
+        "description": "Add cli_id column to tasks (Step 3 multi-CLI routing)",
+        "sql": [
+            "ALTER TABLE tasks ADD COLUMN cli_id TEXT",
+        ],
+    },
 ]
 
 
